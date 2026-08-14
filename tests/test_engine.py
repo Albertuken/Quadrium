@@ -1,0 +1,1543 @@
+"""
+Unit checks for the MVP engine. Runnable without pytest:
+
+    python3 tests/test_engine.py
+
+The end-to-end check is `examples/synthetic_accommodation.py`, which exits
+non-zero if any scenario fails validation. This file isolates the properties
+that example cannot show on its own.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "examples"))
+sys.path.insert(0, str(ROOT / "library" / "validators"))
+
+from synthetic_accommodation import (build_keys, build_scenarios,  # noqa: E402
+                                     build_table)
+from quadrium.balancing import BalancingError, balance, ras  # noqa: E402
+from quadrium.disaggregation import split_sectors, targets  # noqa: E402
+from quadrium.reaggregation import reaggregate  # noqa: E402
+from quadrium.models import (ProxyStrength, Scenario,  # noqa: E402
+                              SplitSpec)
+from quadrium.scenarios import ScenarioInfeasible, run_scenario  # noqa: E402
+
+NEW = ["HOT", "CAM", "RES", "FBS"]
+LBL = ["Hotels", "Camping", "Restaurants", "F&B"]
+FAILURES: list[str] = []
+
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
+    if not ok:
+        FAILURES.append(name)
+
+
+def test_gras_reduces_to_ras():
+    """RAS is the special case of GRAS with no negatives (UNH_18 ¶18.35, p. 558).
+
+    Not an aesthetic claim — it is why replacing RAS with GRAS costs nothing.
+    """
+    rng = np.random.default_rng(0)
+    Z = rng.uniform(1, 100, (6, 6))
+    tr = Z.sum(axis=1) * rng.uniform(0.9, 1.1, 6)
+    tc = Z.sum(axis=0) * rng.uniform(0.9, 1.1, 6)
+    tc *= tr.sum() / tc.sum()                      # make the margins consistent
+    Zr, _, _ = ras(Z, tr, tc, tol=1e-12)
+    Zg, info = balance(Z, tr, tc, method="GRAS", tol=1e-12)
+    dev = float(np.max(np.abs(Zr - Zg)))
+    check("GRAS reproduces RAS on a non-negative matrix", dev < 1e-6,
+          f"max|RAS - GRAS| = {dev:.2e}, method chosen = {info['method']}")
+
+
+def test_ras_refuses_negatives():
+    Z = np.array([[10.0, 5.0], [-2.0, 8.0]])
+    try:
+        balance(Z, np.array([16.0, 7.0]), np.array([9.0, 14.0]), method="RAS")
+    except BalancingError as exc:
+        check("RAS refuses a matrix with negatives", "non-negative" in str(exc))
+    else:
+        check("RAS refuses a matrix with negatives", False, "it accepted one")
+
+
+def test_reaggregation_is_exact():
+    """The Reaggregation Guarantee (MVP_0.1 §8), the sharp version.
+
+    Everything except the split sector was copied, never estimated, so it must
+    return bit-for-bit — not 'within tolerance'.
+    """
+    table = build_table()
+    keys, scenarios = build_keys(), build_scenarios()
+    res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], scenarios[0], keys)
+    Z_re = reaggregate(res.table.Z, res.mapping, table.n)
+    diff = np.abs(Z_re - table.Z)
+    mask = np.ones_like(diff, dtype=bool)
+    sidx = [s["sector_code"] for s in res.splits]
+    p = table.index_of(sidx[0])
+    mask[p, :] = False
+    mask[:, p] = False
+    check("untouched sectors reaggregate exactly", float(diff[mask].max()) < 1e-12,
+          f"max|dev| = {diff[mask].max():.2e}")
+    check("split sector reaggregates within tolerance", float(diff.max()) < 1e-9,
+          f"max|dev| = {diff.max():.2e}")
+
+
+def test_signs_and_zeros_preserved():
+    table = build_table()
+    res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], build_scenarios()[0], build_keys())
+    seed_sign = np.sign(res.seed_Z)
+    out_sign = np.sign(res.table.Z)
+    check("no cell changes sign during balancing",
+          int(np.count_nonzero(seed_sign != out_sign)) == 0)
+    check("the original negative survives",
+          int((res.table.Z < 0).sum()) == int((res.seed_Z < 0).sum()),
+          f"{int((res.table.Z < 0).sum())} negative cell(s) in the result")
+
+
+def test_infeasible_scenario_is_rejected():
+    """Multi-proxy splitting can describe an economy that cannot exist."""
+    table = build_table()
+    keys, scenarios = build_keys(), build_scenarios()
+    mixed = [s for s in scenarios if s.scenario_id == "S3_mixed"][0]
+    try:
+        run_scenario(table, [SplitSpec("ACC", NEW, LBL)], mixed, keys)
+    except ScenarioInfeasible as exc:
+        check("infeasible proxy combination is rejected, not solved",
+              "impossible economy" in exc.explanation)
+    else:
+        check("infeasible proxy combination is rejected, not solved", False,
+              "it produced a table")
+
+
+def test_original_table_is_never_mutated():
+    table = build_table()
+    before = table.Z.copy()
+    run_scenario(table, [SplitSpec("ACC", NEW, LBL)], build_scenarios()[0], build_keys())
+    check("the original table is not mutated (spec §5)",
+          np.array_equal(before, table.Z))
+
+
+def test_weights_sum_to_one():
+    table = build_table()
+    seed = split_sectors(table, [SplitSpec("ACC", NEW, LBL)], build_scenarios()[0], build_keys())
+    ok = all(np.isclose(np.asarray(w).sum(), 1.0)
+             for s in seed["splits"] for w in s["weights"].values())
+    check("every allocation key normalises to 1", ok)
+
+
+def test_real_uk_table_loads_and_balances():
+    """The published ONS table, not a synthetic one.
+
+    Guards the two traps in that file: the reference year is 2023 while the
+    filename says 2022 (OQ-D-01), and the final-demand block mixes components
+    with a subtotal of them (`P3 S1`), which double-counts household
+    consumption by GBP 259,330 million on one row if summed as printed.
+    """
+    from quadrium.io_loader import load_uk_analytical_iot
+    path = ROOT / "UK_IOAT_2023_domestic_ixi.xlsx"
+    if not path.exists():
+        check("real UK table loads", True, "fixture absent, skipped")
+        return
+    t = load_uk_analytical_iot(path)
+    check("year read from the workbook, not the filename", t.year == 2023,
+          f"year = {t.year}, filename says 2022")
+    check("no final-demand subtotal column survives",
+          "P3 S1" not in t.Y_labels, f"Y = {t.Y_labels}")
+    row = float(np.abs(t.Z.sum(1) + t.Y.sum(1) - t.X).max())
+    col = float(np.abs(t.Z.sum(0) + t.VA.sum(0) - t.X).max())
+    scale = float(np.abs(t.X).max())
+    check("the real table balances", max(row, col) < 1e-6 * scale,
+          f"rows {row:.2e}, cols {col:.2e} against outputs up to {scale:,.0f}")
+    check("the real table has legitimate negatives",
+          int((t.Z < 0).sum()) + int((t.Y < 0).sum()) + int((t.VA < 0).sum()) > 0,
+          f"Z={int((t.Z<0).sum())} Y={int((t.Y<0).sum())} VA={int((t.VA<0).sum())}"
+          " — a non-negative solver could not reproduce this table")
+
+
+def test_loader_refuses_an_unbalanced_table():
+    from quadrium.io_loader import LoaderError, _assert_balances
+    table = build_table()
+    table.X = table.X.copy()
+    table.X[0] += 1000.0
+    try:
+        _assert_balances(table, "tampered")
+    except LoaderError as exc:
+        check("an unbalanced table is refused, not repaired",
+              "does not balance" in str(exc))
+    else:
+        check("an unbalanced table is refused, not repaired", False,
+              "it was accepted")
+
+
+def test_real_ine_table_loads_and_balances():
+    """The published INE table — the second real fixture, and a different shape.
+
+    Product by product, not industry by industry; split across three sheets;
+    final-demand subtotals named in Spanish prose with no codes, so the UK
+    prefix heuristic cannot reach them.
+
+    The interior table does not balance for one product (OQ-D-04), which makes
+    this the one place where refusing is the *expected* outcome and getting a
+    table back is the failure.
+    """
+    from quadrium.io_loader import LoaderError, load_ine_tio
+    path = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    if not path.exists():
+        check("real INE table loads", True, "fixture absent, skipped")
+        return
+
+    try:
+        load_ine_tio(path)
+    except LoaderError as exc:
+        worst = next((l.strip() for l in str(exc).splitlines()
+                      if "worst row" in l), str(exc).splitlines()[0])
+        check("the INE interior table is refused by default (OQ-D-04)",
+              "does not balance" in str(exc) and "4,921" in str(exc), worst)
+    else:
+        check("the INE interior table is refused by default (OQ-D-04)", False,
+              "it was accepted — the 4,921.6 discrepancy went in silently")
+
+    t = load_ine_tio(path, unbalanced="residual_column")
+    check("year read from the workbook, not the two-digit filename",
+          t.year == 2022, f"year = {t.year}")
+    check("the '44 bis' product keeps its own code",
+          "44 bis" in t.sector_codes and len(set(t.sector_codes)) == 64,
+          f"{len(set(t.sector_codes))} distinct codes")
+    check("no final-demand subtotal column survives",
+          not any(l.startswith(("Total", "Formación bruta de capital"))
+                  and "fijo" not in l for l in t.Y_labels),
+          f"Y = {t.Y_labels}")
+    check("the residual says out loud that the INE did not publish it",
+          any("RESIDUAL" in l for l in t.Y_labels)
+          and t.notes is not None and "OQ-D-04" in t.notes)
+
+    for name, table in (("interior", t),
+                        ("total", load_ine_tio(path, variant="total"))):
+        row = float(np.abs(table.Z.sum(1) + table.Y.sum(1) - table.X).max())
+        col = float(np.abs(table.Z.sum(0) + table.VA.sum(0) - table.X).max())
+        check(f"the INE {name} table balances",
+              max(row, col) < 1e-6 * float(np.abs(table.X).max()),
+              f"rows {row:.2e}, cols {col:.2e}")
+
+    # The layout is hard-coded. Prove the guard that re-derives it actually
+    # fires, rather than trusting that it would.
+    from quadrium import io_loader as IL
+    for key, wrong in (("row_output", 85), ("row_gos", 83)):
+        good = IL._INE[key]
+        IL._INE[key] = wrong
+        try:
+            load_ine_tio(path, unbalanced="residual_column")
+        except LoaderError as exc:
+            failed = next((l.strip() for l in str(exc).splitlines()
+                           if "failed check" in l), "")
+            check(f"a moved '{key}' is caught by an identity",
+                  "layout no longer matches" in str(exc), failed)
+        else:
+            check(f"a moved '{key}' is caught by an identity", False,
+                  "the wrong row was read without complaint")
+        finally:
+            IL._INE[key] = good
+
+
+def test_the_spanish_table_is_reachable_from_a_workbook():
+    """A loader nobody can ask for is a loader that does not exist.
+
+    Also guards the anti-silence rule: `table_unbalanced` means something for
+    exactly one `table_kind`, and setting it anywhere else is refused rather
+    than ignored.
+    """
+    from quadrium.config import ConfigError, build_config
+    path = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    if not path.exists():
+        check("the Spanish table is reachable from a workbook", True,
+              "fixture absent, skipped")
+        return
+
+    base = dict(project_id="es", table_path=str(path))
+    splits = {"splits": [{"sector_code": "36", "new_code": "36A",
+                          "new_label": "Alojamiento", "key_id": ""},
+                         {"sector_code": "36", "new_code": "36B",
+                          "new_label": "Comidas y bebidas", "key_id": ""}]}
+
+    cfg = build_config({**base, "table_kind": "ine_interior",
+                        "table_unbalanced": "residual_column"}, splits)
+    check("a workbook can ask for the Spanish domestic table",
+          cfg["table"].table_id == "ES-TIO-PXP-2022-interior",
+          cfg["table"].table_id)
+    check("and for the total-flows one",
+          build_config({**base, "table_kind": "ine_total"},
+                       splits)["table"].table_id == "ES-TIO-PXP-2022-total")
+
+    try:
+        build_config({**base, "table_kind": "ine_interior"}, splits)
+    except ConfigError as exc:
+        check("the default still refuses the unbalanced table",
+              "does not balance" in str(exc))
+    else:
+        check("the default still refuses the unbalanced table", False,
+              "it loaded")
+
+    try:
+        build_config({**base, "table_kind": "uk_analytical",
+                      "table_unbalanced": "residual_column"}, splits)
+    except ConfigError as exc:
+        check("a setting that would be ignored is an error instead",
+              "applies only to" in str(exc), str(exc)[:90])
+    else:
+        check("a setting that would be ignored is an error instead", False,
+              "it was silently ignored")
+
+
+def test_the_spanish_pilot_holds_its_two_delicate_properties():
+    """Guards the two things in `examples/es_hosteleria.py` that are easy to
+    break and silent when broken.
+
+    First, an input profile must change what a subsector buys and not how much.
+    The engine normalises intensities per supplier, so it cannot enforce that;
+    the example does it, and product 36's diagonal is only 0.12 % of its input
+    column, so an unneutralised profile is not a rounding error — it is a
+    refused scenario.
+
+    Second, the survey's value-added key does not fit inside the parent's
+    accounts (OQ-B-12, A-06). That infeasibility is the pilot's finding. If it
+    ever silently starts passing, either the data or the engine changed and the
+    report's argument no longer holds.
+    """
+    sys.path.insert(0, str(ROOT / "examples"))
+    path = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    if not path.exists():
+        check("the Spanish pilot holds", True, "fixture absent, skipped")
+        return
+    from es_hosteleria import (NEW, LBL, build_keys,  # noqa: E402
+                               build_profiles)
+    from quadrium.io_loader import load_ine_tio
+    from quadrium.models import Scenario, SplitSpec
+    from quadrium.scenarios import run_project
+
+    table = load_ine_tio(path, unbalanced="residual_column")
+    keys = build_keys()
+    w = keys["k_produccion"].w
+    profiles = build_profiles(table, w)
+
+    p = table.index_of("36")
+    col = table.Z[:, p].copy()
+    col[p] = 0.0
+    from quadrium.disaggregation import _column_shares
+    got = col @ _column_shares(table, p, NEW, w, profiles, True)
+    want = w * col.sum()
+    off = float(np.abs(got - want).max())
+    room = float(table.Z[p, p])
+    check("the input profile moves composition, not level",
+          off < 1e-6 * room,
+          f"purchases off by {off:.3e} million EUR against an internal block "
+          f"of {room:,.1f} ({off / room:.2e} of it)")
+    check("and it still says a restaurant buys food and a hotel rents premises",
+          profiles["36B"]["5"] > profiles["36A"]["5"]
+          and profiles["36A"]["44"] > profiles["36B"]["44"],
+          f"36A food x{profiles['36A']['5']:.3f} premises "
+          f"x{profiles['36A']['44']:.3f}; 36B food x{profiles['36B']['5']:.3f} "
+          f"premises x{profiles['36B']['44']:.3f}")
+
+    split = SplitSpec("36", NEW, LBL, keys_by_block={"output": "k_produccion"})
+    results, meta = run_project(
+        table, [split],
+        [Scenario(scenario_id="S1", label="base"),
+         Scenario(scenario_id="S3", label="va observado",
+                  keys_by_block={"value_added": "k_vab",
+                                 "intermediate_cols": "k_compras"},
+                  input_profiles=profiles)],
+        keys)
+    check("the proportional split is feasible",
+          [r.scenario_id for r in results] == ["S1"],
+          f"feasible: {[r.scenario_id for r in results]}")
+    rejected = {i["scenario_id"] for i in meta["infeasible"]}
+    check("the observed value-added key is still refused (OQ-B-12, A-06)",
+          rejected == {"S3"}, f"rejected: {sorted(rejected)}")
+    check("and the refusal names the negative it would have required",
+          any("cannot be negative" in i["detail"] for i in meta["infeasible"]))
+
+
+def test_a_key_from_the_wrong_year_says_so():
+    """Silence #16: `source_year` was stored, printed, exported — and compared
+    with `table.year` by nothing.
+
+    The evidence behind what the warning says lives in
+    `library/validators/run_key_vintage.py`, which measures the cost on seven
+    years of real data. This checks the plumbing: that a stale key reaches the
+    reader, and that a clean run does not cry wolf.
+    """
+    from dataclasses import replace
+    table = build_table()
+    keys, scenario = build_keys(), build_scenarios()[0]
+
+    # The shipped fixture's own keys are 2021 and 2022 against a 2024 table.
+    # That was invisible until this check existed and it is NOT a mistake — a
+    # proxy almost always lags the table it splits, so the fixture is the
+    # realistic case. Asserted here so nobody later "tidies" the years and
+    # removes the one example in the repo where the warning fires.
+    shipped = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], scenario, keys)
+    sv = [c for c in shipped.report.checks if c.name == "check_key_vintage"][0]
+    check("the vintage check runs at all", sv is not None)
+    check("the shipped fixture's own keys lag its table, and it now says so",
+          not sv.passed and "do not come from 2024" in sv.detail, sv.detail[:100])
+
+    aligned = {k: replace(v, source_year=table.year) for k, v in keys.items()}
+    res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], scenario, aligned)
+    vint = [c for c in res.report.checks if c.name == "check_key_vintage"]
+    check("a key from the table's own year does not warn",
+          vint and vint[0].passed, vint[0].detail if vint else "absent")
+
+    stale = {k: replace(v, source_year=table.year - 3) for k, v in keys.items()}
+    res2 = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], scenario, stale)
+    v2 = [c for c in res2.report.checks if c.name == "check_key_vintage"][0]
+    check("a key from three years earlier does warn", not v2.passed)
+    check("and the warning names the gap, not just the year",
+          "-3 year(s)" in v2.detail, v2.detail[:110])
+    check("it is a warning, not an error — a stale proxy is often the best one",
+          v2.severity == "warning" and res2.report.passed)
+
+    from quadrium.reporting import scenario_section
+    md = scenario_section(res2)
+    check("the report puts the gap next to the year in the key table",
+          "| vs table |" in md and "**-3 yr**" in md)
+    check("and a same-year run says so instead of staying blank",
+          "same year" in scenario_section(res))
+
+
+def test_a_share_of_something_that_changes_sign_is_refused():
+    """Real data, INE structural business survey 2020: hospitality gross
+    operating surplus was -1,838,308 thousand EUR in accommodation against
+    +231,683 in food service.
+
+    That pair sums negative and the old guard caught it. Flip the signs and the
+    sum is positive with one part negative — `[1000, -100]` normalised to
+    `[1.111, -0.111]` and was ACCEPTED, handing a subsector -11 % of its block.
+    """
+    from quadrium.models import AllocationKey, ProxyStrength
+
+    def build(vals):
+        return AllocationKey(key_id="k", applies_to="output",
+                             new_sector_codes=["A", "B"], raw_values=vals,
+                             source="s", source_year=2020,
+                             strength=ProxyStrength.MEDIUM)
+
+    for label, vals in (("sum negative", [-1_838_308.0, 231_683.0]),
+                        ("sum POSITIVE, one part negative", [1000.0, -100.0])):
+        try:
+            k = build(vals)
+        except ValueError as exc:
+            check(f"refused: {label}", "negative raw value" in str(exc)
+                  or "sum to" in str(exc))
+        else:
+            check(f"refused: {label}", False,
+                  f"accepted, weights {[round(w, 4) for w in k.weights]}")
+    check("an ordinary key is untouched",
+          build([30.0, 70.0]).weights == [0.3, 0.7])
+
+
+def test_value_added_rows_can_carry_their_own_evidence():
+    """OQ-B-12. The block used to split by one scalar per subsector, so a
+    survey measuring compensation and operating surplus separately could not be
+    used at all.
+
+    Three properties, and the third is what stops this being a foot-gun:
+    a pinned row takes its key exactly, every row still sums back to its parent,
+    and pinning rows that claim more than the block key leaves is refused rather
+    than absorbed.
+    """
+    from dataclasses import replace
+    from quadrium.disaggregation import DisaggregationError
+    from quadrium.models import AllocationKey, ProxyStrength
+
+    table = build_table()
+    keys, scenario = build_keys(), build_scenarios()[0]
+    rows = table.VA_labels
+    p = table.index_of("ACC")
+
+    # The pin is a mild perturbation of the block's own weights. A pin far from
+    # them is not "more evidence", it is a claim the block total cannot fund —
+    # which is the refusal tested further down.
+    base = np.asarray(run_scenario(table, [SplitSpec("ACC", NEW, LBL)],
+                                   scenario, keys)
+                      .splits[0]["weights"]["value_added"], float)
+    tweak = base * np.array([1.10, 0.95, 1.02, 0.93])
+    pin = AllocationKey(key_id="k_pin", applies_to="value_added",
+                        new_sector_codes=NEW,
+                        raw_values=[float(v) for v in tweak],
+                        source="s", source_year=table.year,
+                        strength=ProxyStrength.MEDIUM)
+    keys = {**keys, "k_pin": pin}
+    spec = SplitSpec("ACC", NEW, LBL,
+                     va_row_keys={rows[0]: "k_pin"}, va_residual_row=rows[-1])
+    res = run_scenario(table, [spec], scenario, keys)
+
+    got = [res.table.VA[0, res.table.index_of(c)] / table.VA[0, p] for c in NEW]
+    check("a pinned VA row takes its key exactly",
+          np.allclose(got, pin.w), f"{[round(x, 4) for x in got]}")
+
+    for r, label in enumerate(rows):
+        total = sum(res.table.VA[r, res.table.index_of(c)] for c in NEW)
+        if not np.isclose(total, table.VA[r, p]):
+            check(f"row {label!r} still sums back to its parent", False,
+                  f"{total:,.4f} against {table.VA[r, p]:,.4f}")
+            break
+    else:
+        check("every VA row still sums back to its parent, residual included",
+              True, f"{len(rows)} row(s)")
+
+    # A residual row cannot take more of its parent than exists.
+    greedy = replace(pin, key_id="k_greedy",
+                     raw_values=[999., 1., 1., 1.], weights=None)
+    try:
+        run_scenario(table, [SplitSpec("ACC", NEW, LBL,
+                                       va_row_keys={rows[0]: "k_greedy",
+                                                    rows[1]: "k_greedy"},
+                                       va_residual_row=rows[-1])],
+                     scenario, {**keys, "k_greedy": greedy})
+    except DisaggregationError as exc:
+        check("pinning more than the block leaves is refused",
+              "impossible share" in str(exc), str(exc)[:90])
+    else:
+        check("pinning more than the block leaves is refused", False,
+              "it was absorbed silently")
+
+    # Naming rows without naming who absorbs them is refused at construction.
+    try:
+        SplitSpec("ACC", NEW, LBL, va_row_keys={rows[0]: "k_pin"})
+    except ValueError as exc:
+        check("a residual row must be named, not guessed",
+              "va_residual_row" in str(exc))
+    else:
+        check("a residual row must be named, not guessed", False, "accepted")
+
+
+def test_an_input_profile_carries_its_provenance_and_its_side_effect():
+    """OQ-B-13, both halves.
+
+    A profile was a bare `dict[str, float]`: a pattern derived from an official
+    survey and one guessed over lunch reached the reader identically labelled.
+    And it moved subsector SIZE as a side effect of describing composition,
+    which the engine never mentioned — the thing that made the Spanish pilot
+    infeasible twice.
+    """
+    from quadrium.disaggregation import (neutralise_profile,
+                                          profile_level_shift)
+    from quadrium.models import ProfileProvenance
+    from quadrium.reporting import scenario_section
+
+    table = build_table()
+    keys, base = build_keys(), build_scenarios()[0]
+    # Two suppliers each, so there is a within-subsector composition to preserve.
+    prof = {"HOT": {"AGR": 1.4, "MAN": 0.7},
+            "RES": {"AGR": 0.8, "MAN": 1.2}}
+    w = np.asarray(run_scenario(table, [SplitSpec("ACC", NEW, LBL)], base, keys)
+                   .splits[0]["weights"]["intermediate_cols"], float)
+
+    shift = profile_level_shift(table, "ACC", NEW, w, prof)
+    check("the engine measures what a profile does to subsector size",
+          shift["max_abs"] > 0 and not shift["neutral"],
+          f"moves {shift['max_abs']:.3f} against an internal block of "
+          f"{shift['internal_block']:.1f}")
+
+    fixed = neutralise_profile(table, "ACC", NEW, w, prof)
+    after = profile_level_shift(table, "ACC", NEW, w, fixed["profiles"])
+    check("and can remove the level while keeping the pattern",
+          after["neutral"] and after["max_abs"] < 1e-6 * shift["max_abs"],
+          f"{shift['max_abs']:.3f} -> {after['max_abs']:.2e}")
+    # What survives is each subsector's COMPOSITION -- what it buys.
+    for code in ("HOT", "RES"):
+        before = prof[code]["AGR"] / prof[code]["MAN"]
+        after = (fixed["profiles"][code]["AGR"]
+                 / fixed["profiles"][code]["MAN"])
+        if abs(before - after) > 1e-9:
+            check("each subsector's composition survives untouched", False,
+                  f"{code}: {before:.4f} -> {after:.4f}")
+            break
+    else:
+        check("each subsector's composition survives untouched", True,
+              "the ratios among the suppliers a subsector names")
+    # What cannot survive, and the docstring says why: between subsectors, the
+    # pattern IS the level, and the level is what the key already fixed.
+    cross_before = prof["HOT"]["AGR"] / prof["RES"]["AGR"]
+    cross_after = (fixed["profiles"]["HOT"]["AGR"]
+                   / fixed["profiles"]["RES"]["AGR"])
+    check("the between-subsector ratio moves, because it was a size claim",
+          abs(cross_before - cross_after) > 1e-9,
+          f"{cross_before:.4f} -> {cross_after:.4f}; put a size claim in the "
+          f"intermediate_cols key, not in a profile")
+
+    neutral = fixed["profiles"]
+    unsourced = replace_scenario(base, neutral, None)
+    sourced = replace_scenario(base, neutral, ProfileProvenance(
+        source="a real survey", source_year=table.year,
+        strength=ProxyStrength.MEDIUM))
+    md_un = scenario_section(run_scenario(table, [SplitSpec("ACC", NEW, LBL)],
+                                          unsourced, keys))
+    md_so = scenario_section(run_scenario(table, [SplitSpec("ACC", NEW, LBL)],
+                                          sourced, keys))
+    check("an unsourced profile is labelled as such",
+          "no source recorded" in md_un)
+    check("a sourced one is not, and names its source",
+          "no source recorded" not in md_so and "a real survey" in md_so)
+    md_raw = scenario_section(run_scenario(
+        table, [SplitSpec("ACC", NEW, LBL)],
+        replace_scenario(base, {"HOT": {"AGR": 1.15}}, None), keys))
+    check("and the size side effect is reported, not left to be discovered",
+          "moves subsector SIZE" in md_raw)
+    check("a neutralised profile draws no such warning",
+          "moves subsector SIZE" not in md_un)
+
+
+def replace_scenario(base, profiles, provenance):
+    from dataclasses import replace
+    return replace(base, scenario_id="P", input_profiles=profiles,
+                   profile_provenance=provenance)
+
+
+def test_corroboration_reports_a_spread_and_refuses_to_rank():
+    """OQ-S-06. The report used to mark the scenario that disagreed least with
+    its unused keys as "better-supported".
+
+    The Spanish pilot killed that. Its largest disagreement was employment, at
+    58.8 %, and when the INE's 110-product supply table settled the answer,
+    employment was the CLOSEST of seven keys and the driving key was 9.8 points
+    out. Least disagreement measures resemblance to your own inputs.
+    """
+    from quadrium.reporting import build_report
+
+    table = build_table()
+    keys, scenarios = build_keys(), build_scenarios()
+    usable = [s for s in scenarios if s.scenario_id != "S3_mixed"]
+    results, meta = __import__("quadrium.scenarios", fromlist=["run_project"]) \
+        .run_project(table, [SplitSpec("ACC", NEW, LBL)], usable, keys)
+    md = build_report(results, meta, "corroboration spread")
+
+    check("the ranking sentence is gone",
+          "better-supported split" not in md and "disagrees least with the "
+          "measurements" not in md)
+    check("a spread is reported instead",
+          "How far the outside evidence disagrees" in md
+          and "closest key" in md and "furthest key" in md)
+    check("and the removal is explained where the ranking used to be",
+          "removed for cause" in md and "58.8" in md,
+          "the case that killed it is named, not just the rule")
+    check("the caveat still says what a large disagreement IS good for",
+          "where to go looking" in md)
+
+
+def test_the_spanish_supply_use_tables_load_and_balance():
+    """The finest table the INE publishes, and the only fixture in the project
+    where the valuation identities can be checked at all (OQ-D-03).
+
+    Guards two label traps that a `partition(". ")` handled and a "more robust"
+    regex did not: the supply-use workbook writes `5 .Pescado` with the space on
+    the wrong side of the dot, and the input-output workbook wraps product 26
+    onto a second line.
+    """
+    from quadrium.io_loader import load_ine_tod
+    path = ROOT / "data" / "ine" / "cne_tod_22.xlsx"
+    if not path.exists():
+        check("the Spanish supply-use tables load", True, "fixture absent")
+        return
+    s = load_ine_tod(path)
+    check("110 products by 81 activities, the published detail",
+          (s.n_products, s.n_activities) == (110, 81),
+          f"{s.n_products} x {s.n_activities}")
+    check("the year comes from the workbook's own banner",
+          s.year == 2022, f"year = {s.year}")
+    check("a label with the dot on the wrong side still parses",
+          "5" in s.product_codes
+          and s.product_labels[s.product_codes.index("5")].startswith("Pescado"),
+          s.product_labels[s.product_codes.index("5")][:40])
+
+    d = float(np.abs(s.supply_at_purchasers() - s.use_at_purchasers()).max())
+    check("ID-01 holds: supply meets use product by product", d < 1e-3,
+          f"max deviation {d:.2e}")
+    for label, v in (("trade", s.trade_margins),
+                     ("transport", s.transport_margins)):
+        check(f"ID-08 the {label} margin column sums to zero",
+              abs(float(v.sum())) < 1e-3, f"{float(v.sum()):.2e}")
+        check(f"ID-19 and it carries the negatives that make it work",
+              int((v < 0).sum()) > 0,
+              f"{int((v < 0).sum())} negative(s), most negative {v.min():,.1f}")
+
+    # The reason this fixture exists: an analytical IOT cannot answer any of it.
+    from quadrium.io_loader import load_ine_tio
+    tio = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    if tio.exists():
+        t = load_ine_tio(tio, unbalanced="residual_column")
+        pair = [s.q[s.index_of_product(c)] for c in ("73", "74")]
+        check("and it disaggregates the IOT's product 36 exactly",
+              abs(sum(pair) - t.X[t.index_of("36")]) < 0.05,
+              f"{pair[0]:,.1f} + {pair[1]:,.1f} = {sum(pair):,.1f} against "
+              f"{t.X[t.index_of('36')]:,.1f}")
+
+
+def test_the_eurostat_connector_loads_and_refuses_correctly():
+    """The connector, and the three traps it was written around.
+
+    A missing cell is not a zero; the product set is derived from the data
+    rather than assumed; and the object's own row identity is checked, not only
+    the identities the source happens to satisfy.
+    """
+    from quadrium.eurostat import EurostatError, load_iot
+    path = ROOT / "data" / "eurostat" / "naio_10_cp1700_ES_2022.json"
+    if not path.exists():
+        check("the Eurostat connector loads", True, "fixture absent")
+        return
+
+    dom = load_iot(path, variant="domestic")
+    tot = load_iot(path, variant="total")
+    for t in (dom, tot):
+        row = float(np.abs(t.Z.sum(1) + t.Y.sum(1) - t.X).max())
+        col = float(np.abs(t.Z.sum(0) + t.VA.sum(0) - t.X).max())
+        check(f"{t.table_id} balances both ways",
+              max(row, col) < 1e-3, f"rows {row:.2e}, cols {col:.2e}")
+    check("the product set is derived from the data, not a hard-coded 64",
+          dom.n == 65 and "C10-12" in dom.sector_codes
+          and "C10" not in dom.sector_codes,
+          f"{dom.n} codes; the CPA hierarchy is served whole and the "
+          f"populated level is the one taken")
+    check("the domestic variant picks P5M where P52/P53 are not published",
+          "P5M" in dom.Y_labels and "P52" not in dom.Y_labels,
+          ", ".join(dom.Y_labels))
+    check("and the total variant picks the finer pair, which IS published",
+          "P52" in tot.Y_labels and "P53" in tot.Y_labels)
+    check("the total table carries a DERIVED negative imports column",
+          any("DERIVED" in l for l in tot.Y_labels),
+          "without it the IOTable row identity is off by 78,638")
+
+    try:
+        load_iot(path, variant="imports")
+    except EurostatError as exc:
+        check("the imports variant is refused as not being an IOT",
+              "no `P1` output vector" in str(exc))
+    else:
+        check("the imports variant is refused as not being an IOT", False,
+              "it returned a table")
+
+    # OQ-D-04: Eurostat's copy of the Spanish table does not carry the defect.
+    ine = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    if ine.exists():
+        from quadrium.io_loader import load_ine_tio
+        i = load_ine_tio(ine, unbalanced="residual_column")
+        j = dom.Y_labels.index("P3_S15")
+        k = [n for n, l in enumerate(i.Y_labels) if "instituciones" in l][0]
+        check("Eurostat has 7.3 where the INE workbook has -4,914.3 (OQ-D-04)",
+              abs(dom.Y[dom.index_of("A01"), j] - 7.3) < 0.05
+              and i.Y[0, k] < -4000,
+              f"Eurostat {dom.Y[dom.index_of('A01'), j]:,.1f} against INE "
+              f"{i.Y[0, k]:,.1f}")
+        check("and the two agree on every total, so it is the same table",
+              abs(dom.Z.sum() - i.Z.sum()) < 0.05
+              and abs(dom.X.sum() - i.X.sum()) < 0.05,
+              f"Z {dom.Z.sum():,.1f} · X {dom.X.sum():,.1f}")
+
+
+def test_the_eurostat_supply_use_loader():
+    """A supply-use pair for any member state, not just the one country whose
+    spreadsheet layout the project happens to have reverse-engineered.
+
+    Guards the three things that went wrong writing it, each of which would
+    have been a silent wrong answer rather than a crash.
+    """
+    from quadrium.eurostat import load_sut
+    sup = ROOT / "data" / "eurostat" / "naio_10_cp15_AT_2022.json"
+    use = ROOT / "data" / "eurostat" / "naio_10_cp16_AT_2022.json"
+    if not (sup.exists() and use.exists()):
+        check("the Eurostat supply-use loader", True, "fixture absent")
+        return
+    s = load_sut(sup, use)
+    check("it builds a supply-use pair from two Eurostat files",
+          (s.n_products, s.n_activities) == (65, 65) and s.year == 2022,
+          f"{s.table_id}: {s.n_products} x {s.n_activities}")
+
+    # 1. NACE section P is Education. A filter that drops everything starting
+    #    with "P" to remove P3/P5/P6 loses it, and activity output falls
+    #    25,913 short -- which is a wrong table, not an error.
+    check("NACE section P (Education) survives the final-demand filter",
+          "P" in s.activity_codes and abs(s.q.sum() - s.g.sum()) < 0.5,
+          f"q {s.q.sum():,.1f} against g {s.g.sum():,.1f}")
+
+    # 2. Eurostat publishes trade and transport margins COMBINED. Filling the
+    #    two component fields with the total and a column of zeros would be
+    #    undetectable downstream.
+    check("combined margins are recorded as combined, not split by invention",
+          s.trade_margins is None and s.transport_margins is None
+          and s.total_margins is not None,
+          "`OTTM` is the sum; ID-09 cannot be asked of this source")
+    check("ID-08 still holds: the margin column sums to zero",
+          abs(float(s.total_margins.sum())) < 1e-3
+          and int((s.total_margins < 0).sum()) > 0,
+          f"{float(s.total_margins.sum()):.2e} with "
+          f"{int((s.total_margins < 0).sum())} negative products")
+
+    # 3. A mismatched pair is two economies, not a supply-use pair.
+    from quadrium.eurostat import EurostatError
+    es = ROOT / "data" / "eurostat" / "naio_10_cp15_ES_2022.json"
+    if es.exists():
+        try:
+            load_sut(es, use)
+        except EurostatError as exc:
+            check("a mismatched country pair is refused",
+                  "do not make a supply-use pair" in str(exc))
+        else:
+            check("a mismatched country pair is refused", False, "it loaded")
+
+
+def test_project_folder_is_reproducible():
+    """MVP_0.1 §3: everything needed to rerun the analysis lands on disk."""
+    import json
+    import tempfile
+    from quadrium.models import AssumptionLedger
+    from quadrium.project import IOProject
+
+    table = build_table()
+    with tempfile.TemporaryDirectory() as td:
+        proj = IOProject(
+            project_id="t", table=table,
+            splits=[SplitSpec("ACC", NEW, LBL)], scenarios=build_scenarios(),
+            keys=build_keys(), ledger=AssumptionLedger(project_id="t"),
+            root=Path(td))
+        d = proj.run().write()
+        must = ["project.json", "original_table.csv", "report.md",
+                "assumption_ledger.json"]
+        missing = [f for f in must if not (d / f).exists()]
+        check("the project folder holds the reproducibility record",
+              not missing, f"missing: {missing}" if missing else "")
+        for res in proj.results:
+            sd = d / "scenarios" / res.scenario_id
+            need = ["table_disaggregated.csv", "provenance.csv",
+                    "validation_report.json", "diagnostics.json",
+                    "technical_coefficients.csv"]
+            gone = [f for f in need if not (sd / f).exists()]
+            check(f"scenario {res.scenario_id} exports are complete", not gone,
+                  f"missing: {gone}" if gone else "")
+        man = json.loads((d / "project.json").read_text())
+        check("the rejected scenario is recorded, not dropped",
+              len(man["outcome"]["scenarios_rejected"]) == 1,
+              f"{man['outcome']['scenarios_rejected']}")
+        check("tolerances are declared as project choices in the manifest",
+              "OQ-B-02" in man["tolerances_are_project_choices"])
+
+
+def test_export_json_handles_numpy_and_enums():
+    """The JSON writer must not choke on the types the engine actually uses."""
+    import json
+    import tempfile
+    from quadrium.export import write_json
+    from quadrium.models import CellLabel, ProxyStrength
+    payload = {"a": np.float64(1.5), "b": np.int64(3), "c": np.array([1.0, 2.0]),
+               "d": CellLabel.BALANCED_ADJUSTMENT, "e": ProxyStrength.WEAK,
+               "f": np.bool_(True), "g": float("nan")}
+    with tempfile.TemporaryDirectory() as td:
+        out = write_json(payload, Path(td) / "x.json")
+        back = json.loads(out.read_text())
+    check("JSON export survives numpy, enums and NaN",
+          back["d"] == "balanced_adjustment" and back["c"] == [1.0, 2.0]
+          and back["g"] is None, str(back))
+
+
+def test_input_profiles_preserve_supplier_totals():
+    """The property that keeps reaggregation exact.
+
+    A profile redistributes a supplier's sales WITHIN the new group. It must
+    never change how much that supplier sells TO the group, or the untouched
+    rows stop hitting their targets and §8 breaks.
+    """
+    from quadrium.disaggregation import split_sector
+    table = build_table()
+    plain = Scenario(scenario_id="plain", label="plain",
+                     keys_by_block={"output": "key_employment"})
+    profiled = Scenario(
+        scenario_id="profiled", label="profiled",
+        keys_by_block={"output": "key_employment"},
+        input_profiles={"HOT": {"AGR": 0.90, "MAN": 1.10},
+                        "RES": {"AGR": 1.10, "OTH": 0.92}})
+    keys = build_keys()
+    a = split_sectors(table, [SplitSpec("ACC", NEW, LBL)], plain, keys)
+    b = split_sectors(table, [SplitSpec("ACC", NEW, LBL)], profiled, keys)
+    pos = a["splits"][0]["positions"]
+    off = [i for i in range(len(a["codes"])) if i not in pos]
+    dev = float(np.max(np.abs(a["Z"][np.ix_(off, pos)].sum(axis=1)
+                              - b["Z"][np.ix_(off, pos)].sum(axis=1))))
+    check("input profiles preserve每 supplier's total sales to the group".replace("每", " each "),
+          dev < 1e-10, f"max|dev| = {dev:.2e}")
+    moved = float(np.max(np.abs(a["Z"][np.ix_(off, pos)] - b["Z"][np.ix_(off, pos)])))
+    check("input profiles actually move purchases between subsectors",
+          moved > 1.0, f"max cell change = {moved:.2f}")
+
+
+def test_input_profiles_differentiate_multipliers():
+    """Without profiles every subsector has the same multiplier; with them, not."""
+    table = build_table()
+    keys = build_keys()
+    plain = Scenario(scenario_id="plain", label="plain",
+                     keys_by_block={"output": "key_employment"})
+    profiled = Scenario(
+        scenario_id="profiled", label="profiled",
+        keys_by_block={"output": "key_employment"},
+        # Gentle on purpose: this synthetic sector trades only 12 with itself,
+        # so it absorbs about +-10 % of intensity variation before the internal
+        # block would need a negative total. The UK fixture has far more room.
+        input_profiles={"HOT": {"AGR": 0.90, "MAN": 1.10},
+                        "RES": {"AGR": 1.10, "MAN": 0.90}})
+    out = {}
+    for sc in (plain, profiled):
+        res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], sc, keys)
+        pos = res.splits[0]["positions"]
+        mult = res.diagnostics["multipliers"][pos]
+        out[sc.scenario_id] = (float(mult.max() - mult.min()),
+                               res.splits[0]["input_structure"])
+    check("a single key leaves the subsectors undifferentiated",
+          not out["plain"][1]["differentiated"],
+          f"cosine distance {out['plain'][1]['mean_cosine_distance']:.6f}, "
+          f"multiplier spread {out['plain'][0]:.2e}")
+    check("input profiles differentiate them",
+          out["profiled"][1]["differentiated"] and out["profiled"][0] > 1e-4,
+          f"cosine distance {out['profiled'][1]['mean_cosine_distance']:.4f}, "
+          f"multiplier spread {out['profiled'][0]:.4f}")
+
+
+def test_input_profiles_reject_nonsense():
+    """Strict where it should be strict.
+
+    A profile on the SplitSpec is about that split, so a typo must raise. A
+    profile on the Scenario is a shared pool across several splits, so entries
+    naming another split's subsectors are ignored by design — that is what lets
+    one scenario be "profiled" and another "plain" over the same splits.
+    """
+    from quadrium.disaggregation import DisaggregationError, split_sectors
+    table, keys = build_table(), build_keys()
+    sc = Scenario(scenario_id="x", label="x",
+                  keys_by_block={"output": "key_employment"})
+    cases = {
+        "unknown subsector": {"NOPE": {"AGR": 1.5}},
+        "unknown supplier": {"HOT": {"NOPE": 1.5}},
+        "negative intensity": {"HOT": {"AGR": -1.0}},
+        "supplier with nowhere to sell": {c: {"AGR": 0.0} for c in NEW},
+    }
+    for name, prof in cases.items():
+        spec = SplitSpec("ACC", NEW, LBL, input_profiles=prof)
+        try:
+            split_sectors(table, [spec], sc, keys)
+        except DisaggregationError:
+            check(f"spec-level profile rejects: {name}", True)
+        else:
+            check(f"spec-level profile rejects: {name}", False, "it was accepted")
+
+    shared = Scenario(scenario_id="y", label="y",
+                      keys_by_block={"output": "key_employment"},
+                      input_profiles={"HOT": {"AGR": 1.05},
+                                      "SOMEONE_ELSE": {"AGR": 9.9}})
+    try:
+        seed = split_sectors(table, [SplitSpec("ACC", NEW, LBL)], shared, keys)
+    except DisaggregationError as exc:
+        check("scenario-level pool ignores other splits' subsectors", False,
+              str(exc)[:80])
+    else:
+        check("scenario-level pool ignores other splits' subsectors",
+              seed["splits"][0]["profiled"])
+
+
+
+
+def _two_sector_setup():
+    from quadrium.models import AllocationKey, ProxyStrength
+    table = build_table()
+    keys = {k.key_id: k for k in [
+        AllocationKey("k_acc", "output", ["HOT", "RES"], [30., 70.],
+                      "illustrative", 2024, ProxyStrength.WEAK),
+        AllocationKey("k_tra", "output", ["ROAD", "RAIL"], [65., 35.],
+                      "illustrative", 2024, ProxyStrength.WEAK)]}
+    specs = [SplitSpec("ACC", ["HOT", "RES"], ["Hotels", "Restaurants"],
+                       {"output": "k_acc"}),
+             SplitSpec("TRA", ["ROAD", "RAIL"], ["Road", "Rail"],
+                       {"output": "k_tra"})]
+    return table, keys, specs
+
+
+def test_two_sectors_in_one_run():
+    """Both split sectors reaggregate; everything else returns bit-for-bit."""
+    from quadrium.reaggregation import reaggregate
+    table, keys, specs = _two_sector_setup()
+    sc = Scenario(scenario_id="multi", label="multi")
+    res = run_scenario(table, specs, sc, keys)
+
+    check("two sectors are divided in one run", len(res.splits) == 2,
+          f"{[s['sector_code'] for s in res.splits]} -> "
+          f"{res.table.n} sectors from {table.n}")
+    check("the multi-sector run validates", res.report.passed,
+          f"reaggregation error {res.report.reaggregation_error_pct:.2e} %")
+
+    Z_re = reaggregate(res.table.Z, res.mapping, table.n)
+    diff = np.abs(Z_re - table.Z)
+    mask = np.ones_like(diff, dtype=bool)
+    for code in ("ACC", "TRA"):
+        i = table.index_of(code)
+        mask[i, :] = False
+        mask[:, i] = False
+    check("sectors touched by neither split return exactly",
+          float(diff[mask].max()) < 1e-12, f"max|dev| = {diff[mask].max():.2e}")
+    check("both split sectors reaggregate within tolerance",
+          float(diff.max()) < 1e-9, f"max|dev| = {diff.max():.2e}")
+    check("no sign changes across either split",
+          res.diagnostics["balance_info"]["sign_changes"] == 0)
+
+
+def test_split_order_does_not_matter():
+    """Without input profiles the splits commute. Asserted, not assumed.
+
+    It matters because the engine applies them sequentially: if the order
+    changed the answer, the result would depend on how the analyst happened to
+    list the sectors.
+    """
+    table, keys, specs = _two_sector_setup()
+    sc = Scenario(scenario_id="o", label="o")
+    a = run_scenario(table, specs, sc, keys)
+    b = run_scenario(table, specs[::-1], sc, keys)
+    order = [b.table.sector_codes.index(c) for c in a.table.sector_codes]
+    dev = float(np.max(np.abs(a.table.Z - b.table.Z[np.ix_(order, order)])))
+    check("splitting A then B equals splitting B then A", dev < 1e-10,
+          f"max|dev| = {dev:.2e}")
+
+
+def test_a_sector_cannot_be_split_twice():
+    from quadrium.disaggregation import DisaggregationError, split_sectors
+    table, keys, specs = _two_sector_setup()
+    sc = Scenario(scenario_id="d", label="d")
+    for name, bad in {
+        "the same sector listed twice": [specs[0], specs[0]],
+        "a new code that already exists": [
+            SplitSpec("ACC", ["MAN", "RES"], ["x", "y"], {"output": "k_acc"})],
+    }.items():
+        try:
+            split_sectors(table, bad, sc, keys)
+        except DisaggregationError:
+            check(f"rejects: {name}", True)
+        else:
+            check(f"rejects: {name}", False, "it was accepted")
+
+
+def test_config_workbook_round_trip():
+    """The template must be loadable, and loading it must build a real run.
+
+    This is the path an analyst who does not write Python actually takes, so it
+    gets a test rather than a demo.
+    """
+    import tempfile
+    from quadrium.config import load_config, write_template
+    if not (ROOT / "UK_IOAT_2023_domestic_ixi.xlsx").exists():
+        check("config workbook round trip", True, "fixture absent, skipped")
+        return
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = write_template(Path(td) / "cfg.xlsx")
+        _set(cfg_path, "project", 2, 2, str((ROOT / "UK_IOAT_2023_domestic_ixi.xlsx").resolve()))
+        cfg = load_config(cfg_path)
+    check("the template is a valid configuration",
+          cfg["table"].n == 104 and len(cfg["splits"]) == 1
+          and len(cfg["scenarios"]) == 2,
+          f"{cfg['table'].n} sectors, {len(cfg['splits'])} split(s), "
+          f"{len(cfg['scenarios'])} scenario(s)")
+    check("comment rows are not read as data",
+          all(k.strip() for s in cfg["splits"] for k in s.new_codes)
+          and all(not c.startswith("#") for s in cfg["splits"]
+                  for c in s.new_codes))
+    profiled = [s for s in cfg["scenarios"] if s.input_profiles]
+    check("profiles attach to the scenario that names them",
+          len(profiled) == 1 and profiled[0].scenario_id == "S2_profiled",
+          f"{[s.scenario_id for s in profiled]}")
+    check("the ledger records every key and every profile",
+          any(a.assumption_id.startswith("KEY-") for a in cfg["ledger"].assumptions)
+          and any(a.assumption_id.startswith("PROFILE-")
+                  for a in cfg["ledger"].assumptions))
+
+
+def _set(path, sheet, row, col, value):
+    import openpyxl
+    wb = openpyxl.load_workbook(path)
+    wb[sheet].cell(row=row, column=col, value=value)
+    wb.save(path)
+
+
+def test_config_errors_are_useful():
+    """A bad workbook must say what is wrong, where, and in the analyst's terms."""
+    import shutil
+    import tempfile
+    from quadrium.config import ConfigError, load_config, write_template
+    if not (ROOT / "UK_IOAT_2023_domestic_ixi.xlsx").exists():
+        check("config errors are useful", True, "fixture absent, skipped")
+        return
+    with tempfile.TemporaryDirectory() as td:
+        base = write_template(Path(td) / "base.xlsx")
+        _set(base, "project", 2, 2, str((ROOT / "UK_IOAT_2023_domestic_ixi.xlsx").resolve()))
+        cases = {
+            "bad strength": ("keys", 2, 6, "very strong", "strong, medium or weak"),
+            "non-numeric weight": ("keys", 2, 3, "lots", "is not a number"),
+            "unknown sector": ("splits", 2, 1, "NOSUCH", "not in the loaded table"),
+            "unknown supplier": ("profiles", 2, 3, "XX9", "not a sector"),
+            "orphan profile": ("profiles", 2, 1, "S9", "does not define"),
+        }
+        for name, (sheet, row, col, bad, expect) in cases.items():
+            p = Path(td) / f"{name.replace(' ', '_')}.xlsx"
+            shutil.copy(base, p)
+            _set(p, sheet, row, col, bad)
+            try:
+                load_config(p)
+            except ConfigError as exc:
+                check(f"explains: {name}", expect in str(exc),
+                      str(exc).splitlines()[0][:70])
+            else:
+                check(f"explains: {name}", False, "it was accepted")
+
+
+def test_classification_validates_split_codes():
+    """M-049: is this a subdivision, or just a list of codes?"""
+    from quadrium.classification import NACE_REV_2_1, check_split
+    good = check_split("I56", ["I561", "I562", "I563"])
+    check("a division splitting into its groups is accepted", good.ok,
+          good.summary()[:60])
+    check("and it still says coverage was not checked",
+          any("coverage not checked" in u for u in good.unchecked))
+
+    bad = {
+        "a child outside the parent": ("I56", ["I561", "I571"]),
+        "skipping a level": ("I56", ["I5601", "I5602"]),
+        "a child repeating the parent": ("I56", ["I56", "I561"]),
+        "the same child twice": ("I56", ["I561", "I561"]),
+        "more children than digits allow": ("56", [f"56{i}" for i in "123456789"] + ["560"]),
+    }
+    for name, (parent, kids) in bad.items():
+        check(f"rejects: {name}", not check_split(parent, kids).ok)
+
+    deep = check_split("5610", ["56101", "56102"], NACE_REV_2_1)
+    check("rejects splitting below NACE's deepest level", not deep.ok,
+          deep.problems[0][:70] if deep.problems else "")
+    national = check_split("5610", ["56101", "56102"])
+    check("allows it in a national version with a fifth digit", national.ok)
+
+    unknown = check_split("ACC", ["HOT", "RES"])
+    check("codes that are not a classification are not an error",
+          unknown.ok and not unknown.parsed)
+
+
+def test_engine_refuses_an_illegitimate_split():
+    """The check runs on every path, not only in the workbook loader."""
+    from quadrium.disaggregation import DisaggregationError
+    from quadrium.io_loader import load_uk_analytical_iot
+    from quadrium.models import AllocationKey, ProxyStrength
+    path = ROOT / "UK_IOAT_2023_domestic_ixi.xlsx"
+    if not path.exists():
+        check("engine refuses an illegitimate split", True, "fixture absent")
+        return
+    table = load_uk_analytical_iot(path)
+    keys = {"k": AllocationKey("k", "output", ["I561", "I571"], [7., 3.],
+                               "illustrative", 2023, ProxyStrength.WEAK)}
+    try:
+        run_scenario(table,
+                     [SplitSpec("I56", ["I561", "I571"], ["a", "b"],
+                                {"output": "k"})],
+                     Scenario(scenario_id="s", label="s"), keys)
+    except DisaggregationError as exc:
+        check("the engine refuses a child outside the parent",
+              "not inside I56" in str(exc))
+    else:
+        check("the engine refuses a child outside the parent", False,
+              "it produced a table")
+
+
+def test_targets_are_consistent():
+    """Row and column targets must sum to the same grand total, or no table exists."""
+    table = build_table()
+    seed = split_sectors(table, [SplitSpec("ACC", NEW, LBL)], build_scenarios()[0], build_keys())
+    tr, tc = targets(seed["Y"], seed["VA"], seed["X"])
+    check("row and column targets sum to the same total",
+          abs(tr.sum() - tc.sum()) < 1e-9,
+          f"difference = {tr.sum() - tc.sum():.2e}")
+
+
+def test_id19_margin_column():
+    """ID-19: a margin column sums to zero AND gives the margin up somewhere.
+
+    CORE_010 par. 7.19, p. 211. The sign pattern is half the identity: a column
+    can hit a zero total while having reallocated nothing, and the first version
+    of this check passed exactly that case because it tested "not positive"
+    instead of "strictly gives something up".
+    """
+    from quadrium.identities import id19_margin_column_sums_to_zero as id19
+    cases = [
+        ("a correct column",            [12.0, 30.0, -50.0, 8.0],   [2],    True),
+        ("zero total, nothing moved",   [12.0, 30.0, 0.0, -42.0],   [2],    False),
+        ("does not sum to zero",        [12.0, 30.0, -10.0, 8.0],   [2],    False),
+        ("service row positive",        [-30.0, -20.0, 50.0, 0.0],  [2],    False),
+        ("two service rows, one zero",  [40.0, 10.0, -50.0, 0.0],   [2, 3], True),
+        ("an empty column",             [0.0, 0.0, 0.0, 0.0],       [2],    True),
+    ]
+    for name, col, svc, want in cases:
+        r = id19(col, service_rows=svc)
+        check(f"{name} -> {'passes' if want else 'is rejected'}",
+              r.passed == want, r.detail)
+
+
+def test_corroboration_uses_the_keys_the_split_did_not():
+    """A registered-but-unused key becomes an automatic external check.
+
+    This is the only check in the project that can distinguish a good split
+    from a bad one; every other one passes on any key at all. So it is worth
+    testing three things and not just that it runs: that it ignores the key
+    that DROVE the split, that it compares an unused key against the block
+    that key claims to describe, and that the gap it reports is arithmetic
+    rather than decoration.
+    """
+    from quadrium.validation import corroborate_keys
+    from quadrium.models import AllocationKey, ProxyStrength
+    codes = ["A1", "A2"]
+
+    def key(kid, block, vals):
+        return AllocationKey(key_id=kid, applies_to=block,
+                             new_sector_codes=codes, raw_values=vals,
+                             source="test", source_year=2023,
+                             strength=ProxyStrength.STRONG)
+
+    keys = {"driver": key("driver", "output", [60.0, 40.0]),
+            "other": key("other", "value_added", [50.0, 50.0]),
+            "elsewhere": AllocationKey(
+                key_id="elsewhere", applies_to="output",
+                new_sector_codes=["B1", "B2"], raw_values=[1.0, 1.0],
+                source="test", source_year=2023,
+                strength=ProxyStrength.STRONG)}
+    used = {"output": "driver"}
+    weights = {"output": [0.6, 0.4], "value_added": [0.6, 0.4]}
+
+    got, skipped = corroborate_keys(keys, codes, used, weights)
+    ids = [c["key_id"] for c in got]
+    check("the driving key is not compared against itself", "driver" not in ids,
+          f"compared: {ids}")
+    check("a key for another split is ignored", "elsewhere" not in ids,
+          f"compared: {ids}")
+    check("the unused key is compared", ids == ["other"], f"compared: {ids}")
+
+    c = got[0]
+    check("compared against the block the key claims",
+          c["compared_against_block"] == "value_added",
+          c["compared_against_block"])
+    # split gave A1 0.6 where the key measures 0.5 -> +20 %
+    check("the gap is computed, not decorative",
+          abs(c["rows"][0]["gap"] - 0.2) < 1e-12
+          and abs(c["max_abs_gap"] - 0.2) < 1e-12,
+          f"gap={c['rows'][0]['gap']:.4f} worst={c['max_abs_gap']:.4f}")
+
+    # And with nothing spare to compare against, it says nothing at all.
+    check("no unused key -> no corroboration, not an empty flourish",
+          corroborate_keys({"driver": keys["driver"]}, codes, used,
+                           weights)[0] == [],
+          "should be an empty list")
+
+    # A weak key must never become evidence. This is the case that produced a
+    # WRONG verdict on the first real run: a leftover illustrative key beat two
+    # official ones because nothing filtered it out.
+    weak = key("guess", "output", [90.0, 10.0])
+    weak.strength = ProxyStrength.WEAK
+    got2, skipped2 = corroborate_keys({**keys, "guess": weak}, codes, used,
+                                      weights)
+    check("a weak key is not used as corroboration",
+          "guess" not in [c["key_id"] for c in got2],
+          f"compared: {[c['key_id'] for c in got2]}")
+    check("but it is reported as skipped, not dropped in silence",
+          [s["key_id"] for s in skipped2] == ["guess"],
+          f"skipped: {skipped2}")
+
+
+def test_the_report_does_not_stay_silent():
+    """Three places the report used to say nothing, where nothing read as fine.
+
+    Each of these was found by reading real output, not by reasoning about the
+    code, and each has the same shape: an absent line that a reader completes
+    in the system's favour.
+    """
+    import numpy as np
+    from types import SimpleNamespace
+    from quadrium.reporting import scenario_section
+    from quadrium.models import CellLabel
+
+    def render(split):
+        class R:
+            scenario_id = "S"
+            provenance = np.array([[CellLabel.OBSERVED]], dtype=object)
+            report = SimpleNamespace(to_markdown=lambda: "(none)")
+            table = SimpleNamespace(sector_codes=["B1"], Z=np.array([[1.0]]),
+                                    Y=np.array([[1.0]]), VA=np.array([[1.0]]),
+                                    X=np.array([2.0]))
+            diagnostics = {"balance_info": {
+                "method": "GRAS", "reason": "-", "converged": True,
+                "iterations_per_split": {"B": 1}, "max_row_dev": 0.0,
+                "max_col_dev": 0.0, "n_negative_seed": 0,
+                "n_negative_result": 0, "sign_changes": 0},
+                "multipliers": [1.0]}
+            splits = [split]
+        return scenario_section(R())
+
+    base = {"sector_code": "B", "sector_label": "B", "positions": [0],
+            "keys_used": {"output": "k"}, "keys_inherited": {"output": False},
+            "key_meta": {"k": {"strength": "strong", "source": "s",
+                               "source_year": 2023}},
+            "weights": {"output": [1.0]}, "headroom_pct": 5.0,
+            "parent_diagonal": 100.0, "tightest_internal_total": 5.0,
+            "internal_block_share_pct": 0.0, "original_diagonal": 100.0,
+            "input_structure": {}}
+
+    # 1. A key with no headroom at all used to produce NO headroom line.
+    out = render({**base, "headroom_pct": float("nan"), "parent_diagonal": 0.0})
+    check("zero self-trade is stated, not omitted",
+          "trades nothing with itself" in out,
+          "the most constrained case must not be the quietest")
+
+    # 2. A weak key driving the split used to look like a strong one.
+    out = render({**base, "key_meta": {"k": {"strength": "weak", "source": "s",
+                                            "source_year": 2023}}})
+    check("a weak driving key is called out", "`weak` is driving" in out, out[:80])
+
+    # 3. A block that inherited its key used to look like a deliberate choice.
+    out = render({**base, "keys_inherited": {"output": True}})
+    check("an inherited key says so", "inherited" in out, out[:80])
+    check("and the inheritance is explained, not just labelled",
+          "not a decision by the analyst" in out, out[:80])
+
+
+def test_machine_facing_surfaces_do_not_stay_silent():
+    """The JSON, the folder and the CLI, where the reader is a program.
+
+    A person gets the caveats from report.md. Anything automating over this
+    gets the folder and the JSON, and those used to carry the numbers without
+    the warnings — including, for a whole day, the results of a scenario that
+    had been withdrawn for being misleading.
+    """
+    import json
+    import shutil
+    from quadrium.project import IOProject
+
+    table, keys, scen = build_table(), build_keys(), build_scenarios()
+    root = ROOT / "outputs" / "_test_silences"
+    if root.exists():
+        shutil.rmtree(root)
+
+    spec = SplitSpec("ACC", NEW, LBL)
+    p1 = IOProject(project_id="_test_silences", table=table, splits=[spec],
+                   scenarios=scen[:1], keys=keys, root=ROOT / "outputs")
+    p1.run().write()
+    d = root / "scenarios"
+    first = {x.name for x in d.iterdir()}
+
+    # A stale scenario folder from an earlier configuration must not survive.
+    (d / "S9_withdrawn").mkdir()
+    (d / "S9_withdrawn" / "table_disaggregated.csv").write_text("stale\n")
+    p2 = IOProject(project_id="_test_silences", table=table, splits=[spec],
+                   scenarios=scen[:1], keys=keys, root=ROOT / "outputs")
+    p2.run().write()
+    after = {x.name for x in d.iterdir()}
+    check("a withdrawn scenario's folder is removed, not left looking current",
+          "S9_withdrawn" not in after, f"folder holds {sorted(after)}")
+    check("and the removal is announced, not silent",
+          "S9_withdrawn" in getattr(p2, "removed_scenarios", []),
+          f"removed: {getattr(p2, 'removed_scenarios', None)}")
+    check("the scenarios that belong are untouched", first <= after,
+          f"{sorted(first)} vs {sorted(after)}")
+
+    # The manifest is the authoritative list, so a consumer can check the
+    # filesystem against something.
+    man = json.loads((root / "project.json").read_text())
+    check("project.json names the scenarios this run produced",
+          man.get("scenario_ids") == sorted(first), str(man.get("scenario_ids")))
+    check("and records what it removed as stale",
+          man.get("scenarios_removed_as_stale") == ["S9_withdrawn"],
+          str(man.get("scenarios_removed_as_stale")))
+
+    # The corroboration's scope must be readable without parsing English prose.
+    diag = json.loads(
+        (d / sorted(first)[0] / "diagnostics.json").read_text())
+    check("the JSON states what the corroboration covers",
+          "corroboration_covers" in diag["splits"][0],
+          "a consumer reading max_abs_gap needs to know its scope")
+
+    shutil.rmtree(root)
+
+
+def test_exports_travel_with_their_status():
+    """A number that leaves this system must not leave its caveats behind.
+
+    The XLSX shades estimated cells and carries a README sheet. The CSV — the
+    file people actually open — carried neither, and the provenance sat in a
+    separate file nobody has a reason to look for.
+    """
+    import shutil
+    import numpy as np
+    from quadrium.project import IOProject
+
+    root = ROOT / "outputs" / "_test_exports"
+    if root.exists():
+        shutil.rmtree(root)
+    p = IOProject(project_id="_test_exports", table=build_table(),
+                  splits=[SplitSpec("ACC", NEW, LBL)],
+                  scenarios=build_scenarios()[:1], keys=build_keys(),
+                  root=ROOT / "outputs")
+    p.run().write()
+    sd = root / "scenarios" / p.results[0].scenario_id
+
+    csv = (sd / "table_disaggregated.csv").read_text()
+    head = [ln for ln in csv.splitlines() if ln.startswith("#")]
+    check("the table CSV says not everything in it is observed",
+          any("NOT ALL OF THESE NUMBERS ARE OBSERVED" in ln for ln in head),
+          f"{len(head)} comment line(s)")
+    check("and it points at where the caveats are",
+          any("report.md" in ln for ln in head), str(head[-1:]))
+    check("the data itself is still parseable below the comments",
+          csv.splitlines()[len(head)].startswith("code,label,"),
+          csv.splitlines()[len(head)][:40])
+
+    # An uncomputable coefficient must not be written as a plausible zero.
+    coef = (sd / "technical_coefficients.csv").read_text()
+    check("the coefficients file distinguishes 'unknown' from 'zero'",
+          coef.startswith("#") and "not the same as a coefficient" in coef,
+          coef.splitlines()[0][:60])
+
+    # The loader's own decisions reach the human-readable report.
+    rep = (root / "report.md").read_text()
+    check("the report states what the loader decided about the input",
+          "What the loader decided" in rep or "Reference year:" in rep,
+          "a reader must be told their table was modified")
+
+    shutil.rmtree(root)
+
+
+def test_a_pinned_cell_the_solver_moved_stops_claiming_to_be_pinned():
+    """The worst silence found in this engine: a label that asserted a falsehood.
+
+    `user_constraints` writes a value and marks the cell USER_CONSTRAINT, which
+    the report renders "OBSERVED (analyst-pinned)". Nothing protected it —
+    `locked_cells` is a different mechanism and GRAS refuses locks outright —
+    so on any table with negatives a pin inside the internal block is moved by
+    the solver and went on describing itself as the analyst's own value.
+    Reproduced: asked 99.0, held 0.3734, still labelled pinned.
+    """
+    from quadrium.models import CellLabel
+    table = build_table()
+    p = table.index_of("ACC")
+    sc = Scenario(scenario_id="pinned", label="pinned",
+                  keys_by_block={"output": "key_employment"},
+                  user_constraints={f"{p},{p+1}": 99.0})
+    res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], sc, build_keys())
+
+    held = float(res.table.Z[p, p + 1])
+    check("the solver did move the pinned cell (the premise of this test)",
+          abs(held - 99.0) > 1e-6, f"cell holds {held:.4f}")
+    check("so it no longer calls itself analyst-pinned",
+          res.provenance[p, p + 1] is CellLabel.BALANCED_ADJUSTMENT,
+          f"label is {res.provenance[p, p+1].value}")
+
+    over = res.diagnostics.get("user_constraints_overridden") or []
+    check("the override is recorded with both numbers", len(over) == 1
+          and abs(over[0]["requested"] - 99.0) < 1e-9
+          and abs(over[0]["actual"] - held) < 1e-9, str(over))
+    check("and the validation report warns rather than passing quietly",
+          any(c.name == "check_user_constraints_held" and not c.passed
+              for c in res.report.checks),
+          "a moved pin must not be a silent pass")
+
+    # A pin the solver did NOT touch must keep its label — the fix must not
+    # relabel everything out of caution.
+    off = table.index_of("MAN")
+    sc2 = Scenario(scenario_id="untouched", label="untouched",
+                   keys_by_block={"output": "key_employment"},
+                   user_constraints={f"{off},{off}": float(table.Z[off, off])})
+    res2 = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], sc2, build_keys())
+    check("a pin the solver left alone still reads as pinned",
+          res2.provenance[off, off] is CellLabel.USER_CONSTRAINT,
+          f"label is {res2.provenance[off, off].value}")
+
+
+def test_a_number_too_small_to_show_is_not_shown_as_zero():
+    """Rounding must not turn "a little" into "none".
+
+    The last of the silences, and the quietest: `f"{0.04:,.1f}"` is `"0.0"`, so
+    a sector that buys a little was reported as buying nothing, with no way for
+    the reader to tell that case from a true zero.
+    """
+    from quadrium.reporting import _fmt, _pct
+
+    check("a true zero still reads as zero", _fmt(0.0) == "0.0", _fmt(0.0))
+    check("a small positive is marked as below the threshold",
+          _fmt(0.04) == "<0.05", _fmt(0.04))
+    check("a small negative keeps its sign", _fmt(-0.04) == ">-0.05",
+          _fmt(-0.04))
+    check("anything that rounds to a visible figure is untouched",
+          _fmt(0.06) == "0.1" and _fmt(1234.5) == "1,234.5",
+          f"{_fmt(0.06)} / {_fmt(1234.5)}")
+    check("the threshold follows the requested precision",
+          _fmt(0.0004, 3) == "<0.0005" and _fmt(0.04, 3) == "0.040",
+          f"{_fmt(0.0004, 3)} / {_fmt(0.04, 3)}")
+    check("not-computable stays a third thing, not a zero",
+          _fmt(float("nan")) == "—", _fmt(float("nan")))
+
+    # The same rule on percentages, where a rounded-away gap reads as agreement.
+    check("a zero gap reads as zero", _pct(0.0) == "+0.0%", _pct(0.0))
+    check("a tiny gap is not reported as agreement",
+          _pct(0.0004) == "<+0.05%", _pct(0.0004))
+    check("a real gap is unchanged", _pct(-0.153) == "-15.3%", _pct(-0.153))
+
+
+def main() -> int:
+    print("quadrium engine checks")
+    print("=" * 60)
+    for fn in (test_gras_reduces_to_ras, test_ras_refuses_negatives,
+               test_reaggregation_is_exact, test_signs_and_zeros_preserved,
+               test_infeasible_scenario_is_rejected,
+               test_original_table_is_never_mutated, test_weights_sum_to_one,
+               test_real_uk_table_loads_and_balances,
+               test_loader_refuses_an_unbalanced_table,
+               test_real_ine_table_loads_and_balances,
+               test_the_spanish_supply_use_tables_load_and_balance,
+               test_the_eurostat_connector_loads_and_refuses_correctly,
+               test_the_eurostat_supply_use_loader,
+               test_the_spanish_table_is_reachable_from_a_workbook,
+               test_the_spanish_pilot_holds_its_two_delicate_properties,
+               test_a_key_from_the_wrong_year_says_so,
+               test_a_share_of_something_that_changes_sign_is_refused,
+               test_value_added_rows_can_carry_their_own_evidence,
+               test_an_input_profile_carries_its_provenance_and_its_side_effect,
+               test_corroboration_reports_a_spread_and_refuses_to_rank,
+               test_project_folder_is_reproducible,
+               test_export_json_handles_numpy_and_enums,
+               test_input_profiles_preserve_supplier_totals,
+               test_input_profiles_differentiate_multipliers,
+               test_input_profiles_reject_nonsense,
+               test_two_sectors_in_one_run, test_split_order_does_not_matter,
+               test_a_sector_cannot_be_split_twice,
+               test_config_workbook_round_trip, test_config_errors_are_useful,
+               test_classification_validates_split_codes,
+               test_engine_refuses_an_illegitimate_split,
+               test_targets_are_consistent, test_id19_margin_column,
+               test_corroboration_uses_the_keys_the_split_did_not,
+               test_the_report_does_not_stay_silent,
+               test_machine_facing_surfaces_do_not_stay_silent,
+               test_exports_travel_with_their_status,
+               test_a_pinned_cell_the_solver_moved_stops_claiming_to_be_pinned,
+               test_a_number_too_small_to_show_is_not_shown_as_zero):
+        print(f"\n{fn.__name__}")
+        fn()
+    print("\n" + "=" * 60)
+    if FAILURES:
+        print(f"{len(FAILURES)} check(s) FAILED: {', '.join(FAILURES)}")
+        return 1
+    print("All checks passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
