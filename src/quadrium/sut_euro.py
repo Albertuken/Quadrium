@@ -74,7 +74,21 @@ STOP_PCT = 1.0
 # (¶18.101, p. 577) while Box 18.8's 1 per cent rule would have stopped far
 # earlier; the two accounts are not reconciled (`M-046` LIMITATIONS). A limit is
 # needed because nothing in the method guarantees the loop terminates.
-PROJECT_MAX_ITER = 200
+#
+# It was 200, chosen from a chapter whose own fixture converges in THREE. On
+# real supply-use pairs that is nowhere near enough. Measured 2026-08-26,
+# iterations to reach the chapter's own 1 per cent rule:
+#
+#     ES 2021 -> 2022     356        IT 2021 -> 2022   2,835
+#     AT 2021 -> 2022     561        NL 2021 -> 2022   1,703
+#     AT 2020 -> 2022   1,617
+#
+# At 200 every one of them stopped short — Austria at 9.4 per cent, Spain at
+# 2.5 — and said "Converged in 200 iteration(s)", which was false and was the
+# one sentence a reader would look at. Both halves of that are fixed: the
+# ceiling is raised past what real data needs, and a run that reaches it now
+# refuses instead of reporting.
+PROJECT_MAX_ITER = 5000
 
 
 class SutEuroError(ValueError):

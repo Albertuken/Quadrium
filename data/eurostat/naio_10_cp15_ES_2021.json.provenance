@@ -1,0 +1,10 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp15?format=JSON&geo=ES&time=2021&unit=MIO_EUR",
+  "dataset": "naio_10_cp15",
+  "geo": "ES",
+  "year": 2021,
+  "bytes": 73273,
+  "sha256": "8a72ed5ae470d02d387f956d34461114162e8a030d7561f189b61e1fc2883434",
+  "retrieved": "2026-08-26",
+  "why": "the year before ES 2022, so a projection can be tested OUT OF SAMPLE against a table the office later published"
+}

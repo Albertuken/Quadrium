@@ -117,14 +117,14 @@ def main() -> int:
                      imports_target=float(Um0.sum()))
     va_dev = max(abs(v - 1.0) for k, v in wrong.deviations.items()
                  if k.startswith("va["))
+    parked = float(np.abs(wrong.Ud - Ud0).max())
     check("the same call at BASIC prices fails, and fails quietly",
-          not wrong.converged
-          and float(np.abs(wrong.Ud - Ud0).max()) > 100
-          and va_dev < 1e-3,
+          not wrong.converged and parked > dev * 1e6 and va_dev < 1e-3,
           f"{wrong.iterations} iterations without converging, parked "
-          f"{float(np.abs(wrong.Ud - Ud0).max()):.0f} from the base pair, and "
-          f"the worst value-added deviation reads {1 + va_dev:.5f} — which "
-          f"looks like success. Only the identity test tells them apart")
+          f"{parked:,.0f} from the base pair against the {dev:.3g} the right "
+          f"basis returns — a factor of {parked / dev:,.0f} — while the worst "
+          f"value-added deviation reads {1 + va_dev:.5f}, which looks like "
+          f"success. Only the identity test tells them apart")
 
     # 3 -- a real projection moves everything, and moves it consistently.
     print()

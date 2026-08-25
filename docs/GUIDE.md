@@ -230,7 +230,24 @@ the test to run if you ever doubt your targets.
 
 The method stops when every aggregate is within one per cent of its target,
 which is the Handbook's own rule. Your totals are approached, not attained, and
-the report says how closely.
+the report says how closely. Real pairs take **hundreds to thousands of
+iterations** to get there — 356 for Spain 2021 → 2022, 2,835 for Italy — where
+the Handbook's own worked example takes three. A run that does not reach the
+rule now refuses rather than returning a table that says it converged.
+
+**What a projection is for, and what it costs.** The projected table is
+consistent with the totals you supplied and the base year is not: Spain's 2021
+value added is 10.8 % below 2022's, so if you need a table that adds up to 2022,
+the 2021 table is not an option however good it is. That consistency is what you
+are buying.
+
+You are not buying a better estimate of the structure. Projecting Spain, Austria,
+Italy and the Netherlands forward one or two years and scoring the result
+against the table their offices later published, **the projected cells came out
+further from the truth than the base year's own cells in all five tests** — and
+the same on technical coefficients, which have no scale in them. Five tests are
+five tests, and no manual claims otherwise, but do not read "projected to 2026"
+as "a better picture of 2026 than the latest published table".
 
 **If the pair does not close.** The engine checks the publisher's own
 identities before loading anything, against a bound derived from that

@@ -385,8 +385,8 @@ class SupplyUseTables:
         return self.transformable and self.taxes_by_final_demand is not None
 
     def project(self, *, gva, final_use, taxes, imports,
-                method: str = "sut_euro", year: int | None = None
-                ) -> "SupplyUseTables":
+                method: str = "sut_euro", year: int | None = None,
+                max_iter: int | None = None) -> "SupplyUseTables":
         """Project this pair onto a later year's totals. UNH_18 ch. 18.
 
         WHAT THIS IS FOR, AND WHY IT IS A SECOND VERB
@@ -409,6 +409,30 @@ class SupplyUseTables:
         Every cell is BALANCED in the sense of §A.1: the base year's structure
         carried onto the target year's totals. Nothing in it was observed for
         the target year except the totals you supplied.
+
+        AND IT WAS BACK-TESTED, WHICH IS NOT THE SAME AS VERIFIED
+        ----------------------------------------------------------
+        Reproducing UNH_18 Box 18.7's printed iterations shows the code
+        implements the chapter. It says nothing about whether the answer is
+        good, and on 2026-08-26 that was measured for the first time:
+        Eurostat's consecutive pairs for Spain, Austria, Italy and the
+        Netherlands were projected forward and scored against the table the
+        office later published.
+
+        **The projected cells came out further from the published year than
+        the base year's own cells, in all five tests** — 34.0 % against 29.4 %
+        of total domestic intermediate use for Spain 2021 → 2022, and the same
+        ordering on technical coefficients, which have no scale in them. It is
+        not the damping exponent: sweeping `ε` from 0.3 to 1.0 moves the
+        iteration count and not the answer.
+
+        That is not a verdict on the method, and the comparison is not
+        symmetric. **The projected pair is consistent with the target
+        aggregates and the base year is not** — Spain's 2021 value added is
+        10.8 % below 2022's — so anyone who needs a table adding up to known
+        later-year totals cannot use the base year at all, however close its
+        cells are. The consistency is the product. What the back-test measures
+        is its price. See `../validators/run_projection_backtest.py`.
 
         Parameters
         ----------
@@ -461,10 +485,11 @@ class SupplyUseTables:
 
         if method == "sut_euro":
             from .sut_euro import sut_euro
+            kw = {} if max_iter is None else {"max_iter": int(max_iter)}
             r = sut_euro(Ud0, Um0, tls0, self.V[_np.ix_(pi, ai)].T,
                          va_target=gva, final_use_target=final_use,
                          tls_target=float(taxes),
-                         imports_target=float(imports))
+                         imports_target=float(imports), **kw)
             # `r.V` is industries x products and `r.x` is industry output --
             # taken from the result rather than rebuilt, because rebuilding is
             # how a rounding residue becomes a second opinion.
@@ -476,6 +501,25 @@ class SupplyUseTables:
             # signature of a value-added block that did not move with the
             # rest of the table.
             tls_new, gva_new = r.tls.ravel(), r.gva.ravel()
+            # It said "Converged in N iteration(s)" whatever happened. On every
+            # real pair tried on 2026-08-26 that sentence was false: the loop
+            # hit its 200-iteration ceiling with the worst aggregate still 2.5
+            # to 9.4 per cent from its target, and the note reported success.
+            # A projection that did not converge is not a projection.
+            if not r.converged:
+                worst = max(abs(v - 1.0) for v in r.deviations.values()) * 100
+                raise ValueError(
+                    f"the projection did not converge: {r.iterations} "
+                    f"iterations and the worst aggregate is still "
+                    f"{worst:.2f} % from its target, against the chapter's "
+                    f"own 1 per cent rule (UNH_18 Box 18.8).\n\n"
+                    f"Raise `max_iter` — real supply-use pairs have needed "
+                    f"356 to 2,835 iterations where the chapter's own fixture "
+                    f"takes three — or check the targets: projecting a pair "
+                    f"onto its OWN totals must return that pair in one "
+                    f"iteration, and if it does not, the targets are in the "
+                    f"wrong price basis. Final use must be at PURCHASERS' "
+                    f"prices, taxes included.")
             note = (f"SUT-EURO, UNH_18 ¶18.89–18.102, pp. 575–577. Converged "
                     f"in {r.iterations} iteration(s) on the chapter's own "
                     f"1 per cent rule.")
@@ -521,7 +565,13 @@ class SupplyUseTables:
             notes=(f"PROJECTED, NOT OBSERVED. The {self.year} pair's structure "
                    f"carried onto {label} totals by {note} Nothing here was "
                    f"measured for {label} except the value added, final use, "
-                   f"taxes and imports totals that were supplied."
+                   f"taxes and imports totals that were supplied. What this "
+                   f"buys is consistency with those totals, which the "
+                   f"{self.year} table does not have. It is not a better "
+                   f"picture of {label}'s structure: back-tested on five "
+                   f"consecutive Eurostat pairs, the projected cells came out "
+                   f"FURTHER from the table the office later published than "
+                   f"the base year's own cells did."
                    + (f" Dropped for having no base-year output, which leaves "
                       f"a market share undefined: {', '.join(dropped)}."
                       if dropped else "")))

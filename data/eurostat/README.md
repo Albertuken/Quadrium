@@ -617,3 +617,48 @@ does, and both say whether the set OVERSHOOTS (mixes levels) or falls SHORT
 
 Malta is still refused, on the industry axis, 20.08 % short — correctly, and now
 for the reason that is true.
+
+---
+
+## `naio_10_cp15/cp1610_ES_2021.json` — the year before, so a projection can be scored
+
+Retrieved 2026-08-26; URL, bytes and SHA-256 in the `.provenance` sidecars.
+`naio_10_cp16_ES_2021.json` was already here.
+
+With these two, Spain has **two consecutive projectable pairs on identical
+axes**, which is what a back-test needs: project 2021 onto 2022's published
+value added, final use, taxes and imports, then compare cell by cell with the
+2022 the office actually published.
+
+Until this was run, the projection had been checked only against UNH_18
+Box 18.7's printed iterations — which tests that the code implements the
+chapter, not that the chapter's answer is good.
+
+**Two defects fell out immediately.** The iteration ceiling was 200, taken from
+a fixture that converges in three; real pairs need 356 (ES), 561 and 1,617
+(AT), 1,703 (NL) and 2,835 (IT). And the projected table's own note said
+"Converged in N iteration(s)" whether it had converged or not — at the 200
+ceiling Austria was still 9.4 % from its target and the note reported success.
+
+**And the measurement, which is not flattering.** Scored against the published
+2022, on domestic intermediate use:
+
+| | levels | coefficients (per 1000) |
+|---|---:|---:|
+| projected | 34.0 % | 2.117 |
+| base year unchanged | 29.4 % | 2.029 |
+| base year scaled | 28.8 % | 2.029 |
+
+The projection is further from the published table than the base year left
+alone — and the same holds for Austria, Italy and the Netherlands, and on
+technical coefficients, which have no scale in them. It is not the project's
+own damping choice either: sweeping `ε` from 0.3 to 1.0 moves the iteration
+count and not the answer.
+
+That is not a verdict on the method. The projected pair **is consistent with
+2022's aggregates and the base year is not** — Spain's 2021 value added is
+10.8 % below 2022's — so anyone needing a table that adds up to known later-year
+totals cannot use the base year at all. The consistency is the product; this is
+its price, and now it is a number.
+
+`library/validators/run_projection_backtest.py`.
