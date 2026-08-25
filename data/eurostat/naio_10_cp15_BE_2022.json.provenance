@@ -1,0 +1,10 @@
+{
+  "dataset": "naio_10_cp15",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp15?format=JSON&lang=EN&geo=BE&time=2022&unit=MIO_EUR",
+  "geo": "BE",
+  "year": 2022,
+  "bytes": 140804,
+  "sha256": "2a1e2a2ec51de6b95595afbbb7e362407fdd7a0ce6e0743e75eddd8338cdfe66",
+  "retrieved_at": "2026-08-25T19:23:10.816270+00:00",
+  "n_values": 12295
+}

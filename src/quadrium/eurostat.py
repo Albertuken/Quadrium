@@ -683,7 +683,8 @@ _SUT_VA_LABELS = ["Compensation of employees",
 
 
 def load_sut(supply_path: Path | str, use_path: Path | str,
-             use_basic_path: Path | str | None = None) -> SupplyUseTables:
+             use_basic_path: Path | str | None = None,
+             unbalanced: str = "refuse") -> SupplyUseTables:
     """Build a `SupplyUseTables` from Eurostat's supply and use tables.
 
     `supply_path` is a saved `naio_10_cp15` (supply at basic prices, with the
@@ -937,17 +938,126 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
         ("intermediate consumption plus value added equals output",
          U.sum(0) + W.sum(0), g, n_p + len(_SUT_VA_ROWS)),
     ]
+    # WHOSE PRECISION, AND WHAT EXACTLY FAILED
+    #
+    # The bound was `0.005 * n_terms` -- two decimals, hard-coded for every
+    # publisher -- while `load_iot`, `io_loader._assert_balances` and
+    # `validation.validate_original` all derive it from the file's own printed
+    # precision (`OQ-B-02`). It was the fifth place in this project holding a
+    # derived quantity to an assumed constant, and here it errs tight:
+    #
+    #     NL, integers     derived 34.500   applied 0.345   100x too tight
+    #     ES, 1 decimal    derived  3.450   applied 0.345    10x too tight
+    #     AT BE FR, 2 dp   derived  0.465   applied 0.465   right by accident
+    #
+    # The Netherlands and Spain passed on being internally exact, not on the
+    # bound being right; a publisher rounding to integers with ordinary
+    # rounding residue would have been refused.
+    #
+    # AND THE MESSAGE SAID ONLY THE MAXIMUM. "off by 0.8000" and "+0.8 on
+    # L68A, -0.8 on L68B, cancelling" are the same number and completely
+    # different findings, and only the second lets a reader decide what to do.
+    # THE COARSER OF THE TWO FILES GOVERNS. These identities sum cells from
+    # the supply file AND the use file, and each cell carries its own file's
+    # rounding. Taking the finer precision would understate the bound, so the
+    # tolerance is computed against each file and the LARGER is used --
+    # conservative in the only direction that matters, since erring tight is
+    # how a valid table gets refused.
+    _sup_v = [v for v in sup.doc["value"].values() if isinstance(v, (int, float))]
+    _use_v = [v for v in use.doc["value"].values() if isinstance(v, (int, float))]
+
+    def _tol(n_terms):
+        return max(_rounding_tol(n_terms, _sup_v), _rounding_tol(n_terms, _use_v))
+
+    residue_notes = []
+    admitted = 0.0
     for label, items, flat in (("as published", exact, TOL),
                                ("as rebuilt", rounded, None)):
         for item in items:
             what, a, b = item[0], item[1], item[2]
-            tol = flat if flat is not None else 0.005 * item[3]
-            d = float(np.abs(np.asarray(a, float) - np.asarray(b, float)).max())
-            if d > tol:
-                raise EurostatError(
-                    f"{Path(supply_path).name} + {Path(use_path).name} do not "
-                    f"balance and will not be loaded.\n  failed ({label}): "
-                    f"{what}\n  off by {d:,.4f} (tolerance {tol:g}"
-                    + (f", 0.005 x {item[3]} summed cells at two decimals)"
-                       if flat is None else ")"))
+            a = np.asarray(a, float)
+            b = np.asarray(b, float)
+            tol = flat if flat is not None else _tol(item[3])
+            resid = a - b
+            d = float(np.abs(resid).max())
+            names = (industries if resid.size == len(industries)
+                     else [_bare(c) for c in products]
+                     if resid.size == len(products) else None)
+
+            # Reported on EVERY load, not only on failure. Austria passes every
+            # per-industry test with residues that sum to +1.86 in one
+            # direction -- a systematic lean that nothing surfaced, because the
+            # check only ever looked at the maximum.
+            if flat is None and resid.size > 1 and abs(resid.sum()) > tol:
+                residue_notes.append(
+                    f"{what}: residues sum to {resid.sum():+,.3f} across "
+                    f"{resid.size} of them, so they lean rather than cancel, "
+                    f"though none exceeds the {tol:,.3f} this source's own "
+                    f"precision allows")
+
+            if d <= tol:
+                continue
+
+            over = np.flatnonzero(np.abs(resid) > tol)
+            cancels_now = abs(float(resid.sum())) <= tol
+
+            # THE ONE ADMITTED CASE, AND ONLY IT.
+            #
+            # `unbalanced="cancelling"` admits residues that sum to zero within
+            # the bound: a boundary between named lines rather than a table
+            # that fails to add up. Belgium's 2022 pair is the case it exists
+            # for -- +0.8 on L68A, -0.8 on L68B, and 0.000 on the other 87.
+            #
+            # A table whose residues ACCUMULATE is not covered and still
+            # refuses, because "whatever is missing is missing from the table
+            # as a whole" is a different problem with the same maximum. The
+            # default is `refuse`, as it is for `table_unbalanced` in the
+            # configuration, which this follows: an escape hatch you had to
+            # type is one you meant.
+            if unbalanced == "cancelling" and cancels_now and flat is None:
+                residue_notes.append(
+                    f"ADMITTED BY `sut_unbalanced: cancelling`: {what} is out "
+                    f"by up to {d:,.3f} against the {tol:,.3f} this source's "
+                    f"precision allows, on "
+                    + ", ".join(f"{names[i] if names else i} {resid[i]:+,.3f}"
+                                for i in over[:6])
+                    + f", and those residues sum to {resid.sum():+,.3f}. They "
+                      f"cancel, so nothing is missing from the table as a "
+                      f"whole -- but they are real and every figure drawn from "
+                      f"those lines carries them")
+                admitted = max(admitted, d)
+                continue
+
+            worst = over[np.argsort(-np.abs(resid[over]))][:6]
+            lines = [f"{names[i] if names else i:>10}  {resid[i]:+9.3f}"
+                     for i in worst]
+            cancels = cancels_now
+            verdict = (
+                f"The residues sum to {resid.sum():+,.3f}, so they CANCEL: "
+                f"this is a boundary between {len(over)} of "
+                f"{resid.size} lines, not a table that fails to add up."
+                if cancels else
+                f"The residues sum to {resid.sum():+,.3f}, so they do not "
+                f"cancel: whatever is missing is missing from the table as a "
+                f"whole.")
+            if cancels:
+                verdict += ("\n  `sut_unbalanced: cancelling` in the "
+                            "configuration admits exactly this case, and "
+                            "records in the report what it admitted.")
+            raise EurostatError(
+                f"{Path(supply_path).name} + {Path(use_path).name} do not "
+                f"balance and will not be loaded.\n"
+                f"  failed ({label}): {what}\n"
+                f"  {len(over)} of {resid.size} beyond the {tol:,.3f} "
+                f"{'their own printed precision allows' if flat is None else 'published aggregates must meet'}"
+                f"{':' if lines else ''}\n"
+                + "".join(f"      {ln}\n" for ln in lines)
+                + (f"      … and {len(over) - len(worst)} more\n"
+                   if len(over) > len(worst) else "")
+                + f"  {verdict}")
+
+    if residue_notes:
+        sut.notes = ((sut.notes or "") + " CLOSURE: "
+                     + "; ".join(residue_notes) + ".").strip()
+    sut.admitted_residue = float(admitted)
     return sut

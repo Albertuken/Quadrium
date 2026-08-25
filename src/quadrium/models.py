@@ -171,6 +171,16 @@ class IOTable:
     # its parent's and appends its own.
     lineage: list[str] = field(default_factory=list)
 
+    # HOW FAR THE SOURCE WAS ALREADY OUT, carried rather than rediscovered.
+    #
+    # A table built from a source whose own books do not close inherits that,
+    # and every downstream check would otherwise attribute it to this engine.
+    # `run_scenario` measures it for a table it can see; a TRANSFORMED table
+    # cannot be measured that way, because the transformation has already
+    # redistributed the residue across a new axis. So the pair records what it
+    # admitted and the table carries the number forward.
+    inherited_residue: float = 0.0
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)
@@ -336,6 +346,9 @@ class SupplyUseTables:
     # Spain 2022: 18,993.1 across industries plus 102,154.9 across final use
     # is 121,148.0, the published total exactly.
     taxes_by_final_demand: Optional[np.ndarray] = None
+    # What `unbalanced="cancelling"` let through, if anything: the largest
+    # residue admitted, in the table's own units. Zero when nothing was.
+    admitted_residue: float = 0.0
 
     retrieved_at: datetime = field(default_factory=_utcnow)
     notes: Optional[str] = None
@@ -590,10 +603,54 @@ class SupplyUseTables:
         labels = [src_labels[i] for i in idx]
         X = (self.q if product_axis else self.g)[idx]
 
+        # A PRODUCT NOBODY MAKES AT HOME IS STILL BOUGHT, and dropping it
+        # from the product axis must not drop what it was bought for.
+        #
+        # `_live()` removes products with no domestic output, because a
+        # symmetric domestic table has no row for something no domestic
+        # industry produces and every model divides by that output. But the
+        # IMPORTED use of such a product is real, and it belongs in the
+        # imported-use row exactly as any other import does.
+        #
+        # Belgium 2022 is the case that found this: `B06`, crude petroleum and
+        # natural gas, has zero domestic output and 20,342 of imports, of which
+        # 20,238 goes to `C19`, refining. Masked away, C19's column lost 20,210
+        # and the column identity failed by that much. Spain has no wholly
+        # imported product, so nothing showed there.
+        # THE TWO FAMILIES APPLY `T` FROM OPPOSITE SIDES, so the imported row
+        # is built differently for each -- and only one of them needs `T` at
+        # all.
+        #
+        #   A, B, E (product axis):  Sm = Um @ T, so the row is the full
+        #       imported use summed over products and then transformed.
+        #   C, D (industry axis):    Sm = T @ Um with T a market-share matrix
+        #       whose columns sum to 1, so `(T @ Um).sum(0) == Um.sum(0)`
+        #       exactly: the transformation PRESERVES column totals and the
+        #       plain sum over all products is already the answer.
+        #
+        # Getting this wrong is not subtle in its effect and is very subtle in
+        # its appearance: `@ T` on the industry axis silently produced column
+        # residues of 3,175 for Spain, a table that closes to 0.0000 when it is
+        # right.
+        dead_p = _np.flatnonzero(~keep_p)
+        imported_by_activity = self.U_imported[:, ai].sum(axis=0)
+        imported_row = (imported_by_activity @ r.T
+                        if MODELS[model][1].startswith("product")
+                        else imported_by_activity)
+        stranded = (float(self.U_domestic[_np.ix_(dead_p, ai)].sum())
+                    if dead_p.size else 0.0)
+        if abs(stranded) > 1e-6:
+            raise ValueError(
+                f"{stranded:,.1f} of DOMESTIC use is recorded against "
+                f"product(s) with no domestic output at all: "
+                f"{', '.join(self.product_codes[i] for i in dead_p)}. That is "
+                f"not a rounding residue and not something this engine will "
+                f"redistribute on its own.")
+
         # `E`'s first row is the taxes vector that was stacked on top of `W`,
         # so it rides through the same transformation as everything else on the
         # industry axis rather than being carried across unchanged.
-        VA = _np.vstack([r.Sm.sum(axis=0), r.E])
+        VA = _np.vstack([imported_row, r.E])
         VA_labels = ["Use of imported products (not value added)",
                      "Taxes less subsidies on products (not value added)"]
         VA_labels += list(self.W_labels)
@@ -610,7 +667,7 @@ class SupplyUseTables:
             Z=r.Sd, Y=r.Yd, Y_labels=list(self.Y_labels), VA=VA,
             VA_labels=VA_labels, X=X,
             source=self.source,
-            provenance=prov,
+            provenance=prov, inherited_residue=self.admitted_residue,
             lineage=[f"{self.table_id}: supply-use pair transformed to "
                      f"{MODELS[model][1]} by model {model} "
                      f"({MODELS[model][0]})"],
@@ -624,9 +681,14 @@ class SupplyUseTables:
                    + (f"{r.n_negatives} negative cell(s) were produced, which "
                       f"model {model} may do. " if r.n_negatives else
                       f"No negative cells were produced. ")
-                   + (f"Dropped for having no output at all, which leaves a "
-                      f"coefficient undefined: {', '.join(sorted(set(dropped)))}. "
-                      if dropped else "")
+                   + (f"Dropped for having no domestic output, which leaves a "
+                      f"coefficient undefined: {', '.join(sorted(set(dropped)))}"
+                      + (f"; their imported use, "
+                         f"{float(self.U_imported[_np.ix_(dead_p, ai)].sum()):,.1f}, is kept "
+                         f"in the imported-use row, because a product nobody "
+                         f"makes at home is still bought"
+                         if dead_p.size and self.U_imported[_np.ix_(dead_p, ai)].sum() > 1e-6 else "")
+                      + ". " if dropped else "")
                    + " ".join(r.notes)))
 
     def __post_init__(self) -> None:

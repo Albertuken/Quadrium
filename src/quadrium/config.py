@@ -223,6 +223,20 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
 
     files = {name: root / f"{DATASETS[name]}_{geo}_{year}.json"
              for name in ("supply", "use_purchasers", "use_basic")}
+    unbalanced = str(meta.get("sut_unbalanced") or "refuse").strip().lower()
+    if unbalanced not in ("refuse", "cancelling"):
+        raise ConfigError(
+            f"sut_unbalanced {unbalanced!r} must be 'refuse' (the default) or "
+            f"'cancelling'.\n\n"
+            f"`cancelling` admits ONE case: a closing identity out beyond what "
+            f"the source's own precision allows, whose residues SUM TO ZERO "
+            f"and sit in lines the message names — a boundary between two "
+            f"industries rather than a table that fails to add up. Belgium's "
+            f"2022 pair is +0.8 on L68A and -0.8 on L68B, and 0.000 on the "
+            f"other 87.\n\n"
+            f"It does not admit residues that accumulate. Whatever is missing "
+            f"from a table as a whole stays missing, and the load stops.")
+
     to_year = meta.get("project_to_year")
     pmethod = str(meta.get("project_method") or "sut_euro").strip().lower()
     if to_year not in (None, ""):
@@ -237,7 +251,8 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
 
     return root, {"geo": geo, "year": year, "model": model, "files": files,
                   "took_default_model": not meta.get("eurostat_model"),
-                  "project_to_year": to_year, "project_method": pmethod}
+                  "project_to_year": to_year, "project_method": pmethod,
+                  "unbalanced": unbalanced}
 
 
 def _project(sut, req: dict, targets: list, defaults: list):
@@ -359,13 +374,27 @@ def _load_eurostat_sut(req: dict, offline: bool, refresh: bool,
 
     try:
         sut = load_sut(req["files"]["supply"], req["files"]["use_purchasers"],
-                       req["files"]["use_basic"])
+                       req["files"]["use_basic"],
+                       unbalanced=req.get("unbalanced", "refuse"))
     except EurostatError as exc:
         raise ConfigError(f"the supply-use pair could not be built:\n{exc}"
                           ) from None
 
     print(f"    Supply-use: {sut.V.shape[0]} products x {sut.V.shape[1]} "
           f"activities, {sut.q.sum():,.0f} {sut.unit}")
+    for chunk in (sut.notes or "").split("CLOSURE:")[1:]:
+        for part in chunk.strip().rstrip(".").split("; "):
+            if part.startswith("ADMITTED"):
+                # Split on the marker, not on the first colon: the note
+                # itself contains one, inside `sut_unbalanced: cancelling`.
+                marker = "`sut_unbalanced: cancelling`: "
+                body = part.split(marker, 1)[-1] if marker in part else part
+                defaults.append(
+                    "`sut_unbalanced: cancelling` was set, and it admitted a "
+                    "real discrepancy — " + body)
+            else:
+                defaults.append("the source's closing identities lean rather "
+                                "than cancel — " + part)
 
     if req.get("project_to_year"):
         sut = _project(sut, req, targets, defaults)

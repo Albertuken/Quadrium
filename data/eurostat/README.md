@@ -409,3 +409,41 @@ precision allows, a factor of 1.74. Austria, Spain, France and the Netherlands
 all pass the same check. The refusal is correct and the message says by how
 much; it is recorded here because "the adviser named a config and the config did
 not load" is worth knowing about before it surprises someone.
+
+---
+
+## `naio_10_cp15/cp16/cp1610_BE_2022.json` — the pair that is refused
+
+**What they are.** Belgium's 2022 supply-use system, 89 products by 89
+industries. Retrieved 2026-08-25; URLs, byte counts and SHA-256 in the
+`.provenance` sidecar beside each file.
+
+**Why they are here, and it is not for Belgium.** They are the fixture for
+`run_sut_closure.py`, and they carry three things no other pair here does.
+
+**One.** The closing identity fails, and fails in exactly two cells:
+
+| industry | residue |
+|---|---|
+| `L68A` imputed rents of owner-occupied dwellings | **+0.800** |
+| `L68B` other real estate services | **−0.800** |
+| the other 87 | 0.000 |
+
+Sum exactly 0.000. A boundary between two halves of one sector, not a table
+that fails to add up — and `L68A` is the same sector that produces all 19
+negative cells in the UK analytical table's Leontief inverse, and the subject
+of `OQ-D-02`. It is refused by default; `sut_unbalanced: cancelling` admits
+this shape and only this shape, and records what it admitted.
+
+**Two.** `B06`, crude petroleum and natural gas, has **zero domestic output and
+20,342 of imports**, of which 20,238 goes to `C19`, refining. Belgium imports
+all its crude and refines it. It is the first wholly imported product in this
+data folder, and it found a real defect: `to_iot` dropped such products from the
+product axis — correctly, since no domestic industry makes them and every model
+divides by that output — and dropped their imported use with them, taking
+20,210 out of C19's column.
+
+**Three.** It is the first pair here that is rectangular *after* masking, 85
+products against 84 industries, so models A and C refuse it and B and D do not.
+
+Austria, Spain, France and the Netherlands pass every check Belgium fails.

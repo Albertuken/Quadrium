@@ -219,6 +219,17 @@ The method stops when every aggregate is within one per cent of its target,
 which is the Handbook's own rule. Your totals are approached, not attained, and
 the report says how closely.
 
+**If the pair does not close.** The engine checks the publisher's own
+identities before loading anything, against a bound derived from that
+publisher's printed precision, and refuses a pair that misses it — naming the
+lines that failed and saying whether their residues cancel. That distinction
+matters: Belgium's 2022 pair is +0.8 on `L68A` and −0.8 on `L68B` and 0.000 on
+the other 87, which is a boundary between two halves of one sector, not a table
+that fails to add up. `sut_unbalanced: cancelling` admits that shape and only
+that shape; residues that accumulate still stop the load. Whatever it admits is
+recorded in the report and carried forward, so every later check accounts for it
+rather than blaming the engine.
+
 The engine downloads three files for this — supply, use at purchasers' prices,
 and use at basic prices split into domestic and imported. That third one is why
 the split is read rather than assumed: deriving it would mean supposing every

@@ -310,8 +310,13 @@ def validate_original(table: IOTable) -> ValidationReport:
                              table.VA.ravel(), table.X.ravel()])
     n_row = table.n + table.Y.shape[1] + 1      # Z row + Y row + X
     n_col = table.n + table.VA.shape[0] + 1     # Z column + VA column + X
-    tol_row = max(PROJECT_BALANCE_ABS_TOL, assertable_tolerance(values, n_row))
-    tol_col = max(PROJECT_BALANCE_ABS_TOL, assertable_tolerance(values, n_col))
+    # A table inherits its source's unclosed books. Zero for a publisher whose
+    # identities close, and the admitted residue for one whose do not.
+    inherited = max(0.0, float(getattr(table, "inherited_residue", 0.0)))
+    tol_row = max(PROJECT_BALANCE_ABS_TOL,
+                  assertable_tolerance(values, n_row)) + inherited
+    tol_col = max(PROJECT_BALANCE_ABS_TOL,
+                  assertable_tolerance(values, n_col)) + inherited
     d = printed_decimals(values)
     basis = (f"derived from this source's own {d}-decimal precision over "
              f"{n_row} terms (OQ-B-02: 0.5·10^-d·n)" if d is not None else
@@ -346,7 +351,8 @@ def validate_original(table: IOTable) -> ValidationReport:
     # The system the multipliers will come out of, checked before anything is
     # built on it. `source_residue` is zero here by definition: this IS the
     # source.
-    _leontief_check(rep, table.Z, table.X, table.Y, 0.0, "",
+    _leontief_check(rep, table.Z, table.X, table.Y,
+                    float(getattr(table, "inherited_residue", 0.0)), "",
                     table.sector_codes)
     return rep
 
