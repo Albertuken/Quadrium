@@ -420,11 +420,14 @@ class SupplyUseTables:
         office later published.
 
         **The projected cells came out further from the published year than
-        the base year's own cells, in all five tests** — 34.0 % against 29.4 %
-        of total domestic intermediate use for Spain 2021 → 2022, and the same
-        ordering on technical coefficients, which have no scale in them. It is
-        not the damping exponent: sweeping `ε` from 0.3 to 1.0 moves the
-        iteration count and not the answer.
+        the base year's own cells, in all twelve tests across eight
+        countries** — 34.0 % against 29.4 % of total domestic intermediate use
+        for Spain 2021 → 2022, 51.6 % against 15.4 % for France — and the same
+        ordering on technical coefficients, which have no scale in them.
+        Scaling the base year by a single number, the growth in value added,
+        beat the projection every time as well. It is not the damping exponent:
+        sweeping `ε` from 0.3 to 1.0 moves the iteration count and not the
+        answer.
 
         That is not a verdict on the method, and the comparison is not
         symmetric. **The projected pair is consistent with the target
@@ -568,10 +571,11 @@ class SupplyUseTables:
                    f"taxes and imports totals that were supplied. What this "
                    f"buys is consistency with those totals, which the "
                    f"{self.year} table does not have. It is not a better "
-                   f"picture of {label}'s structure: back-tested on five "
-                   f"consecutive Eurostat pairs, the projected cells came out "
-                   f"FURTHER from the table the office later published than "
-                   f"the base year's own cells did."
+                   f"picture of {label}'s structure: back-tested on twelve "
+                   f"consecutive Eurostat pairs across eight countries, the "
+                   f"projected cells came out FURTHER from the table the "
+                   f"office later published than the base year's own cells "
+                   f"did, every time."
                    + (f" Dropped for having no base-year output, which leaves "
                       f"a market share undefined: {', '.join(dropped)}."
                       if dropped else "")))

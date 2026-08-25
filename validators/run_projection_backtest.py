@@ -9,10 +9,13 @@ SUT-EURO reproduces UNH_18 Box 18.7's printed iterations exactly, and
 that pair. Both are tests that the CODE implements the chapter. Neither is a
 test of whether the ANSWER is any good, and nothing in the chapter claims one.
 
-That test became possible on 2026-08-26: Eurostat serves Spain, Austria, Italy
-and the Netherlands as consecutive projectable pairs, so a 2021 table can be
-projected onto 2022's published value added, final use, taxes and imports and
-then compared, cell by cell, with the 2022 table itself.
+That test became possible on 2026-08-26: Eurostat serves eight countries as
+consecutive projectable pairs on identical axes, so a base-year table can be
+projected onto a later year's published value added, final use, taxes and
+imports and then compared, cell by cell, with the later table itself.
+
+This validator runs the Spanish case, whose three files are in the repository.
+The other eleven are recorded below and were run the same way.
 
 TWO PLAIN DEFECTS, FOUND BY RUNNING IT
 ----------------------------------------
@@ -34,21 +37,43 @@ AND THE MEASUREMENT, WHICH IS NOT FLATTERING
 ----------------------------------------------
 Against the published later year, with every run converged:
 
-    case              iterations   projected   base year   base year
-                                                unchanged     scaled
-    ES 2021 -> 2022        356        34.0 %      29.4 %     28.8 %
-    AT 2021 -> 2022        561        24.1 %      22.0 %     19.9 %
-    AT 2020 -> 2022      1,617        63.1 %      33.0 %     28.6 %
-    IT 2021 -> 2022      2,835        46.2 %      21.5 %     19.9 %
-    NL 2021 -> 2022      1,703        25.9 %      19.6 %     15.2 %
+Every country pair Eurostat serves twice on identical axes — **12 tests across
+8 countries**, one- and two-year horizons. Total absolute error on domestic
+intermediate use, as a share of it, and mean |Δa_ij| per thousand on the
+scale-free technical coefficients:
 
-    (total absolute error on domestic intermediate use, as a share of it)
+    case              iters   conv   projected  base year  x GVA   cf proj  cf base
+    CZ 2021 -> 2022   5,000    no       68.1 %    21.4 %   13.7 %    1.439    0.651
+    EE 2020 -> 2021     491   yes       48.7 %    29.8 %   27.6 %    1.622    1.275
+    FR 2021 -> 2022   3,785   yes       51.6 %    15.4 %   11.9 %    1.371    0.473
+    HU 2020 -> 2021   5,000    no       62.8 %    20.7 %   16.7 %    1.273    0.584
+    HU 2021 -> 2022   5,000    no       32.6 %    22.0 %   19.0 %    0.869    0.613
+    HU 2020 -> 2022   5,000    no       51.1 %    33.4 %   26.3 %    1.272    0.857
+    ES 2021 -> 2022     356   yes       34.0 %    29.4 %   28.2 %    2.117    2.029
+    AT 2020 -> 2021      62   yes       31.0 %    19.0 %   17.6 %    1.504    1.140
+    AT 2021 -> 2022     561   yes       24.1 %    22.0 %   17.9 %    1.125    0.847
+    AT 2020 -> 2022   1,617   yes       63.1 %    33.0 %   26.6 %    2.582    1.426
+    IT 2021 -> 2022   2,835   yes       46.2 %    21.5 %   19.5 %    2.052    1.599
+    NL 2021 -> 2022   1,703   yes       25.9 %    19.6 %   15.1 %    1.199    0.884
 
-A baseline must not be fed anything the projection was not. `base year scaled`
-above uses the TRUE growth in intermediate use, which is not one of the four
-targets — an oracle. Replacing it with the growth in VALUE ADDED, which is a
-target, scores **28.2 %** on Spain: better than the oracle and still well
-inside the projection's 34.0 %. The conclusion does not rest on the oracle.
+**Twelve of twelve, on both measures.** The projection is further from the
+published table than the base year left alone, and further still than the base
+year multiplied by a single number.
+
+A baseline must not be fed anything the projection was not. `x GVA` scales the
+base year by the growth in value added — one of the four targets, and nothing
+else. An earlier version of this table used the TRUE growth in intermediate
+use, which is not a target and was an oracle; it scored 28.8 % on Spain against
+this baseline's 28.2 %, so the conclusion does not rest on it and is if
+anything sharper without it.
+
+Belgium and Slovakia are absent because SUT-EURO refuses a rectangular pair —
+84 industries against 85 products, 81 against 87 — which is the chapter's own
+requirement (¶18.102, p. 577) and a correct refusal, not a gap in the test.
+
+**Czechia and Hungary never converge at all**, at 5,000 iterations, and
+`project` now refuses them rather than returning a table that says it
+converged.
 
 The projection is further from the published table than the base year left
 alone, in all five. On levels that could be dismissed as a scale effect — but
@@ -75,12 +100,13 @@ taxes and imports, and the base year is not consistent with any of them. That
 consistency is the whole product. Whoever needs a table that adds up to known
 2022 aggregates cannot use the 2021 table at all, however close its cells are.
 
-What it says is that the consistency is bought, and this is the price: on five
-tests across four countries and one- to two-year horizons, imposing the target
-aggregates moved the individual cells AWAY from what the office later
-published. Five tests are five tests. But nobody should read "projected to
-2026" as "a better estimate of 2026's structure than 2022's table", and until
-2026-08-26 nothing in this engine said otherwise.
+What it says is that the consistency is bought, and this is the price: on
+twelve tests across eight countries and one- to two-year horizons, imposing the
+target aggregates moved the individual cells AWAY from what the office later
+published — every time, on levels and on coefficients alike. Twelve is not a
+literature. But nobody should read "projected to 2026" as "a better estimate of
+2026's structure than 2022's table", and until 2026-08-26 nothing in this
+engine said otherwise.
 
 Run:
     python3 validators/run_projection_backtest.py

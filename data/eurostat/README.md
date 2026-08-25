@@ -656,10 +656,32 @@ growth in value added instead, which IS a target, scores better than the oracle
 did: the conclusion does not rest on it.
 
 The projection is further from the published table than the base year left
-alone — and the same holds for Austria, Italy and the Netherlands, and on
-technical coefficients, which have no scale in them. It is not the project's
-own damping choice either: sweeping `ε` from 0.3 to 1.0 moves the iteration
-count and not the answer.
+alone. Run on **every country Eurostat serves twice on identical axes — twelve
+tests across eight countries** — it is further in all twelve, on levels and on
+technical coefficients alike, and the single-number baseline beats it every
+time:
+
+| case | iters | projected | base year | × GVA growth |
+|---|---:|---:|---:|---:|
+| CZ 2021→2022 | 5,000 (no) | 68.1 % | 21.4 % | 13.7 % |
+| EE 2020→2021 | 491 | 48.7 % | 29.8 % | 27.6 % |
+| FR 2021→2022 | 3,785 | 51.6 % | 15.4 % | 11.9 % |
+| HU 2020→2021 | 5,000 (no) | 62.8 % | 20.7 % | 16.7 % |
+| HU 2021→2022 | 5,000 (no) | 32.6 % | 22.0 % | 19.0 % |
+| HU 2020→2022 | 5,000 (no) | 51.1 % | 33.4 % | 26.3 % |
+| ES 2021→2022 | 356 | 34.0 % | 29.4 % | 28.2 % |
+| AT 2020→2021 | 62 | 31.0 % | 19.0 % | 17.6 % |
+| AT 2021→2022 | 561 | 24.1 % | 22.0 % | 17.9 % |
+| AT 2020→2022 | 1,617 | 63.1 % | 33.0 % | 26.6 % |
+| IT 2021→2022 | 2,835 | 46.2 % | 21.5 % | 19.5 % |
+| NL 2021→2022 | 1,703 | 25.9 % | 19.6 % | 15.1 % |
+
+Belgium and Slovakia are absent because SUT-EURO refuses a rectangular pair,
+which is the chapter's own requirement (¶18.102, p. 577). **Czechia and Hungary
+never converge at all** at 5,000 iterations, and `project` now refuses them.
+
+It is not the project's own damping choice either: sweeping `ε` from 0.3 to 1.0
+moves the iteration count and not the answer.
 
 That is not a verdict on the method. The projected pair **is consistent with
 2022's aggregates and the base year is not** — Spain's 2021 value added is
