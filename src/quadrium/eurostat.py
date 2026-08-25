@@ -682,7 +682,8 @@ _SUT_VA_LABELS = ["Compensation of employees",
                   "Operating surplus and mixed income, gross"]
 
 
-def load_sut(supply_path: Path | str, use_path: Path | str) -> SupplyUseTables:
+def load_sut(supply_path: Path | str, use_path: Path | str,
+             use_basic_path: Path | str | None = None) -> SupplyUseTables:
     """Build a `SupplyUseTables` from Eurostat's supply and use tables.
 
     `supply_path` is a saved `naio_10_cp15` (supply at basic prices, with the
@@ -815,6 +816,71 @@ def load_sut(supply_path: Path | str, use_path: Path | str) -> SupplyUseTables:
     W = np.array([[use.at(ind_use=j, prd_ava=r) or 0.0 for j in industries]
                   for r in _SUT_VA_ROWS], float)
 
+    # ---- the domestic/imported split at basic prices, if it was given -----
+    #
+    # `naio_10_cp1610` is the use table at BASIC prices with a `stk_flow`
+    # dimension of TOTAL / DOM / IMP. It is read on exactly the product and
+    # industry sets derived above, so the blocks line up with `V` cell for cell;
+    # a code that carries no value there contributes zero rather than dropping
+    # the column and silently changing the shape.
+    #
+    # Without this file the pair still loads and still satisfies every identity
+    # a supply-use pair has. It just cannot be transformed, and says so.
+    Ud = Um = Yd = Ym = tax_by_act = None
+    if use_basic_path is not None:
+        ub = _Cube(json.loads(Path(use_basic_path).read_text()))
+        for dim in ("stk_flow", "ind_use", "prd_ava"):
+            if dim not in ub.ids:
+                raise EurostatError(
+                    f"{Path(use_basic_path).name} has no `{dim}` dimension; "
+                    f"this expects naio_10_cp1610, use at basic prices. "
+                    f"Dimensions: {', '.join(ub.ids)}")
+        ub_geo = next(iter(ub.index.get("geo", {"?": 0})))
+        ub_time = next(iter(ub.index.get("time", {"?": 0})))
+        if (ub_geo, str(ub_time)) != (geo, str(year)):
+            raise EurostatError(
+                f"the basic-price use file is {ub_geo} {ub_time} and the pair "
+                f"is {geo} {year}. Two economies, or two years, do not make a "
+                f"supply-use system.")
+
+        def _block(flow):
+            return np.array([[ub.at(stk_flow=flow, ind_use=j, prd_ava=p) or 0.0
+                              for j in industries] for p in products], float)
+
+        def _fd(flow):
+            return np.array([[ub.at(stk_flow=flow, ind_use=c, prd_ava=p) or 0.0
+                              for c in fd] for p in products], float)
+
+        Ud, Um, Yd, Ym = _block("DOM"), _block("IMP"), _fd("DOM"), _fd("IMP")
+        tax_by_act = np.array(
+            [ub.at(stk_flow="TOTAL", ind_use=j, prd_ava="D21X31") or 0.0
+             for j in industries], float)
+
+        # The split must reconstitute what the pair already knows, or it is not
+        # the same table. Both are checked against the rounding the source's own
+        # precision allows, not against zero.
+        # `published_values` and the `n_p`/`n_a` counts belong to `load_iot`
+        # and to the block further down; this reads the supply file's own
+        # values, which is what these blocks were rounded alongside.
+        sup_values = [v for v in sup.doc["value"].values()
+                      if isinstance(v, (int, float))]
+        n_prod, n_ind = len(products), len(industries)
+        tol_row = _rounding_tol(n_ind + len(fd) + 1, sup_values)
+        tol_col = _rounding_tol(n_prod * 2 + 2, sup_values)
+        for label, got, want, tol in (
+                ("domestic use and domestic final use rebuild product output",
+                 Ud.sum(1) + Yd.sum(1), q, tol_row),
+                ("imported use and imported final use rebuild imports",
+                 Um.sum(1) + Ym.sum(1), imports, tol_row),
+                ("use at basic prices plus taxes rebuilds industry output",
+                 Ud.sum(0) + Um.sum(0) + tax_by_act + W.sum(0), g, tol_col)):
+            dev = float(np.abs(got - want).max())
+            if dev > tol:
+                raise EurostatError(
+                    f"{Path(use_basic_path).name} does not belong to this "
+                    f"pair: {label} is out by {dev:,.4f} against a bound of "
+                    f"{tol:,.4f} derived from the source's own precision.")
+
     sut = SupplyUseTables(
         table_id=f"EUROSTAT-SUT-{geo}-{year}",
         country=str(sup.labels["geo"].get(geo, geo)), year=int(year),
@@ -829,7 +895,11 @@ def load_sut(supply_path: Path | str, use_path: Path | str) -> SupplyUseTables:
         V=V, U=U, Y=Y, Y_labels=fd, W=W, W_labels=list(_SUT_VA_LABELS),
         imports=imports, total_margins=margins, taxes_on_products=taxes,
         q=q, g=g,
-        source=f"Eurostat naio_10_cp15 + naio_10_cp16, {geo} {year}",
+        U_domestic=Ud, U_imported=Um, Y_domestic=Yd, Y_imported=Ym,
+        taxes_by_activity=tax_by_act,
+        source=(f"Eurostat naio_10_cp15 + naio_10_cp16"
+                + (" + naio_10_cp1610" if Ud is not None else "")
+                + f", {geo} {year}"),
         retrieved_at=datetime.now(timezone.utc),
         notes=(f"Supply at basic prices and use at purchasers' prices, "
                f"{len(products)} products by {len(industries)} activities. "

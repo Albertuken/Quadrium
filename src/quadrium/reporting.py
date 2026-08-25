@@ -410,12 +410,16 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             counts = tbl.provenance_counts()
             total = max(sum(counts.values()), 1)
             est = total - counts.get("OBSERVED", 0)
+            # "a disaggregation" was the only way in when this was written.
+            # A table transformed from a supply-use pair arrives here too, and
+            # calling that a disaggregation would misname the one thing the
+            # reader most needs to get right. The lineage below says which.
             prov.append(
                 f"- ⚠️ **The input table is not a publication.** It is itself "
-                f"the output of a disaggregation: **{est} of its {total} "
+                f"a product of this engine: **{est} of its {total} "
                 f"intermediate cells ({100 * est / total:.1f} %) were already "
                 f"estimates before this run began**, and every figure below "
-                f"inherits them. The chain, oldest first:")
+                f"inherits them. What was done to it, oldest first:")
             prov += [f"  {i}. {line}" for i, line
                      in enumerate(tbl.lineage or ["(not recorded)"], start=1)]
     lines += prov + ["", meta["original_report"].to_markdown(), "", "---", ""]

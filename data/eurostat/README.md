@@ -335,3 +335,41 @@ fixture the project held either printed one decimal or closed exactly.
 tolerance of 1.5e-04 — so this was never a Portuguese problem.
 
 `run_eurostat_config.py` holds the whole chain.
+
+---
+
+## `naio_10_cp1610_{ES,AT}_2022.json` — use at basic prices, split DOM / IMP
+
+**What they are.** The use table at **basic prices**, with a `stk_flow`
+dimension of `TOTAL` / `DOM` / `IMP` — what each industry and each final-demand
+category buys, separated into what was produced at home and what was imported.
+
+**Source.** Eurostat, `naio_10_cp1610`.
+
+```
+https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1610?format=JSON&lang=EN&geo=ES&time=2022&unit=MIO_EUR
+```
+
+**Retrieved.** 2026-08-25.
+`ES` 233,977 bytes, SHA-256 `31ddd6d35db5e27688268810cf7bd35aa0709a7b16e71b777a5b2c13b0e21af8`
+`AT` 538,767 bytes, SHA-256 `73db41d501896c3b4ed6ebd57f0057e3eac3a1d08dc0c0d1af69e8df4eb614cd`
+
+**Why they are here.** They are what makes a SUT→IOT transformation possible.
+`naio_10_cp16` is at purchasers' prices and undivided; the four models of
+CORE_013 need the domestic and imported halves separately, because in a Leontief
+system domestic demand pulls domestic output and imported demand leaves the
+economy. **Deriving that split would impose import proportionality** — every
+user of a product importing the same share of it — which is an economic
+hypothesis rather than bookkeeping. Eurostat publishes it, so it is read.
+
+Both identities were verified on load, and they close:
+
+| | Spain (1 decimal) | Austria (2 decimals) |
+|---|---|---|
+| `U_dom.rows + Y_dom.rows = q` | 0.0000 | 0.10 |
+| `U_imp.rows + Y_imp.rows = imports` | 0.0000 | 0.06 |
+| `U.cols + taxes + VA.cols = g` | 0.0000 | 0.11 |
+
+Austria's residues sit against a rounding floor of 0.34 for a 68-term sum.
+
+`run_sut_to_iot.py` holds the whole path.

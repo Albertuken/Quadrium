@@ -165,6 +165,32 @@ and the year and the engine downloads the table from Eurostat:
 | `eurostat_dataset` | `product_by_product` (default) or `industry_by_industry` |
 | `eurostat_variant` | `domestic` (default) or `total` |
 
+**If the year you want has no symmetric table, use the supply-use pair.** Most
+offices publish supply and use before, and more often than, symmetric tables:
+Spain has 22 years of the symmetric table and 35 of the pair, and the most
+recent year exists only as a pair. Set `table_kind: eurostat_sut` with the same
+country and year, plus one more key:
+
+| `eurostat_model` | Axis | Can produce negative cells? |
+|---|---|---|
+| `A` product technology | product × product | yes |
+| `B` industry technology | product × product | no |
+| `C` fixed industry sales | industry × industry | yes |
+| `D` fixed product sales *(default)* | industry × industry | no |
+
+**That key is a real decision and not a formatting option.** A supply-use pair
+is what the data is collected as; a symmetric table is what an assumption about
+secondary production turns it into. On Spain 2022, models A and D differ by
+5,629 million EUR in their widest cell from identical inputs. The report names
+the model that produced your table, and if you leave the key blank it tells you
+a default was taken.
+
+The engine downloads three files for this — supply, use at purchasers' prices,
+and use at basic prices split into domestic and imported. That third one is why
+the split is read rather than assumed: deriving it would mean supposing every
+user of a product imports the same share of it, which is an economic
+hypothesis, not bookkeeping.
+
 The first run downloads it, prints the URL, the size and the SHA-256, and saves
 it under `data/eurostat/`. **Every run after that reads those same bytes and
 never touches the network.** That is deliberate: statistical offices revise, and

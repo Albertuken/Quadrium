@@ -303,8 +303,159 @@ class SupplyUseTables:
     source: str
     trade_margins: Optional[np.ndarray] = None
     transport_margins: Optional[np.ndarray] = None
+
+    # ---- the blocks a transformation needs, and only some sources give -----
+    #
+    # `U` above is use at PURCHASERS' prices and undivided. A transformation
+    # needs use at BASIC prices, split into what was produced at home and what
+    # was imported, because the two behave differently in a Leontief system:
+    # domestic demand pulls domestic output, imported demand leaves the economy.
+    #
+    # Eurostat publishes exactly that in `naio_10_cp1610`, on a `stk_flow`
+    # dimension of TOTAL / DOM / IMP, so the split is READ and not assumed. It
+    # matters that it is read: deriving it would mean the import-proportionality
+    # assumption -- every user of a product imports the same share of it -- which
+    # is a substantive economic hypothesis, not bookkeeping.
+    #
+    # Measured on Spain and Austria 2022, the blocks close both identities:
+    #     q = U_domestic.rows + Y_domestic.rows
+    #     g = U_domestic.cols + U_imported.cols + taxes_by_activity + W.cols
+    # exactly for Spain, and to 0.10 for Austria against a rounding floor of
+    # 0.34 -- Austria prints two decimals where Spain prints one.
+    U_domestic: Optional[np.ndarray] = None      # products x activities, basic
+    U_imported: Optional[np.ndarray] = None      # products x activities, basic
+    Y_domestic: Optional[np.ndarray] = None      # products x k
+    Y_imported: Optional[np.ndarray] = None      # products x k
+    # Taxes less subsidies on products, BY ACTIVITY -- what carries each
+    # industry's intermediate consumption from basic to purchasers' prices. Not
+    # value added, and labelled as not, wherever it surfaces.
+    taxes_by_activity: Optional[np.ndarray] = None
+
     retrieved_at: datetime = field(default_factory=_utcnow)
     notes: Optional[str] = None
+
+    @property
+    def transformable(self) -> bool:
+        """Whether this pair carries what a SUT->IOT transformation needs."""
+        return all(x is not None for x in
+                   (self.U_domestic, self.U_imported, self.Y_domestic,
+                    self.Y_imported, self.taxes_by_activity))
+
+    def to_iot(self, model: str = "D") -> "IOTable":
+        """Transform this pair into a symmetric table, by one named model.
+
+        WHY THE MODEL IS AN ARGUMENT AND NOT A DEFAULT DECISION
+        --------------------------------------------------------
+        A supply-use pair is what the data is collected as. An input-output
+        table is what someone's assumption about secondary production turns it
+        into, and the four assumptions are not interchangeable. CORE_013 Figure
+        12.2, p. 378 sets them out; `run_model_choice.py` measured what the
+        choice costs on four national tables and found model A's negatives
+        spanning a factor of fourteen between France and the Netherlands.
+
+        So the caller names the model, the report records it, and nothing here
+        picks one quietly. `D` is the argument's default only because CORE_013
+        par. 12.76, p. 393 recommends it for rectangular tables and it needs no
+        square supply matrix -- but a default is not a recommendation, and the
+        note on the returned table says which model produced it.
+
+        WHAT THE RESULT IS, AND IS NOT
+        --------------------------------
+        A DOMESTIC table. `Z` is domestic intermediate flows, `Y` domestic final
+        use, and the imported block becomes a single row of value added marked
+        `not value added`, exactly as the ONS and INE loaders do it, so the
+        column identity closes the same way everywhere in this engine.
+
+        Every cell is `BALANCED` in the sense of §A.1: none of it was observed
+        as a symmetric flow, because no such observation exists. That is what
+        `provenance` carries out of here.
+        """
+        import numpy as _np
+
+        from .transformation import MODELS, transform
+
+        if not self.transformable:
+            raise ValueError(
+                "this supply-use pair carries no domestic/imported split at "
+                "basic prices, so it cannot be transformed. For Eurostat that "
+                "means `naio_10_cp1610` was not loaded beside `naio_10_cp15` "
+                "and `naio_10_cp16`. Deriving the split instead would impose "
+                "the import-proportionality assumption, which is an economic "
+                "hypothesis this engine will not make on your behalf.")
+
+        model = str(model).strip().upper()
+
+        # SECTORS WITH NO OUTPUT COME OUT FIRST, and this is not tidying.
+        # Every model divides by output to form a coefficient matrix, so a
+        # sector producing nothing has no technology to describe and makes the
+        # division undefined. Eurostat's tables carry one: `U`, extraterritorial
+        # organisations, which is published with zero output in every country
+        # here. It is dropped, counted, and named in the note on the result.
+        #
+        # The two axes are masked by their OWN output, because a supply-use
+        # system is rectangular in general -- France publishes 89 products
+        # against 88 activities -- and masking both by one vector is what those
+        # three model validators had to stop doing.
+        keep_p = self.q > 0
+        keep_a = self.g > 0
+        dropped = ([c for c, k in zip(self.product_codes, keep_p) if not k]
+                   + [c for c, k in zip(self.activity_codes, keep_a) if not k])
+        pi, ai = _np.flatnonzero(keep_p), _np.flatnonzero(keep_a)
+        ix = _np.ix_(pi, ai)
+
+        r = transform(model, self.V[ix], self.U_domestic[ix],
+                      self.U_imported[ix],
+                      self.Y_domestic[pi], self.Y_imported[pi],
+                      _np.vstack([self.taxes_by_activity, self.W])[:, ai],
+                      self.g[ai], self.q[pi])
+
+        product_axis = MODELS[model][1].startswith("product")
+        idx = pi if product_axis else ai
+        src_codes = self.product_codes if product_axis else self.activity_codes
+        src_labels = (self.product_labels if product_axis
+                      else self.activity_labels)
+        codes = [src_codes[i] for i in idx]
+        labels = [src_labels[i] for i in idx]
+        X = (self.q if product_axis else self.g)[idx]
+
+        # `E`'s first row is the taxes vector that was stacked on top of `W`,
+        # so it rides through the same transformation as everything else on the
+        # industry axis rather than being carried across unchanged.
+        VA = _np.vstack([r.Sm.sum(axis=0), r.E])
+        VA_labels = ["Use of imported products (not value added)",
+                     "Taxes less subsidies on products (not value added)"]
+        VA_labels += list(self.W_labels)
+
+        prov = _np.empty((len(codes), len(codes)), dtype=object)
+        prov[:, :] = CellLabel.BALANCED_ADJUSTMENT
+
+        return IOTable(
+            table_id=f"{self.table_id}::model-{model}",
+            country=self.country, year=self.year, unit=self.unit,
+            classification=f"{self.classification}, transformed to "
+                           f"{MODELS[model][1]} by model {model}",
+            sector_codes=list(codes), sector_labels=list(labels),
+            Z=r.Sd, Y=r.Yd, Y_labels=list(self.Y_labels), VA=VA,
+            VA_labels=VA_labels, X=X,
+            source=self.source,
+            provenance=prov,
+            lineage=[f"{self.table_id}: supply-use pair transformed to "
+                     f"{MODELS[model][1]} by model {model} "
+                     f"({MODELS[model][0]})"],
+            notes=(f"NOT AN OBSERVED TABLE. A supply-use pair transformed by "
+                   f"model {model}, {MODELS[model][0]}, on the "
+                   f"{MODELS[model][1]} axis. The four models of CORE_013 "
+                   f"Figure 12.2, p. 378 embody four different assumptions "
+                   f"about secondary production and give four different "
+                   f"tables from the same data; which one is right is not a "
+                   f"question the data answers. "
+                   + (f"{r.n_negatives} negative cell(s) were produced, which "
+                      f"model {model} may do. " if r.n_negatives else
+                      f"No negative cells were produced. ")
+                   + (f"Dropped for having no output at all, which leaves a "
+                      f"coefficient undefined: {', '.join(sorted(set(dropped)))}. "
+                      if dropped else "")
+                   + " ".join(r.notes)))
 
     def __post_init__(self) -> None:
         for name in ("V", "U", "Y", "W", "imports", "total_margins",

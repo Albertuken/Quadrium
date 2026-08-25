@@ -99,7 +99,7 @@ from .models import (AllocationKey, Assumption, AssumptionLedger,
 
 REQUIRED_SHEETS = ("project", "splits")
 TABLE_KINDS = ("uk_analytical", "interchange",
-               "ine_interior", "ine_total", "eurostat")
+               "ine_interior", "ine_total", "eurostat", "eurostat_sut")
 
 
 class ConfigError(ValueError):
@@ -160,6 +160,132 @@ def _eurostat_cache_path(meta: dict, base_dir: Path) -> tuple[Path, dict]:
 
     return path, {"dataset": dataset, "geo": geo, "year": year,
                   "variant": variant}
+
+
+def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
+    """Where the three files of a supply-use system live, and what to ask for.
+
+    A symmetric table is one download. A supply-use SYSTEM is three, and they
+    are not interchangeable:
+
+        naio_10_cp15    supply at basic prices, with its valuation columns
+        naio_10_cp16    use at purchasers' prices
+        naio_10_cp1610  use at BASIC prices, split DOM / IMP
+
+    The third is the one that makes a transformation possible. Without it the
+    domestic and imported halves would have to be derived, which means assuming
+    every user of a product imports the same share of it -- an economic
+    hypothesis, not bookkeeping, and not one this engine makes for anybody.
+    """
+    from .eurostat import DATASETS
+
+    geo = str(_need(meta, "eurostat_geo", "project", 0)).strip().upper()
+    if not (len(geo) == 2 and geo.isalpha()):
+        raise ConfigError(
+            f"eurostat_geo is {geo!r}. It must be a two-letter country code.")
+    try:
+        year = int(str(_need(meta, "eurostat_year", "project", 0)).strip())
+    except ValueError:
+        raise ConfigError(
+            f"eurostat_year is {meta.get('eurostat_year')!r}, not a year."
+        ) from None
+
+    model = str(meta.get("eurostat_model") or "D").strip().upper()
+    if model not in ("A", "B", "C", "D"):
+        raise ConfigError(
+            f"eurostat_model {model!r} must be one of the four in CORE_013 "
+            f"Figure 12.2, p. 378:\n"
+            f"  A  product technology            product x product\n"
+            f"  B  industry technology           product x product\n"
+            f"  C  fixed industry sales          industry x industry\n"
+            f"  D  fixed product sales           industry x industry\n"
+            f"A and C need a square supply table and may produce negative "
+            f"cells; B and D cannot produce them. Which is right is not a "
+            f"question the data answers.")
+
+    raw = meta.get("table_path")
+    root = Path(str(raw).strip()) if raw and str(raw).strip() \
+        else Path("data") / "eurostat"
+    if not root.is_absolute():
+        root = (Path(base_dir) / root).resolve()
+    if root.suffix:                       # a file was named; use its folder
+        root = root.parent
+
+    files = {name: root / f"{DATASETS[name]}_{geo}_{year}.json"
+             for name in ("supply", "use_purchasers", "use_basic")}
+    return root, {"geo": geo, "year": year, "model": model, "files": files,
+                  "took_default_model": not meta.get("eurostat_model")}
+
+
+def _load_eurostat_sut(req: dict, offline: bool, refresh: bool,
+                       defaults: list):
+    """Fetch or read the three files, then transform by the named model."""
+    import json
+
+    from .eurostat import EurostatError, fetch, load_sut
+
+    if req["took_default_model"]:
+        defaults.append(
+            "no `eurostat_model` was named, so model D (fixed product sales "
+            "structure) was used. CORE_013 par. 12.76, p. 393 recommends it "
+            "for rectangular tables and it cannot produce negative cells, but "
+            "IT IS STILL A CHOICE ABOUT SECONDARY PRODUCTION and the four "
+            "models give four different tables from the same data")
+
+    for name, path in req["files"].items():
+        side = path.with_suffix(path.suffix + ".provenance")
+        if path.exists() and not refresh:
+            continue
+        if offline:
+            raise ConfigError(
+                f"--offline was given and {path.name} is not cached yet. A "
+                f"supply-use system needs all three of "
+                f"{', '.join(p.name for p in req['files'].values())}.")
+        try:
+            rec = fetch(name, req["geo"], req["year"], path)
+        except EurostatError as exc:
+            raise ConfigError(
+                f"the Eurostat download failed on {name}:\n{exc}\n\n"
+                f"A supply-use system needs all three files; nothing was "
+                f"transformed.") from None
+        side.write_text(json.dumps(rec, indent=2))
+        print(f"    Downloaded {rec['dataset']} {req['geo']} {req['year']} — "
+              f"{rec['bytes']:,} bytes, SHA-256 {rec['sha256'][:16]}…")
+
+    try:
+        sut = load_sut(req["files"]["supply"], req["files"]["use_purchasers"],
+                       req["files"]["use_basic"])
+    except EurostatError as exc:
+        raise ConfigError(f"the supply-use pair could not be built:\n{exc}"
+                          ) from None
+
+    print(f"    Supply-use: {sut.V.shape[0]} products x {sut.V.shape[1]} "
+          f"activities, {sut.q.sum():,.0f} {sut.unit}")
+    try:
+        table = sut.to_iot(req["model"])
+    except (ValueError, ArithmeticError) as exc:
+        raise ConfigError(
+            f"model {req['model']} could not transform this system:\n{exc}"
+        ) from None
+    print(f"    Transformed by model {req['model']} -> {table.n} sectors, "
+          f"{int((table.Z < 0).sum())} negative cell(s) in Z")
+
+    # THE THREE FILES, ON THE TABLE. A supply-use system has no single source
+    # file to checksum, so the manifest records none; the provenance has to
+    # travel with the table instead, or a reader cannot tell which vintage of
+    # which download produced the figures they are holding.
+    stamps = []
+    for name, path in req["files"].items():
+        side = path.with_suffix(path.suffix + ".provenance")
+        try:
+            rec = json.loads(side.read_text())
+            stamps.append(f"{rec['dataset']} {str(rec['retrieved_at'])[:10]} "
+                          f"{rec['sha256'][:16]}…")
+        except (ValueError, OSError):
+            stamps.append(f"{path.name} (no provenance sidecar)")
+    table.notes = ((table.notes or "") + " Built from " + "; ".join(stamps)
+                   + ".").strip()
+    return table
 
 
 def _load_eurostat(path: Path, req: dict, offline: bool, refresh: bool):
@@ -386,6 +512,9 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     without saying where it came from.
     """
     meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
+    # Declared here rather than beside the scenarios below, because the loaders
+    # take defaults too and the analyst must hear about those as well.
+    defaults_taken: list[str] = []
     project_id = str(_need(meta, "project_id", "project", 0)).strip()
     kind = str(meta.get("table_kind") or "uk_analytical").strip().lower()
     if kind not in TABLE_KINDS:
@@ -395,7 +524,9 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     # becomes where the download is KEPT rather than where it already is. So
     # the existence check below cannot apply to it: on a first run the file is
     # supposed to be missing.
-    if kind == "eurostat":
+    if kind == "eurostat_sut":
+        table_path, fetch_note = _eurostat_sut_paths(meta, base_dir)
+    elif kind == "eurostat":
         table_path, fetch_note = _eurostat_cache_path(meta, base_dir)
     else:
         table_path = Path(str(_need(meta, "table_path", "project", 0)).strip())
@@ -428,6 +559,8 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
         "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
+        "eurostat_sut": lambda p: _load_eurostat_sut(fetch_note, offline,
+                                                     refresh, defaults_taken),
     }
     try:
         table = loaders[kind](table_path)
@@ -543,7 +676,6 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     # that is absent and a sheet whose NAME was mistyped are the same thing to
     # this loader, and the second is a mistake the analyst would never see: the
     # run succeeds, on a configuration they did not write (2026-08-10).
-    defaults_taken: list[str] = []
     scen_rows = list(tables.get("scenarios", []))
     if not scen_rows:
         scen_rows = [{"scenario_id": "S1", "label": "Default"}]
@@ -671,7 +803,10 @@ def write_template(path: Path | str) -> Path:
             "#             interchange   the project's own format, and what",
             "#                           this engine writes -- point at a",
             "#                           result to split a second sector.",
-            "#             eurostat      downloaded by country and year.",
+            "#             eurostat      symmetric IOT, downloaded by",
+            "#                           country and year.",
+            "#             eurostat_sut  supply-use pair, downloaded and",
+            "#                           TRANSFORMED into a symmetric table.",
             "#",
             "# For table_kind: eurostat, delete table_path (or use it to say",
             "# where to cache) and add instead:",
@@ -679,6 +814,16 @@ def write_template(path: Path | str) -> Path:
             "#     eurostat_year      2022",
             "#     eurostat_dataset   product_by_product | industry_by_industry",
             "#     eurostat_variant   domestic | total",
+            "#",
+            "# For table_kind: eurostat_sut, the same geo and year, and:",
+            "#     eurostat_model     A | B | C | D   (default D)",
+            "#   A product technology       product x product, may go negative",
+            "#   B industry technology      product x product, cannot",
+            "#   C fixed industry sales     industry x industry, may go negative",
+            "#   D fixed product sales      industry x industry, cannot",
+            "# The four are four assumptions about secondary production and",
+            "# give four different tables from the same data. CORE_013",
+            "# Figure 12.2, p. 378.",
             "# The first run downloads and records the URL and SHA-256; every",
             "# run after it reads those same bytes offline. --refresh forces a",
             "# new download and warns that your results may move.",

@@ -24,6 +24,11 @@ answers whether anyone publishes accommodation separately for Spain — nobody
 does; it sits inside `I`, and that is the sector to divide — and hands back the
 configuration rows to paste.
 
+If the year you want has no symmetric table, name the supply-use pair instead
+and say which of the four transformation models to apply. Spain publishes 22
+years of the symmetric table and 35 of the pair, and 2024 exists only as a
+pair.
+
 Python ≥ 3.10, `numpy` and `openpyxl`. Nothing else.
 
 **New here?** [`docs/GUIDE.md`](docs/GUIDE.md) takes you from an empty folder to
@@ -34,7 +39,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Sixty validators run on official data from six statistical offices, and
+Sixty-one validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -53,6 +58,7 @@ Some of what they establish:
 | The **valuation matrices** total their supply columns to 0.0000 on 65 products, three years | `validators/run_valuation_matrices.py` |
 | A result **read back and split again** keeps its provenance: withholding it would relabel 12 of 36 cells from estimate to observation, with the numbers unchanged | `validators/run_export_roundtrip.py` |
 | Every balance tolerance is **derived from the publisher's own printed precision**. Four gates used flat constants instead, and refused two of three real published tables over residues 10–100× inside what their rounding permits | `validators/run_eurostat_config.py` |
+| A **supply-use pair transforms** into a symmetric table by any of CORE_013's four models, closing both identities to float64 noise on Spain and to hundredths on Austria, which prints two decimals | `validators/run_sut_to_iot.py` |
 | The catalogue counts the codes that **carry data**, not the codes a publisher lists. Spain's symmetric table lists `CPA_I55` and `CPA_I56` among 121 categories and populates neither; 9 of 10 countries on disk cannot separate hotels from restaurants | `validators/run_catalogue.py` |
 
 ## Two ideas the engine is built on
@@ -77,7 +83,7 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       60 runnable checks against published tables
+validators/       61 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 examples/         four worked pilots

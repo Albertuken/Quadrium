@@ -94,7 +94,10 @@ class IOProject:
             },
             "input": {
                 "path": str(src) if src else None,
-                "sha256": _sha256(src) if src and src.exists() else None,
+                # A source can be a FOLDER: a supply-use system is three files, so
+        # `table_path` names where they live rather than which one they are.
+        # Their individual checksums are recorded by the loader, on the table.
+        "sha256": _sha256(src) if src and src.is_file() else None,
                 "note": ("The hash exists so that a silently revised input "
                          "vintage is detectable. A reproducibility record that "
                          "names a file without fixing its contents is not one."),
