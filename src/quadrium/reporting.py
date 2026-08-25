@@ -440,7 +440,9 @@ def build_report(results: list[DisaggregationResult], meta: dict,
 
     lines += ["## Scenario comparison", "",
               "Output multipliers by subsector. The range is the honest measure "
-              "of how much the proxy choice matters.", ""]
+              "of how much the proxy choice matters — of how much it matters, "
+              "not of how wrong the answer is; see the note under *How far the "
+              "outside evidence disagrees*.", ""]
     ids = [r.scenario_id for r in results]
     lines.append("| Subsector | " + " | ".join(ids) + " | Range | Range % |")
     lines.append("|---" * (len(ids) + 3) + "|")
@@ -516,7 +518,18 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "> **What a large disagreement is good for** is telling you "
                   "where to go looking. In that case a better source existed "
                   "and was one download away. See `D_open_questions.md` "
-                  "OQ-S-05 and OQ-S-06.", ""]
+                  "OQ-S-05 and OQ-S-06.",
+                  ">",
+                  "> **And this spread is a floor on your uncertainty, not a "
+                  "confidence interval.** Keys drawn from one survey tend to "
+                  "err the same way, so the whole spread can sit on one side "
+                  "of the answer. Measured on the two Spanish years where the "
+                  "office publishes the true split: in 2021 all seven keys "
+                  "overstate accommodation and the range **misses** the truth "
+                  "by 0.6 points; in 2022 it contains it, but only because "
+                  "the one least-biased key has crossed over — which is not "
+                  "something anyone can check without already knowing the "
+                  "answer. See `run_key_bias.py`.", ""]
 
     # If the multipliers do not differ across subsectors, say why, loudly. An
     # economist reading "range 0.0 %" could otherwise take the result as robust,
