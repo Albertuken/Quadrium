@@ -17,8 +17,9 @@ command.
 4. [Fill in the configuration workbook](#4-fill-in-the-configuration-workbook)
 5. [Run it](#5-run-it)
 6. [Read the report](#6-read-the-report)
-7. [When it refuses](#7-when-it-refuses)
-8. [What it will not do](#8-what-it-will-not-do)
+7. [Split a second sector, later](#7-split-a-second-sector-later)
+8. [When it refuses](#8-when-it-refuses)
+9. [What it will not do](#9-what-it-will-not-do)
 
 ---
 
@@ -334,7 +335,58 @@ carry it into whatever you publish.
 
 ---
 
-## 7. When it refuses
+## 7. Split a second sector, later
+
+You divided hospitality. A month on you want to divide food manufacturing in
+the same table. You do not have to redo the first split: the workbook the
+engine writes, `scenarios/<id>/table_disaggregated.xlsx`, can be read straight
+back in.
+
+Point a new configuration at it:
+
+| Key | Value |
+|---|---|
+| `table_path` | `../outputs/my_project/scenarios/S1_plain/table_disaggregated.xlsx` |
+| `table_kind` | `interchange` |
+
+That file carries the numbers twice on purpose. The sheets `Z`, `FinalDemand`,
+`ValueAdded` and `Output` are laid out for a person, shaded by provenance. The
+sheets `table` and `metadata` hold the same figures in the format the loader
+reads. Both are written in one pass from the same arrays, so they cannot
+disagree.
+
+**What travels with it, and why that matters more than the numbers.** A
+disaggregated table balances exactly as well as a published one. Nothing in the
+figures reveals that two thirds of its cells came from an allocation key rather
+than a survey, so if the provenance did not travel, the second run would stamp
+every cell it did not touch as an observation, and by the third generation a
+table of pure inference would report itself as pure measurement.
+
+So the `Provenance` sheet is read back too, and the new report opens with a
+warning naming the share of cells that were already estimates and the chain of
+splits that produced them, oldest first. On the small test fixture, twelve of
+thirty-six cells would be quietly promoted from estimate to observation by one
+trip through a file if this did not happen.
+
+Two practical consequences:
+
+- **Do not delete or edit the `Provenance` and `metadata` sheets.** A file
+  without them still loads, and still balances, and will silently claim to be a
+  publication.
+- **Each generation reaggregates onto the one before it**, exactly. You can
+  always sum the subsectors back and recover the table you started from, at any
+  point in the chain.
+
+There is no limit on the number of generations, but there is a judgement: every
+split multiplies the assumptions, and the second generation's multipliers rest
+on the first generation's key as much as on your new one. Two generations is
+usually the point at which it is worth asking whether one run with both splits
+would be more defensible — it uses the same original table for both, and the
+report then shows them side by side.
+
+---
+
+## 8. When it refuses
 
 The tool stops rather than producing a number it cannot defend. The messages
 are written for an economist and name the subsector or the proxy at fault.
@@ -346,6 +398,7 @@ are written for an economist and name the subsector or the proxy at fault.
 | One or more scenarios `REJECTED` | Those profiles imply an economy that does not exist — typically a subsector left needing to buy a negative amount from its siblings, because it was given a larger share of inputs than its share of output can absorb. | Nothing about the solver can fix this, and no tolerance will. The report names the subsector and prints the parent's own ratios. Move the keys closer together or soften the intensities. |
 | `Every scenario was rejected` | The same thing, for all of them. Nothing is written. | As above. |
 | `no sector rows found` / `appear below the sector block` | An interchange file whose row labels do not line up with its header. | See §3, Route B: same codes, same order, contiguous. |
+| `the Provenance sheet has N data rows for M sectors` | A re-read result whose provenance grid no longer matches its table, usually after hand-editing. | A grid that does not match is worse than none, because it mislabels rather than leaves unlabelled. Delete the sheet or correct it. |
 | A validation check `FAIL`s but the run finishes | The table was produced but something about it is implausible. | Read that check before using any number. The exit code is non-zero. |
 
 On tolerances: a table published to `d` decimals states each cell as a stand-in
@@ -358,7 +411,7 @@ report labels it `PROJECT CHOICE`.
 
 ---
 
-## 8. What it will not do
+## 9. What it will not do
 
 - **Multi-region tables.** Single-region only.
 - **Regional disaggregation.** Sectors, not territories.

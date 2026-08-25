@@ -838,6 +838,37 @@ def test_project_folder_is_reproducible():
               "than a pointer to a register a reader may not hold")
 
 
+def test_label_mask_beats_the_naive_comparison():
+    """`prov == CellLabel.X` on an object array is silently all-False.
+
+    This is not a hypothetical. `CellLabel` subclasses `str`, numpy converts
+    the right-hand side to a `numpy.str_`, and the elementwise comparison then
+    matches nothing — while the same comparison on a single cell is correct.
+    The failure is invisible: counts of untouched cells come out as zero and
+    read as "nothing to report".
+
+    The test asserts the trap as well as the fix, so that `label_mask` cannot
+    be mistaken for a redundant wrapper around `==` and deleted.
+    """
+    import numpy as np
+    from quadrium.models import CellLabel, label_mask
+
+    a = np.empty((2, 2), dtype=object)
+    a[:, :] = CellLabel.OBSERVED
+    a[0, 0] = CellLabel.PROXY_ESTIMATED
+
+    check("the naive array comparison still lies", (a == CellLabel.OBSERVED).sum() == 0,
+          "3 of 4 cells ARE observed; numpy says 0")
+    check("the scalar comparison is right, which is what hides the trap",
+          a[0, 1] == CellLabel.OBSERVED)
+    check("label_mask counts what is there",
+          int(label_mask(a, CellLabel.OBSERVED).sum()) == 3
+          and int(label_mask(a, CellLabel.PROXY_ESTIMATED).sum()) == 1)
+    check("and it works on the string form the loader reads back",
+          int(label_mask(np.array([["observed", "estimated"]], dtype=object),
+                         CellLabel.OBSERVED).sum()) == 1)
+
+
 def test_export_json_handles_numpy_and_enums():
     """The JSON writer must not choke on the types the engine actually uses."""
     import json

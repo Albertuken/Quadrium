@@ -798,9 +798,80 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
                        for c in sector_codes],
         Z=Z, Y=Y, Y_labels=Y_labels, VA=VA, VA_labels=va_labels, X=X,
         source=str(meta["source"]), retrieved_at=datetime.now(timezone.utc),
-        notes=str(meta.get("notes") or "") or None)
+        notes=str(meta.get("notes") or "") or None,
+        provenance=_read_provenance(sheets, sector_codes),
+        lineage=_read_lineage(meta))
     _assert_balances(table, Path(path).name)
     return table
+
+
+def _read_provenance(sheets: dict, sector_codes: list[str]):
+    """Read a `Provenance` sheet back, if the file carries one.
+
+    This engine writes one beside every table it exports. Reading it is what
+    keeps a second split from promoting the first split's estimates to
+    observations -- a table that has been through a disaggregation balances
+    exactly as well as a published one, so nothing in the numbers would give
+    it away.
+
+    The sheet stores the §A.1 data status, which is coarser than the internal
+    label: `USER_CONSTRAINT` is written as OBSERVED, so a pinned cell comes
+    back as an ordinary observation. That loss is deliberate and stated here
+    rather than hidden -- on reload the analyst who pinned it is not in the
+    room, and the cell is as good as any other observation to whoever is.
+    """
+    import numpy as np
+
+    from .models import CellLabel
+
+    name = next((s for s in sheets if s.strip().lower() == "provenance"), None)
+    if name is None:
+        return None
+    back = {"OBSERVED": CellLabel.OBSERVED,
+            "ESTIMATED": CellLabel.PROXY_ESTIMATED,
+            "BALANCED": CellLabel.BALANCED_ADJUSTMENT}
+    R = [r for r in sheets[name] if r and any(c is not None for c in r)]
+    n = len(sector_codes)
+    if len(R) < 1 + n:
+        raise LoaderError(
+            f"the Provenance sheet has {len(R) - 1} data row(s) for {n} "
+            f"sectors. A provenance grid that does not match the table is "
+            f"worse than none: it would mislabel cells rather than leave them "
+            f"unlabelled. Delete the sheet or correct it.")
+    prov = np.empty((n, n), dtype=object)
+    for i in range(n):
+        for j in range(n):
+            cell = R[1 + i][1 + j]
+            key = str(cell).strip().upper() if cell is not None else "OBSERVED"
+            if key not in back:
+                raise LoaderError(
+                    f"Provenance cell ({sector_codes[i]}, {sector_codes[j]}) "
+                    f"reads {cell!r}; expected one of "
+                    f"{', '.join(sorted(back))}.")
+            prov[i, j] = back[key]
+    return prov
+
+
+def _read_lineage(meta: dict) -> list[str]:
+    """The table's ancestry: `lineage_1`, `lineage_2`, … then `derived_from`.
+
+    Oldest first, so appending this run's own line keeps the order. A table
+    from a statistical office has neither key and comes back with an empty
+    list, which is the correct answer -- it is the start of a lineage, not a
+    step in one.
+    """
+    older = sorted((k for k in meta if k.startswith("lineage_")),
+                   key=lambda k: int(k.rsplit("_", 1)[1]))
+    out = [str(meta[k]) for k in older]
+    # `derived_from` is a one-line summary for whoever opens the workbook, and
+    # on a file this engine wrote it restates the last lineage row with the
+    # estimated share appended -- a share the Provenance sheet already carries
+    # cell by cell. Taking it as well would double the newest step every time
+    # the file went round the loop. It is read only when there is no `lineage_`
+    # row at all, which is the hand-written case.
+    if not out and meta.get("derived_from"):
+        out.append(str(meta["derived_from"]))
+    return out
 
 
 # ---------------------------------------------------------------------------

@@ -235,7 +235,16 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
         VA=seed["VA"], VA_labels=table.VA_labels, X=seed["X"],
         source=f"{table.source} (disaggregated, scenario {scenario.scenario_id})",
         notes="; ".join(f"{s['sector_code']} split into "
-                        f"{', '.join(s['new_codes'])}" for s in seed["splits"]))
+                        f"{', '.join(s['new_codes'])}" for s in seed["splits"]),
+        # The result carries its own provenance and its parent's ancestry, so
+        # that exporting it and reading it back loses neither. `prov` here is
+        # post-balancing: it holds the BALANCED cells the solver moved as well
+        # as the ESTIMATED ones the key produced.
+        provenance=prov,
+        lineage=list(table.lineage) + [
+            f"{table.table_id} -> {table.table_id}::{scenario.scenario_id}: "
+            + "; ".join(f"{s['sector_code']} into {', '.join(s['new_codes'])}"
+                        for s in seed["splits"])])
 
     diag = diagnostics.compute(Z_bal, seed["X"])
     diag["balance_info"] = combined

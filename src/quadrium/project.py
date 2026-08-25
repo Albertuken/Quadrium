@@ -246,8 +246,8 @@ class IOProject:
         report = build_report(self.results, self.meta,
                               self.title or "Sector split")
         if self.preamble:
-            report = report.replace("IO Model Foundry, MVP 0.1",
-                                    f"IO Model Foundry, MVP 0.1\n\n{self.preamble}",
+            report = report.replace("Quadrium 0.1.0 (MVP 0.1)",
+                                    f"Quadrium 0.1.0 (MVP 0.1)\n\n{self.preamble}",
                                     1)
         if self.ledger:
             report += ("\n---\n\n## Assumption ledger\n\n"

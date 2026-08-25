@@ -363,7 +363,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     first = results[0]
     lines = [f"# {table_title}", "",
-             f"Generated {now} · IO Model Foundry, MVP 0.1", "",
+             f"Generated {now} · Quadrium 0.1.0 (MVP 0.1)", "",
              f"Sector `{first.table.sector_codes[first.split_index]}`"
              if False else "", ]
     lines = [x for x in lines if x != ""]
@@ -398,6 +398,26 @@ def build_report(results: list[DisaggregationResult], meta: dict,
         if getattr(tbl, "notes", None):
             prov.append(f"- **What the loader decided when reading this file:** "
                         f"{tbl.notes}")
+        # WHEN THE INPUT IS ITSELF A PRODUCT OF THIS ENGINE.
+        #
+        # A disaggregated table balances as exactly as a published one, so a
+        # reader has no way to tell from the numbers that the "original" here
+        # is already an estimate. Said at the top, before any figure, because
+        # everything below inherits it: the multipliers in a second-generation
+        # table rest on the first generation's allocation key as much as on
+        # this run's.
+        if getattr(tbl, "derived", False):
+            counts = tbl.provenance_counts()
+            total = max(sum(counts.values()), 1)
+            est = total - counts.get("OBSERVED", 0)
+            prov.append(
+                f"- ⚠️ **The input table is not a publication.** It is itself "
+                f"the output of a disaggregation: **{est} of its {total} "
+                f"intermediate cells ({100 * est / total:.1f} %) were already "
+                f"estimates before this run began**, and every figure below "
+                f"inherits them. The chain, oldest first:")
+            prov += [f"  {i}. {line}" for i, line
+                     in enumerate(tbl.lineage or ["(not recorded)"], start=1)]
     lines += prov + ["", meta["original_report"].to_markdown(), "", "---", ""]
 
     for res in results:

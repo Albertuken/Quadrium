@@ -167,7 +167,7 @@ def write_xlsx(res: DisaggregationResult, path: Path) -> Path | None:
     ws = wb.active
     ws.title = "README"
     notes = [
-        ("IO Model Foundry — disaggregated table", True),
+        ("Quadrium — disaggregated table", True),
         ("", False),
         (f"Table: {t.table_id}", False),
         (f"Country / year: {t.country} {t.year}", False),
@@ -193,8 +193,14 @@ def write_xlsx(res: DisaggregationResult, path: Path) -> Path | None:
         ("validity (CORE_006 par. 9.51, p. 288). Read validation_report.json.",
          False),
         ("", False),
-        ("Every tolerance in this pipeline is a project choice. No loaded", False),
-        ("methodological source states a numerical accounting tolerance.", False),
+        ("No published source states a numerical accounting tolerance. The", False),
+        ("floor used here is derived from this table's own stated precision;", False),
+        ("what remains a genuine choice is labelled PROJECT CHOICE in the", False),
+        ("report. See validation_report.json.", False),
+        ("", False),
+        ("SHEETS `table` AND `metadata` hold the same numbers in the format", False),
+        ("this software reads. To split another sector of THIS table, point a", False),
+        ("configuration at this file with table_kind: interchange.", False),
     ]
     for r, (text, is_bold) in enumerate(notes, start=1):
         c = ws.cell(row=r, column=1, value=text)
@@ -258,5 +264,82 @@ def write_xlsx(res: DisaggregationResult, path: Path) -> Path | None:
             c.alignment = Alignment(horizontal="center")
     ws.freeze_panes = "B2"
 
+    _write_interchange_sheets(wb, res)
+
     wb.save(path)
     return path
+
+
+def _write_interchange_sheets(wb, res) -> None:
+    """Add the `table` and `metadata` sheets that make this file re-readable.
+
+    WHY THE SAME WORKBOOK CARRIES THE NUMBERS TWICE
+    ------------------------------------------------
+    The sheets above -- `Z`, `FinalDemand`, `ValueAdded`, `Output` -- are laid
+    out for a person: one block per sheet, shaded by provenance, frozen panes.
+    The interchange format of `io_loader.load_io_table` is laid out for the
+    loader: one sheet, blocks found by their labels.
+
+    Until 2026-08-25 the exporter wrote only the first, so **a Quadrium result
+    could not be read back into Quadrium.** Splitting a second sector of a
+    table you had already split meant redoing the first split in the same run
+    or retyping the output by hand, and the guide had no answer for it.
+
+    Both layouts are written here, in one function, from `res.table` -- so they
+    cannot disagree with each other. Duplication that is generated once from a
+    single source is bookkeeping; duplication that is maintained is a defect.
+
+    The `Provenance` sheet is not decoration either: the loader reads it back,
+    which is what stops a second split from quietly promoting the first
+    split's estimates to observations.
+    """
+    from openpyxl.styles import Font
+
+    t = res.table
+    bold = Font(bold=True)
+
+    ws = wb.create_sheet("table")
+    ws.append([""] + list(t.sector_codes) + [str(y) for y in t.Y_labels])
+    for c in ws[1]:
+        c.font = bold
+    for i, code in enumerate(t.sector_codes):
+        ws.append([code] + [float(v) for v in t.Z[i]]
+                  + [float(v) for v in t.Y[i]])
+    for m, lab in enumerate(t.VA_labels):
+        ws.append([str(lab)] + [float(v) for v in t.VA[m]])
+    ws.append(["Output"] + [float(v) for v in t.X])
+    ws.freeze_panes = "B2"
+
+    ws = wb.create_sheet("metadata")
+    meta = [("table_id", f"{t.table_id}::{res.scenario_id}"),
+            ("country", t.country), ("year", t.year), ("unit", t.unit),
+            ("classification", t.classification), ("source", t.source)]
+    meta += [(f"label_{c}", lab)
+             for c, lab in zip(t.sector_codes, t.sector_labels)]
+
+    divided = "; ".join(f"{s['sector_code']} into {', '.join(s['new_codes'])}"
+                        for s in res.splits)
+    counts = t.provenance_counts() if t.provenance is not None else {}
+    estimated = sum(v for k, v in counts.items() if k != "OBSERVED")
+    total = max(t.n * t.n, 1)
+    meta.append((
+        "derived_from",
+        f"Quadrium disaggregation, scenario {res.scenario_id}: {divided}. "
+        f"{estimated} of {total} intermediate cells ({100 * estimated / total:.1f} %) "
+        f"are not observations."))
+    for i, line in enumerate(t.lineage, start=1):
+        meta.append((f"lineage_{i}", line))
+    meta.append((
+        "notes",
+        "THIS TABLE IS A PRODUCT, NOT A PUBLICATION. It balances exactly, and "
+        "that says nothing about whether it is right: the figures for the "
+        "divided sectors rest on the allocation keys named in the report "
+        "beside it, not on measurement. Read that report before quoting any "
+        "number, and do not redistribute this file as if it were the source "
+        "table."))
+    for k, v in meta:
+        ws.append([k, v])
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 70
+    for row in ws.iter_rows(min_col=1, max_col=1):
+        row[0].font = bold

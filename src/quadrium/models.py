@@ -93,6 +93,33 @@ DATA_STATUS = {
 }
 
 
+def label_mask(prov: np.ndarray, label: CellLabel) -> np.ndarray:
+    """Elementwise `prov == label`. Numpy will not do this correctly itself.
+
+    `CellLabel` subclasses `str`, so numpy converts the right-hand side to a
+    `numpy.str_` and then compares the object-dtype elements against it by a
+    path that never matches:
+
+        a = np.empty((2, 2), dtype=object); a[:, :] = CellLabel.OBSERVED
+        a[0, 0] == CellLabel.OBSERVED   ->  True
+        a      == CellLabel.OBSERVED    ->  all False
+
+    The scalar comparison is right and the array comparison is wrong, silently,
+    and wrong in the direction that hides estimates: every count of untouched
+    cells comes out as zero and reads as "nothing to report". Found on
+    2026-08-25 by a counterfactual that measured a difference of zero where the
+    engine's own tally said twelve.
+
+    Anything comparing a provenance array against a label goes through here.
+    `test_label_mask_beats_the_naive_comparison` keeps this from being tidied
+    away as a redundant wrapper.
+    """
+    arr = np.asarray(prov, dtype=object)
+    want = label.value
+    flat = [(x if isinstance(x, str) else x.value) == want for x in arr.ravel()]
+    return np.asarray(flat, dtype=bool).reshape(arr.shape)
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -128,6 +155,22 @@ class IOTable:
     retrieved_at: datetime = field(default_factory=_utcnow)
     notes: Optional[str] = None
 
+    # WHAT THIS TABLE'S CELLS ALREADY ARE, when that is known: an n x n array
+    # of `CellLabel`, parallel to Z. `None` means the table came from a
+    # publisher and every cell is an observation as far as this system can
+    # tell.
+    #
+    # It exists so a table produced by this engine can be read back into it.
+    # Without it a second split treats the first split's estimates as
+    # observations, and the audit trail resets to zero every time the file is
+    # written and reopened -- the one thing an audit trail may not do.
+    provenance: Optional[np.ndarray] = None
+
+    # Where this table came from, one line per step, oldest first. A table read
+    # from a statistical office has none; one written by this engine carries
+    # its parent's and appends its own.
+    lineage: list[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)
@@ -148,6 +191,33 @@ class IOTable:
             raise ValueError("Y_labels does not match Y columns")
         if len(self.VA_labels) != self.VA.shape[0]:
             raise ValueError("VA_labels does not match VA rows")
+        if self.provenance is not None:
+            self.provenance = np.asarray(self.provenance, dtype=object)
+            if self.provenance.shape != (n, n):
+                raise ValueError(
+                    f"provenance must be {n}x{n} to sit parallel to Z, got "
+                    f"{self.provenance.shape}")
+
+    @property
+    def derived(self) -> bool:
+        """True when some cell of this table is not an observation.
+
+        A table can be derived and still balance perfectly, which is exactly
+        why this is worth asking: nothing in the numbers gives it away.
+        """
+        if self.provenance is None:
+            return False
+        return not bool(label_mask(self.provenance, CellLabel.OBSERVED).all())
+
+    def provenance_counts(self) -> dict[str, int]:
+        """How many cells of Z hold each data status (§A.1 vocabulary)."""
+        out: dict[str, int] = {}
+        if self.provenance is None:
+            return {"OBSERVED": self.n * self.n}
+        for lab in self.provenance.ravel():
+            key = DATA_STATUS[CellLabel(lab if isinstance(lab, str) else lab.value)]
+            out[key] = out.get(key, 0) + 1
+        return out
 
     @property
     def n(self) -> int:

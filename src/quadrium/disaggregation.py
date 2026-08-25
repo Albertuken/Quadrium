@@ -705,11 +705,27 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
             VA=seed["VA"], VA_labels=current.VA_labels, X=seed["X"],
             source=current.source, notes=current.notes)
 
-    # Provenance is recomputed rather than merged: a cell is estimated exactly
-    # when its row or its column belongs to some split's new subsectors.
+    # Provenance is recomputed rather than merged across the splits of THIS
+    # run: a cell is estimated exactly when its row or its column belongs to
+    # some split's new subsectors.
+    #
+    # But it is INHERITED from the table that came in. A table this engine
+    # produced and wrote out can be read back and split again, and its earlier
+    # estimates have to survive that: a cell no split of this run touches is
+    # not thereby an observation, it is whatever it already was. Starting every
+    # cell at OBSERVED, as this did until 2026-08-25, let the audit trail reset
+    # to zero each time a result was written to disk and reopened -- and the
+    # reset was invisible, because a derived table balances exactly as well as
+    # a published one.
     n = current.n
     prov = np.empty((n, n), dtype=object)
-    prov[:, :] = CellLabel.OBSERVED
+    if table.provenance is None:
+        prov[:, :] = CellLabel.OBSERVED
+    else:
+        inherited = table.provenance
+        for i in range(n):
+            for j in range(n):
+                prov[i, j] = inherited[mapping[i], mapping[j]]
     touched = sorted({q for s in splits for q in s["positions"]})
     prov[touched, :] = CellLabel.PROXY_ESTIMATED
     prov[:, touched] = CellLabel.PROXY_ESTIMATED

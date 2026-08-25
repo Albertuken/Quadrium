@@ -1,4 +1,4 @@
-"""IO Model Foundry — MVP 0.1 core engine.
+"""Quadrium — MVP 0.1 core engine.
 
 Scientific software for constructing and disaggregating Supply-Use and
 Input-Output systems. The methodology this implements is specified in

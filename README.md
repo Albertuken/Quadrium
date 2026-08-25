@@ -20,7 +20,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Fifty-seven validators run on official data from six statistical offices, and
+Fifty-eight validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -37,6 +37,7 @@ Some of what they establish:
 | The four **SUT→IOT transformation models** reproduce the Handbook's tables exactly, and behave on signs as its Figure 12.2 says they do | `validators/run_handbook_transformations.py` |
 | Six accounting **identities hold exactly in all 27 published years** of the UK supply-use tables, and value added is preserved from the SUT into the analytical IOT across two tables | `validators/run_uk_sut_identities.py` |
 | The **valuation matrices** total their supply columns to 0.0000 on 65 products, three years | `validators/run_valuation_matrices.py` |
+| A result **read back and split again** keeps its provenance: withholding it would relabel 12 of 36 cells from estimate to observation, with the numbers unchanged | `validators/run_export_roundtrip.py` |
 
 ## Two ideas the engine is built on
 
@@ -60,7 +61,7 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       57 runnable checks against published tables
+validators/       58 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 examples/         four worked pilots
