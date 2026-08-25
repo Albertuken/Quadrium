@@ -643,11 +643,17 @@ ceiling Austria was still 9.4 % from its target and the note reported success.
 **And the measurement, which is not flattering.** Scored against the published
 2022, on domestic intermediate use:
 
-| | levels | coefficients (per 1000) |
-|---|---:|---:|
-| projected | 34.0 % | 2.117 |
-| base year unchanged | 29.4 % | 2.029 |
-| base year scaled | 28.8 % | 2.029 |
+| estimator | levels | coefficients (per 1000) | uses |
+|---|---:|---:|---|
+| projected | 34.0 % | 2.117 | all four targets |
+| base year unchanged | 29.4 % | 2.029 | nothing |
+| base year × GVA growth | **28.2 %** | 2.029 | one target |
+
+A baseline must not be handed information the projection was never given. An
+earlier version of this table scaled the base year by the TRUE growth in
+intermediate use — an oracle, and not one of the four targets. Scaling by the
+growth in value added instead, which IS a target, scores better than the oracle
+did: the conclusion does not rest on it.
 
 The projection is further from the published table than the base year left
 alone — and the same holds for Austria, Italy and the Netherlands, and on

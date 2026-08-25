@@ -44,6 +44,12 @@ Against the published later year, with every run converged:
 
     (total absolute error on domestic intermediate use, as a share of it)
 
+A baseline must not be fed anything the projection was not. `base year scaled`
+above uses the TRUE growth in intermediate use, which is not one of the four
+targets — an oracle. Replacing it with the growth in VALUE ADDED, which is a
+target, scores **28.2 %** on Spain: better than the oracle and still well
+inside the projection's 34.0 %. The conclusion does not rest on the oracle.
+
 The projection is further from the published table than the base year left
 alone, in all five. On levels that could be dismissed as a scale effect — but
 the same holds on TECHNICAL COEFFICIENTS, which have no scale:
@@ -183,17 +189,23 @@ def main() -> int:
 
     Ad, Pd = Ud0[:, :na], full.Ud[:, :na]
     Bd = B.U_domestic[np.ix_(bpi, bai)]
-    k = Bd.sum() / Ad.sum()
+    # The comparison must not hand a baseline information the projection was
+    # never given. `base year scaled` used the TRUE growth in intermediate use,
+    # which is not among the four targets — an oracle. This one scales by the
+    # growth in value added, which IS one of the targets, and it happens to
+    # score better than the oracle did anyway.
+    k = float(target["va_target"].sum() / A.W.sum())
     lv = lambda e: float(np.abs(e - Bd).sum() / np.abs(Bd).sum() * 100)
     co = lambda e, x: float(np.abs(e / np.where(x == 0, 1.0, x)
                                    - Bd / np.where(B.g[bai] == 0, 1.0,
                                                    B.g[bai])).mean() * 1000)
     rows = (("projected", lv(Pd), co(Pd, full.x)),
             ("base year unchanged", lv(Ad), co(Ad, A.g[aai])),
-            ("base year scaled", lv(Ad * k), co(Ad * k, A.g[aai] * k)))
-    print(f"    {'':22}{'levels':>10}{'coefficients':>15}")
+            (f"base year x GVA growth ({k:.3f})", lv(Ad * k),
+             co(Ad * k, A.g[aai] * k)))
+    print(f"    {'':32}{'levels':>10}{'coefficients':>15}")
     for name, l, c in rows:
-        print(f"    {name:<22}{l:>9.1f}%{c:>13.3f} /1000")
+        print(f"    {name:<32}{l:>9.1f}%{c:>13.3f} /1000")
 
     check("the projection is further from the published year than the base is",
           rows[0][1] > rows[1][1] and rows[0][2] > rows[1][2],
@@ -201,6 +213,13 @@ def main() -> int:
           f"{rows[0][2]:.3f} against {rows[1][2]:.3f} per thousand on "
           f"coefficients — the coefficient comparison has no scale in it, so "
           f"this is not the base year winning by being smaller")
+    check("and the baselines are not being fed anything it was not",
+          rows[2][1] < rows[0][1],
+          f"scaling the base year by the growth in value added — one of the "
+          f"four targets, and nothing else — gives {rows[2][1]:.1f} % against "
+          f"the projection's {rows[0][1]:.1f} %. An earlier version of this "
+          f"check scaled by the TRUE growth in intermediate use, which is not "
+          f"a target and was an oracle; it scored 28.8 %, worse than this")
 
     # 3 -- and it is not the project's own damping choice.
     print()
