@@ -444,8 +444,29 @@ In a typical split, around 90 % of cells are untouched and 10 % come from your
 key — which is a useful reminder that a disaggregation is a local operation,
 not a new table.
 
-**Validation.** Eleven or so checks per scenario, each printing the deviation
-it measured and, where it comes from one, citing the manual paragraph and page.
+**The Leontief checks.** Four of them, and they are about the multipliers the
+report prints — a multiplier is a column sum of the Leontief inverse, so these
+are checks on the number you are most likely to quote.
+
+| Check | What it asks |
+|---|---|
+| `check_leontief_productive` | Is the spectral radius of the coefficient matrix below 1? Above it, multipliers are not large — they are undefined. |
+| `check_leontief_identity` | Do `Ax + y = x` and `Ly = x` hold, within your source's own printed precision? |
+| `check_leontief_inverse` | Was the inverse actually computed, given how well conditioned the system is? |
+| `check_leontief_nonnegative` | Does the inverse contain negative entries? |
+
+The last one deserves a note, because it warns rather than fails and it fires on
+real published tables. A negative cell in the inverse says that more final
+demand for one product *lowers* output of another. It follows from negative
+cells in the table itself, which are legitimate — the ONS's own analytical table
+has one, financial services into imputed rents, and that single cell produces 19
+negatives in the inverse, all in one column. The multiplier for that column is
+1.0828, which is 1.1705 minus 0.0877. The check names the column, so you know
+which one multiplier to treat carefully rather than distrusting all of them.
+
+**Validation.** Eleven or so further checks per scenario, each printing the
+deviation it measured and, where it comes from one, citing the manual paragraph
+and page.
 They cover proxy coverage, key vintage against the table's reference year,
 solver convergence, whether the margins were attained, whether cells that
 involve no split sector are still exactly what they were, whether reaggregating

@@ -126,6 +126,149 @@ def corroborate_keys(keys: dict, new_codes: list[str], keys_used: dict,
     return out, skipped
 
 
+def _leontief_check(rep: ValidationReport, Z, X, Y, source_residue: float,
+                    what: str, codes: list | None = None) -> None:
+    """ID-12, on a table this engine is about to hand somebody.
+
+    WHY THIS WAS MISSING, AND WHY THAT MATTERED
+    ---------------------------------------------
+    `identities.id12_leontief` has existed and been verified against published
+    tables since v1.1. A `grep` for it in this file, in `project.py` and in
+    `scenarios.py` returned nothing until 2026-08-25: THE IDENTITY WAS CHECKED
+    AGAINST OTHER PEOPLE'S TABLES AND NEVER AGAINST THE USER'S OWN.
+
+    That is not a gap like a missing feature. The report prints "output
+    multipliers by subsector" and presents them as the result, and a multiplier
+    IS a row sum of the Leontief inverse. The engine was printing the inverse
+    without ever checking the inverse existed.
+
+    The nearest thing it did check was `check_extreme_coefficients`, which
+    flags an individual coefficient above 1. That is a symptom, not the
+    condition: a matrix can have every coefficient below 1 and still fail.
+
+    THREE QUANTITIES, THREE BOUNDS, BECAUSE THEY ARE NOT THE SAME KIND OF THING
+    ----------------------------------------------------------------------------
+    1. `max|Ax + y - x|` is an ACCOUNTING residue. It is bounded by what the
+       source's own precision allows, plus whatever the source's books are
+       already out by.
+    2. `max|(I-A)L - I|` and `max|Ly - x|` are NUMERICAL residues from
+       inverting a matrix. They are bounded by the conditioning of `I - A`
+       times the machine epsilon, and have nothing to do with how the
+       publisher rounded.
+    3. The spectral radius of `A` is neither: it is the CONDITION, not a
+       residue. `rho(A) < 1` is what makes the economy productive, the Neumann
+       series converge and the inverse non-negative. Above 1 the multipliers
+       are not large, they are meaningless.
+    """
+    from .identities import id12_leontief
+
+    Z = np.asarray(Z, float)
+    X = np.asarray(X, float).ravel()
+    y = np.asarray(Y, float).sum(axis=1)
+    n = Z.shape[0]
+
+    res = id12_leontief(Z, X, y)
+    A, L = res.info["A"], res.info["L"]
+
+    # 3 -- the condition, first, because the other two are meaningless without it.
+    rho = float(np.abs(np.linalg.eigvals(A)).max())
+    col = float(A.sum(axis=0).max())
+    rep.add(f"check_leontief_productive{what}", rho < 1.0,
+            f"spectral radius of A = {rho:.6f} (must be < 1), largest column "
+            f"sum {col:.4f}. Below 1 the Neumann series converges, the inverse "
+            f"is non-negative and a multiplier means what it says; at or above "
+            f"it the economy consumes at least as much as it makes and the "
+            f"multipliers are not large but undefined",
+            "error", "ID-12, CORE_005 ¶36.36–36.39, pp. 1015–1016")
+
+    # 1 -- the accounting residue.
+    values = np.concatenate([Z.ravel(), np.asarray(Y, float).ravel(), X])
+    acc_tol = max(PROJECT_BALANCE_ABS_TOL,
+                  assertable_tolerance(values, n + np.asarray(Y).shape[1] + 1)
+                  ) + max(0.0, float(source_residue))
+    acc = float(np.abs(A @ X + y - X).max())
+    # `Ly = x` IS THE SAME STATEMENT, SEEN THROUGH THE INVERSE, so it belongs
+    # here and not with the arithmetic below. If `Ax + y = x` holds only to
+    # `e`, then `Ly - x` inherits `e` amplified by how much `L` amplifies
+    # anything: the standard bound is `‖L‖∞ · e`.
+    #
+    # Lumping it with `‖(I-A)L - I‖` was the same mistake this file has now
+    # made four times in different clothes -- two quantities of different kinds
+    # sharing one tolerance. It showed up immediately: Portugal 2020, whose own
+    # books are 0.09 out because it prints two decimals, reached 7.5e-06
+    # against a bound of 1.1e-12 computed for a matrix inversion.
+    Linf = float(np.abs(L).sum(axis=1).max())
+    xly = float(np.abs(L @ y - X).max())
+    xly_tol = Linf * acc_tol
+    rep.add(f"check_leontief_identity{what}",
+            acc <= acc_tol and xly <= xly_tol,
+            f"max |Ax + y − x| = {acc:.3g} against {acc_tol:.3g}; the same "
+            f"statement through the inverse, max |Ly − x| = {xly:.3g} against "
+            f"{xly_tol:.3g}, which is that bound amplified by ‖L‖∞ = "
+            f"{Linf:.3g}. Both are accounting, bounded by this source's own "
+            f"printed precision and by how far its books were already out",
+            "error", "ID-12, CORE_005 ¶36.36, p. 1015")
+
+    # 4 -- AND WHETHER THE INVERSE MEANS WHAT A MULTIPLIER CLAIMS IT MEANS.
+    #
+    # `rho(A) < 1` guarantees a non-negative inverse only for a NON-NEGATIVE A,
+    # and these matrices are not: negatives in an IO table are legitimate
+    # (§A.8.1) and every loader here meets them. So `L` can carry negative
+    # entries, and a negative `L[i, j]` says that more final demand for j
+    # LOWERS output of i -- which is not a multiplier, whatever the column sum
+    # of that matrix is called.
+    #
+    # Measured across every table this engine can load, on 2026-08-25:
+    #
+    #     ONS UK 2023 analytical            19 negative cells in L
+    #     Eurostat symmetric, ES/PT/IT       0
+    #     INE ES 2022                        0
+    #     SUT -> model A / C            198-623
+    #     SUT -> model B / D                 0
+    #
+    # A WARNING and not an error: the ONS's own published table has them, so
+    # they cannot be a defect. What they are is a caveat the reader of a
+    # multiplier is entitled to, and one more argument for models B and D.
+    neg = int((L < -1e-9).sum())
+    if neg:
+        i, j = np.unravel_index(np.argmin(L), L.shape)
+        bad = np.flatnonzero((L < -1e-9).any(axis=0))
+        # NAMING THE COLUMN IS THE USEFUL PART. On the shipped UK example all
+        # 19 negatives sit in ONE column, so the reader does not need to
+        # distrust 104 multipliers -- they need to distrust one, and know
+        # which.
+        named = (", ".join(str(codes[k]) for k in bad[:6])
+                 + ("…" if len(bad) > 6 else "")) if codes is not None \
+            else f"{len(bad)} column(s)"
+        rep.add(f"check_leontief_nonnegative{what}", False,
+                f"{neg} of {n * n} cells of the Leontief inverse are negative, "
+                f"and they sit in the column(s) for {named}; the deepest is "
+                f"{L[i, j]:.4g}. A "
+                f"negative L[i,j] says that MORE final demand for j lowers "
+                f"output of i. It follows from negative cells in A, which are "
+                f"legitimate — the ONS's own published table has 19 — but a "
+                f"multiplier drawn from such a column is a sum with "
+                f"cancellation in it, and should be quoted knowing that",
+                "warning", "ID-12; A_core_accounting_spec.md §A.8.1")
+    else:
+        rep.add(f"check_leontief_nonnegative{what}", True,
+                f"every cell of the Leontief inverse is non-negative, so each "
+                f"multiplier is a sum of same-signed terms",
+                "info", "ID-12")
+
+    # 2 -- the numerical residue, bounded by conditioning and NOT by the source.
+    cond = float(np.linalg.cond(np.eye(n) - A))
+    num = float(np.abs((np.eye(n) - A) @ L - np.eye(n)).max())
+    num_tol = 32 * n * cond * float(np.finfo(float).eps)
+    rep.add(f"check_leontief_inverse{what}", num <= num_tol,
+            f"‖(I−A)L − I‖ = {num:.3g} against {num_tol:.3g} for a matrix "
+            f"with condition number {cond:,.0f}. This one is arithmetic and "
+            f"nothing else: it asks whether the inverse was computed, not "
+            f"whether the table adds up. An ill-conditioned system loses "
+            f"digits no source precision can restore",
+            "error", "ID-12, CORE_005 ¶36.37, p. 1015")
+
+
 def validate_original(table: IOTable) -> ValidationReport:
     """Must pass before anything else runs (spec §5 step 2)."""
     rep = ValidationReport(table_id=table.table_id, scenario_id="__original__")
@@ -199,6 +342,12 @@ def validate_original(table: IOTable) -> ValidationReport:
     else:
         rep.add("check_zero_output", True, "all sectors have non-zero output",
                 "info")
+
+    # The system the multipliers will come out of, checked before anything is
+    # built on it. `source_residue` is zero here by definition: this IS the
+    # source.
+    _leontief_check(rep, table.Z, table.X, table.Y, 0.0, "",
+                    table.sector_codes)
     return rep
 
 
@@ -427,6 +576,14 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
                f"{abs_err:.3g}, inside the {allowance:.3g} this source's own "
                f"identities are out by"),
             "error")
+
+    # --- the Leontief system of the table this scenario produced
+    #
+    # This is the one that matters most. The report's "output multipliers by
+    # subsector" are read off the inverse of THIS matrix, not of the input's,
+    # and a split changes both A and x. Until 2026-08-25 nothing checked it.
+    _leontief_check(rep, Z_balanced, seed["X"], seed["Y"], source_residue,
+                    "", seed["codes"])
 
     # --- sign structure preserved
     rep.add("check_sign_preserved", balance_info["sign_changes"] == 0,
