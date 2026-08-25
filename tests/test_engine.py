@@ -824,8 +824,18 @@ def test_project_folder_is_reproducible():
         check("the rejected scenario is recorded, not dropped",
               len(man["outcome"]["scenarios_rejected"]) == 1,
               f"{man['outcome']['scenarios_rejected']}")
-        check("tolerances are declared as project choices in the manifest",
-              "OQ-B-02" in man["tolerances_are_project_choices"])
+        # Recorded is not the same as counted. `all_passed` read only the
+        # scenarios that ran, so a run that produced one table out of two
+        # reported success -- in the manifest and in the exit code alike.
+        check("and a rejected scenario makes the run not-all-passed",
+              man["outcome"]["all_passed"] is False,
+              f"all_passed={man['outcome']['all_passed']} with "
+              f"{len(man['outcome']['scenarios_rejected'])} rejected")
+        check("the manifest states where its tolerances come from",
+              "0.5*10^-d*n" in man["tolerances"]
+              and "PROJECT CHOICE" in man["tolerances"],
+              "the derived floor and the residue of genuine choice, rather "
+              "than a pointer to a register a reader may not hold")
 
 
 def test_export_json_handles_numpy_and_enums():

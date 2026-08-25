@@ -553,10 +553,16 @@ def build_report(results: list[DisaggregationResult], meta: dict,
               "- Solver convergence is **necessary but not sufficient** for "
               "statistical validity (CORE_006 ¶9.51, p. 288). A converged run "
               "that fails a plausibility check is a failed run.",
-              "- Every tolerance in this pipeline is a **project choice**. No "
-              "loaded methodological source states a numerical tolerance for an "
-              "accounting identity — see `library/specs/D_open_questions.md` "
-              "OQ-B-02, still open.",
+              "- **No published source states a numerical tolerance for an "
+              "accounting identity.** Six were searched and the question is "
+              "settled: what a balance can be tested against is a property of "
+              "the table, not of the method. So the floor applied here is "
+              "derived from your own table's stated precision — an identity "
+              "summing `n` cells published to `d` decimals cannot be checked "
+              "more tightly than `0.5·10⁻ᵈ·n`, and below that line 'balanced' "
+              "and 'not balanced' are the same observation. Every tolerance "
+              "that remains a genuine choice is labelled `PROJECT CHOICE` "
+              "where it is used.",
               "- The method was **selected by the sign structure of the table**, "
               "not chosen by preference. RAS cannot be applied to a matrix with "
               "negative entries (CORE_012 Box 11.3, p. 345); GRAS can "

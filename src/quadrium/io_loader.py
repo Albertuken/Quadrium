@@ -727,15 +727,51 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
         raise LoaderError("no row labelled 'Output' or 'Total output'; §4.1 "
                           "requires one so the blocks can be located") from None
 
+    while len(header) > 1 and not header[-1]:
+        header.pop()
     labels_col = [str(r[0]).strip() if r[0] is not None else "" for r in R]
-    sector_codes = [c for c in labels_col[1:out_row] if c]
-    # Value-added rows sit between the last sector row and Output.
-    n = len(sector_codes)
+
+    # WHERE THE SECTOR BLOCK ENDS. Between the header and `Output` sit the
+    # sector rows and then the value-added rows, and nothing marks the join --
+    # so it is found the way §4.1 finds every block, by the labels: the sector
+    # rows are the longest run whose labels match the header's leading codes,
+    # one for one and in order. What follows that run down the page is value
+    # added; what follows it across the header is final demand.
+    #
+    # Counting non-empty row labels instead, as this did until 2026-08-25, made
+    # every value-added row a sector. `n` came out too large, no rows were left
+    # for value added, and the loader rejected a well-formed file with a
+    # complaint about the rows it had just miscounted. This is the only route
+    # into the engine for a table from anywhere other than the UK or Spain, and
+    # nothing exercised it -- no test, no validator, no fixture. Writing the
+    # user guide is what ran it. `run_interchange_roundtrip.py` now does.
+    n = 0
+    while (1 + n < out_row and 1 + n < len(header)
+           and labels_col[1 + n] and labels_col[1 + n] == header[1 + n]):
+        n += 1
+    if n == 0:
+        raise LoaderError(
+            f"no sector rows found. §4.1 locates the sector block by matching "
+            f"the leading row labels against the header: row 2 is labelled "
+            f"{labels_col[1]!r} and the first sector column is headed "
+            f"{header[1]!r}. The sector rows must carry the same codes as the "
+            f"sector columns, in the same order.")
+
+    sector_codes = header[1:1 + n]   # == labels_col[1:1 + n], by the match
     va_start = 1 + n
     va_labels = [labels_col[i] for i in range(va_start, out_row)]
     if not va_labels:
-        raise LoaderError("no value-added rows found between the sector block "
-                          "and the Output row; §4.1 requires at least one")
+        raise LoaderError(
+            f"{n} sector row(s) run straight into the Output row, so there are "
+            f"no value-added rows; §4.1 requires at least one. Value added is "
+            f"not optional: without it a column does not add up to output.")
+    stray = [lab for lab in va_labels if lab in header[1:1 + n]]
+    if stray:
+        raise LoaderError(
+            f"the sector code(s) {', '.join(stray)} appear below the sector "
+            f"block. Sector rows must be contiguous and in header order — a "
+            f"value-added row cannot sit between two of them, because the "
+            f"sector block is located by that run.")
 
     n_cols_total = len(header) - 1
     if n_cols_total <= n:
@@ -755,7 +791,11 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
         country=str(meta["country"]), year=int(meta["year"]),
         unit=str(meta["unit"]), classification=str(meta["classification"]),
         sector_codes=sector_codes,
-        sector_labels=[str(meta.get(f"label_{c}", c)) for c in sector_codes],
+        # `meta` keys were lowercased on the way in, so the lookup must be
+        # too. It was not, so every `label_B` row in a metadata sheet was
+        # silently ignored and the report named sectors by their codes.
+        sector_labels=[str(meta.get(f"label_{c}".lower(), c))
+                       for c in sector_codes],
         Z=Z, Y=Y, Y_labels=Y_labels, VA=VA, VA_labels=va_labels, X=X,
         source=str(meta["source"]), retrieved_at=datetime.now(timezone.utc),
         notes=str(meta.get("notes") or "") or None)

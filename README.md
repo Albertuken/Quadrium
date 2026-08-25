@@ -7,15 +7,20 @@ against that manual's own printed numbers.
 
 ```bash
 pip install -e .
-python3 run_quadrium.py --help
+quadrium --help
 ```
 
 Python ≥ 3.10, `numpy` and `openpyxl`. Nothing else.
 
+**New here?** [`docs/GUIDE.md`](docs/GUIDE.md) takes you from an empty folder to
+a disaggregated, balanced table with an audit trail — including how to bring in
+a table from any statistical office, not just the two whose workbooks are read
+natively. No Python: you fill in a spreadsheet and run one command.
+
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Fifty-six validators run on official data from six statistical offices, and
+Fifty-seven validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -55,8 +60,9 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       56 runnable checks against published tables
+validators/       57 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
+docs/             the user guide
 examples/         four worked pilots
 tests/            40 unit tests
 ```

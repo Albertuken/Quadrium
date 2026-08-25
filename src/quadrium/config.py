@@ -444,7 +444,8 @@ def write_template(path: Path | str) -> Path:
             "#             one product -- see OQ-D-04. Anywhere else it is an error.",
             "#",
             "# Fill in the other sheets, then run:",
-            "#     python3 run_quadrium.py <this file>",
+            "#     quadrium <this file>",
+            "# (from a checkout, without installing: python3 run_quadrium.py)",
     ], start=7):
         ws.cell(row=i, column=1, value=line).font = note
 

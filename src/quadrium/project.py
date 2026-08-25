@@ -146,13 +146,23 @@ class IOProject:
             "outcome": {
                 "scenarios_run": [r.scenario_id for r in self.results],
                 "scenarios_rejected": self.meta.get("infeasible", []),
-                "all_passed": all(r.report.passed for r in self.results),
+                # A rejected scenario never reaches validation, so it
+                # cannot be counted as having passed it. Reading only
+                # `results` made a run that produced one table out of two
+                # indistinguishable, here and in the exit code, from one
+                # that produced both.
+                "all_passed": (all(r.report.passed for r in self.results)
+                               and not self.meta.get("infeasible")),
             },
-            "tolerances_are_project_choices": (
-                "Every numerical tolerance in this run is a project choice. No "
-                "loaded methodological source states a tolerance for an "
-                "accounting identity — library/specs/D_open_questions.md "
-                "OQ-B-02, still open."),
+            "tolerances": (
+                "No published source states a numerical tolerance for an "
+                "accounting identity, and six were searched: what a balance can "
+                "be tested against is a property of the table, not of the "
+                "method. The floor applied here is derived from the table's own "
+                "stated precision — an identity summing n cells published to d "
+                "decimals cannot be checked more tightly than 0.5*10^-d*n. "
+                "Tolerances that remain a genuine choice are labelled "
+                "PROJECT CHOICE where they are used."),
         }
 
     def write(self) -> Path:

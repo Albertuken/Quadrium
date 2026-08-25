@@ -156,8 +156,18 @@ def main(argv=None) -> int:
     print(project.summary())
     print(f"\nReport : {project.dir / 'report.md'}")
     print(f"Folder : {project.dir}")
-    ok = all(r.report.passed for r in project.results)
-    if not ok:
+    rejected = project.meta.get("infeasible", [])
+    if rejected:
+        # Not a malfunction, and the report says so -- but not a clean run
+        # either, and the exit code is what a script reads. Counting only
+        # `results` returned 0 for a run that produced one table out of two.
+        print(f"\n{len(rejected)} scenario(s) were REJECTED before they could "
+              f"be balanced: {', '.join(r['scenario_id'] for r in rejected)}. "
+              f"The numbers you gave them describe an economy that cannot "
+              f"exist; the report says which figure is the problem, under "
+              f"'Scenarios that were rejected'.", file=sys.stderr)
+    ok = (all(r.report.passed for r in project.results) and not rejected)
+    if not all(r.report.passed for r in project.results):
         print("\nAt least one scenario FAILED validation. Read the report "
               "before using any number from it.", file=sys.stderr)
     return 0 if ok else 1
