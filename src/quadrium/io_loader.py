@@ -285,6 +285,53 @@ _INE_FD_GROUPS = (
 _INE_FD_COLS = (69, 70, 71, 73, 74, 76, 77)
 _INE_COL_INTERMEDIATE, _INE_COL_FD, _INE_COL_USES = 67, 78, 79
 
+# THE SAME WORKBOOK IN TWO SHAPES, and the difference is two columns.
+#
+# From 2021 the INE splits exports into `Exportaciones Unión Europea` (76) and
+# `Exportaciones terceros Países` (77). From 2016 to 2020 it publishes only
+# `Total exportaciones`, at 75, and everything after it sits two columns
+# earlier. Nothing else moves: the intermediate block, the consumption columns
+# and the capital columns are identical.
+#
+# So exports are a SUBTOTAL in the newer shape and a LEAF in the older one,
+# which is why the older map has one group fewer rather than a group with one
+# member -- a subtotal that equals itself checks nothing.
+#
+# Detected from the header the workbook prints, not from the file name or the
+# sheet count: the year is not what decides this, the publication is.
+_INE_FD_GROUPS_NOSPLIT = (
+    (68, (69, 70, 71), "Total gasto en consumo final"),
+    (72, (73, 74), "Formación bruta de capital"),
+)
+_INE_FD_COLS_NOSPLIT = (69, 70, 71, 73, 74, 75)
+_INE_COLS_NOSPLIT = dict(intermediate=67, fd=76, uses=77)
+
+
+def _ine_columns(t1):
+    """Which column map this workbook uses, read off its own header row.
+
+    Returns `(fd_cols, groups, intermediate, fd_total, uses)`.
+    """
+    header = t1[7] if len(t1) > 7 else []
+
+    def label(j):
+        return str(header[j] or "").strip().lower() if j < len(header) else ""
+
+    if label(76).startswith("exportaciones"):
+        return (_INE_FD_COLS, _INE_FD_GROUPS, _INE_COL_INTERMEDIATE,
+                _INE_COL_FD, _INE_COL_USES)
+    if label(75).startswith("total exportaciones") and \
+            label(76).startswith("total demanda final"):
+        c = _INE_COLS_NOSPLIT
+        return (_INE_FD_COLS_NOSPLIT, _INE_FD_GROUPS_NOSPLIT,
+                c["intermediate"], c["fd"], c["uses"])
+    raise LoaderError(
+        f"the INE workbook's final-demand columns match neither layout this "
+        f"loader knows. Column 75 reads {label(75)!r}, 76 {label(76)!r}. The "
+        f"two known shapes differ only in whether exports are split into "
+        f"European Union and third countries; a third shape needs its own map "
+        f"here, checked against the workbook's own subtotals.")
+
 _INE_TOL = 1e-3   # million EUR. Observed residuals are ~1e-11; see M-058.
 
 
@@ -297,7 +344,39 @@ def _ine_row(R, i, cols) -> np.ndarray:
     return np.array([_num(R[i][j]) if j < len(R[i]) else 0.0 for j in cols])
 
 
-def _assert_ine_layout(S, cols, rows) -> None:
+def _ine_vintage(S) -> str:
+    """Which of the INE's two workbook layouts this is, from its own index.
+
+    The INE publishes the same statistical revision in two shapes, and the
+    difference is what `Tabla 2` MEANS:
+
+        2021 onward   Tabla 2 = the domestic input-output table
+                      Tabla 3 = the imports table
+        2016 to 2020  Tabla 2 = technical coefficients
+                      Tabla 3 = Leontief inverse coefficients
+
+    So for 2016-2020 there is no published domestic/imports split at all —
+    only the total table. Reading `Lista_Tablas`, which the loader already
+    consults for the reference year, is what tells the two apart; guessing
+    from the sheet count would work today and break on the next revision.
+
+    Until 2026-08-25 the loader assumed the newer shape and validated
+    `Tabla1 == Tabla2 + Tabla3` on every file, so all five older years failed
+    with a layout complaint — off by 29,086.92 for 2020 — when nothing about
+    the layout was wrong and the total table was sitting there readable.
+    """
+    for row in S.get("Lista_Tablas", [])[:16]:
+        cells = " ".join(str(c) for c in row if c is not None).lower()
+        if "tabla 2" in cells:
+            if "interior" in cells:
+                return "split"
+            if "coeficientes" in cells:
+                return "total_only"
+    return "split"
+
+
+def _assert_ine_layout(S, cols, rows, vintage: str = "split",
+                       colmap=None) -> None:
     """Re-derive the hard-coded layout from the workbook's own identities.
 
     Each check pins one hard-coded index. If the INE moves a row, the identity
@@ -305,12 +384,24 @@ def _assert_ine_layout(S, cols, rows) -> None:
     silently reading (say) gross value added where output was meant.
     """
     L = _INE
-    t1, t2, t3 = S["Tabla1"], S["Tabla2"], S["Tabla3"]
-    Zt, Zd, Zm = (_ine_block(t, rows, cols) for t in (t1, t2, t3))
+    t1 = S["Tabla1"]
+    split = vintage == "split"
+    t2, t3 = (S["Tabla2"], S["Tabla3"]) if split else (None, None)
+    Zt = _ine_block(t1, rows, cols)
     r1 = lambda k: _ine_row(t1, L[k], cols)
 
-    checks = [
-        ("Tabla1 == Tabla2 + Tabla3 (intermediate block)", Zt, Zd + Zm),
+    checks = []
+    if split:
+        Zd, Zm = (_ine_block(x, rows, cols) for x in (t2, t3))
+        checks.append(
+            ("Tabla1 == Tabla2 + Tabla3 (intermediate block)", Zt, Zd + Zm))
+    split_published = bool(
+        np.abs(_ine_row(t1, L["row_imports_eu"], cols)).sum()
+        + np.abs(_ine_row(t1, L["row_imports_nonue"], cols)).sum())
+    if split_published:
+        checks.append(("row 'Importaciones'", r1("row_imports"),
+                       r1("row_imports_eu") + r1("row_imports_nonue")))
+    checks += [
         ("row 'Total de empleos a precios básicos'", r1("row_uses_basic"),
          Zt.sum(0)),
         ("row 'Total de empleos a precios de adquisición'",
@@ -321,21 +412,32 @@ def _assert_ine_layout(S, cols, rows) -> None:
          r1("row_wages") + r1("row_social")),
         ("row 'Valor añadido bruto a precios básicos'", r1("row_gva"),
          r1("row_compensation") + r1("row_other_taxes") + r1("row_gos")),
-        ("row 'Importaciones'", r1("row_imports"),
-         r1("row_imports_eu") + r1("row_imports_nonue")),
+        # `Importaciones == UE + terceros países` pins those two rows, and it
+        # can only pin rows that carry something. From 2016 to 2020 the INE
+        # PRINTS BOTH LABELS AND LEAVES BOTH ROWS EMPTY -- it publishes total
+        # imports and not the geographic split -- so the check was comparing a
+        # populated row against zero and failing by 33,653.70 on 2020, 58 of 64
+        # columns at once. Nothing about the layout was wrong.
+        #
+        # The rows are used for nothing else, so an absent split costs nothing
+        # but this check, and skipping it is recorded on the table rather than
+        # passed over.
         ("row 'Oferta a precios básicos'", r1("row_supply"),
          r1("row_output") + r1("row_imports")),
         ("column identity pins 'Producción a precios básicos'", r1("row_output"),
          Zt.sum(0) + r1("row_taxes_products") + r1("row_gva")),
     ]
-    for name, tbl in (("Tabla1", t1), ("Tabla2", t2), ("Tabla3", t3)):
-        Y = _ine_block(tbl, rows, _INE_FD_COLS)
+    fd_cols, groups, col_int, col_fd, _ = colmap or _ine_columns(t1)
+    tables = ([("Tabla1", t1), ("Tabla2", t2), ("Tabla3", t3)] if split
+              else [("Tabla1", t1)])
+    for name, tbl in tables:
+        Y = _ine_block(tbl, rows, fd_cols)
         Z = _ine_block(tbl, rows, cols)
         checks.append((f"{name}: final-demand components sum to 'Total demanda "
-                       f"final'", Y.sum(1), _ine_row_col(tbl, rows, _INE_COL_FD)))
+                       f"final'", Y.sum(1), _ine_row_col(tbl, rows, col_fd)))
         checks.append((f"{name}: 'Total demanda intermedia' column",
-                       Z.sum(1), _ine_row_col(tbl, rows, _INE_COL_INTERMEDIATE)))
-        for sub, comp, lab in _INE_FD_GROUPS:
+                       Z.sum(1), _ine_row_col(tbl, rows, col_int)))
+        for sub, comp, lab in groups:
             checks.append((f"{name}: subtotal {lab!r}",
                            _ine_row_col(tbl, rows, sub),
                            sum(_ine_row_col(tbl, rows, c) for c in comp)))
@@ -481,19 +583,35 @@ def load_ine_tio(path: Path | str, variant: str = "interior",
     L = _INE
     rows = range(L["first_row"], L["first_row"] + L["n"])
     cols = range(L["first_col"], L["first_col"] + L["n"])
-    _assert_ine_layout(S, cols, rows)
+    vintage = _ine_vintage(S)
+    if vintage == "total_only" and variant != "total":
+        raise LoaderError(
+            f"{path.name} carries only the TOTAL table. In this vintage of "
+            f"the INE's workbook `Tabla 2` is technical coefficients and "
+            f"`Tabla 3` is the Leontief inverse — the domestic and imports "
+            f"tables are not published for this year at all, so "
+            f"variant={variant!r} has nothing to read.\n"
+            f"Load it with variant='total', knowing what that means: an "
+            f"imported input is treated as if it had been produced in Spain, "
+            f"so multipliers from it overstate domestic effects. The INE "
+            f"publishes the split from 2021 onward.")
+    colmap = _ine_columns(S["Tabla1"])
+    _assert_ine_layout(S, cols, rows, vintage, colmap)
+    fd_cols, fd_groups, _col_int, _col_fd, _col_uses = colmap
 
-    t1, t2, t3 = S["Tabla1"], S["Tabla2"], S["Tabla3"]
+    t1 = S["Tabla1"]
+    t2 = S["Tabla2"] if vintage == "split" else t1
+    t3 = S["Tabla3"] if vintage == "split" else None
     codes, labels = _ine_codes(t2, rows)
     r1 = lambda k: _ine_row(t1, L[k], cols)
     X = r1("row_output")
 
-    fd_labels = [str(t2[7][j] or "").strip() for j in _INE_FD_COLS]
-    dropped = [str(t2[7][sub] or "").strip() for sub, _, _ in _INE_FD_GROUPS]
+    fd_labels = [str(t2[7][j] or "").strip() for j in fd_cols]
+    dropped = [str(t2[7][sub] or "").strip() for sub, _, _ in fd_groups]
 
     if variant == "interior":
         Z = _ine_block(t2, rows, cols)
-        Y = _ine_block(t2, rows, _INE_FD_COLS)
+        Y = _ine_block(t2, rows, fd_cols)
         Y_labels = list(fd_labels)
         VA_labels = ["Importaciones de bienes y servicios (consumos "
                      "intermedios importados)",
@@ -509,7 +627,7 @@ def load_ine_tio(path: Path | str, variant: str = "interior",
                  "VA no son VAB.")
     else:
         Z = _ine_block(t1, rows, cols)
-        Y = np.hstack([_ine_block(t1, rows, _INE_FD_COLS),
+        Y = np.hstack([_ine_block(t1, rows, fd_cols),
                        -r1("row_imports").reshape(-1, 1)])
         Y_labels = fd_labels + ["Importaciones de bienes y servicios "
                                 "(columna negativa, DERIVADA)"]

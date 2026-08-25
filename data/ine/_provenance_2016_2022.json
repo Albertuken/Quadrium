@@ -1,0 +1,72 @@
+{
+  "cne_tio_16.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_16.xlsx",
+    "bytes": 188087,
+    "sha256": "282cbd02a409b2d55ddb3d12e72e4340da82329a5860016c61a1af980bce710e"
+  },
+  "cne_tod_16.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_16.xlsx",
+    "bytes": 165649,
+    "sha256": "46952de82ee9de4cc1d74e4e75b7aa84d372aab31a53396d6c6c952c3dd7400b"
+  },
+  "cne_tio_17.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_17.xlsx",
+    "bytes": 188735,
+    "sha256": "574e9157129caf1fdd2b6aea6e7ea79600a9ff8fdb5da2d2f6dc7dbcaeb11096"
+  },
+  "cne_tod_17.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_17.xlsx",
+    "bytes": 166307,
+    "sha256": "0e3ef65608c78467813265372e2bc26947799717a1197f40fc35d7ebbf8ca00e"
+  },
+  "cne_tio_18.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_18.xlsx",
+    "bytes": 189214,
+    "sha256": "d4a79b0fe2f5b16a016c97c60903b1a2de3209e9ba3d50ac9b4eac0115c3b8e5"
+  },
+  "cne_tod_18.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_18.xlsx",
+    "bytes": 166264,
+    "sha256": "04de7488a1ef8d43e5e3e25d7fef28a3c3d9b6d0493e2e0bc969295c04262ea0"
+  },
+  "cne_tio_19.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_19.xlsx",
+    "bytes": 189320,
+    "sha256": "e2ec856eef7427af8516d3719a837ad80ac2c7e0aa003fac89d2ea09175f2ea4"
+  },
+  "cne_tod_19.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_19.xlsx",
+    "bytes": 166584,
+    "sha256": "f10c0bd65585b276566275c93a2b752ab43dca5f139bf546181df47de8cfa68c"
+  },
+  "cne_tio_20.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_20.xlsx",
+    "bytes": 188946,
+    "sha256": "bf8d5696acbaabe9137c4f22049265061e18a18820461b4bae21379eaafa1f31"
+  },
+  "cne_tod_20.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_20.xlsx",
+    "bytes": 165991,
+    "sha256": "1fbec75c32cda41516eb328d9aa09b005c76d1cfac2815274233e6e6921dd8c6"
+  },
+  "cne_tio_21.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_21.xlsx",
+    "bytes": 436264,
+    "sha256": "c6ce6c4627522ece16ae9f7e98fb1173c8688bb54468dcc3caf9883b63551298"
+  },
+  "cne_tod_21.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_21.xlsx",
+    "bytes": 342914,
+    "sha256": "df16ec583f85386807547574c5d58a95174f9a3a99d5274d21a8e9d3027f476a"
+  },
+  "cne_tio_22.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tio_22.xlsx",
+    "bytes": 382796,
+    "sha256": "7f466a4026a51d2d6e34da9ce31c4a56cabf14f9f4523c2932fa8386f606366e"
+  },
+  "cne_tod_22.xlsx": {
+    "url": "https://www.ine.es/daco/daco42/cne24/cne_tod_22.xlsx",
+    "bytes": 345069,
+    "sha256": "86cbcbf046432c9eacee9935bc55fa2052fbc7feea249fb468c43ee403cad7e9"
+  }
+}

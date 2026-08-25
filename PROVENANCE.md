@@ -13,7 +13,7 @@ URL, retrieval date, size, hash, and what the file was fetched for.
 |---|---|---|
 | **Eurostat** | `data/eurostat/` — supply, use, valuation and symmetric tables (`naio_10_*`), employment by industry (`nama_10_a64_e`), structural business statistics | Commission reuse policy: reuse permitted with attribution |
 | **ONS (United Kingdom)** | `data/ons/`, `UK_IOAT_2023_domestic_ixi.xlsx` — the analytical input-output tables and the Blue Book supply-use tables, 1997–2023 | Open Government Licence v3.0, Crown copyright |
-| **INE (Spain)** | `data/ine/` — supply and use tables, symmetric table, 2022 | INE reuse conditions, attribution required |
+| **INE (Spain)** | `data/ine/` — symmetric tables 2016–2022, supply and use tables 2022 | INE reuse conditions, attribution required |
 | **UNSD** | `data/unsd/` — the NACE↔ISIC correspondence | United Nations, attribution required |
 
 **Attribution, as the publishers ask for it.** Contains public sector

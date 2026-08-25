@@ -277,9 +277,16 @@ Set `table_kind` in the configuration workbook to one of:
 | `table_kind` | What it reads |
 |---|---|
 | `uk_analytical` | The ONS analytical workbook, industry × industry |
-| `ine_interior` | The Spanish INE workbook, domestic output |
-| `ine_total` | The Spanish INE workbook, total flows |
+| `ine_interior` | The Spanish INE workbook, domestic output — **2021 and 2022 only** |
+| `ine_total` | The Spanish INE workbook, total flows — **2016 to 2022** |
 | `interchange` | This project's own format — see Route C |
+
+The Spanish restriction is the publisher's, not the loader's: before 2021 the
+INE does not publish the domestic/imports split at all, so there is no domestic
+table to read. Point `ine_interior` at a 2016–2020 file and the engine says so
+and tells you that `ine_total` will load instead — at the cost of treating an
+imported input as if it had been produced in Spain, which overstates domestic
+effects. All seven years are in `data/ine/`; change only the `table_path`.
 
 These loaders do more than parse. They know, for instance, that the first two
 value-added rows of the ONS table are imports and taxes on products rather than

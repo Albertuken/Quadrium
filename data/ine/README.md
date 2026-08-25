@@ -89,6 +89,87 @@ ways past it.
 
 ---
 
+## `cne_tio_16.xlsx` … `cne_tio_21.xlsx` — the rest of the published series
+
+**What they are.** The same table, for **2016 to 2021**. Same statistical
+revision, same 64 products, same basic prices, same URL pattern. Retrieved
+2026-08-25; each file's URL, byte count and SHA-256 are in
+`_provenance_2016_2022.json` beside them.
+
+```
+https://www.ine.es/daco/daco42/cne24/cne_tio_16.xlsx
+...
+https://www.ine.es/daco/daco42/cne24/cne_tio_21.xlsx
+```
+
+The matching `cne_tod_YY.xlsx` supply-use files for 2016–2021 were retrieved and
+their hashes recorded in the same sidecar, but only `cne_tod_22.xlsx` is kept in
+the repository: nothing reads the earlier ones yet, and hashes are enough to
+re-fetch them exactly.
+
+### The INE publishes this workbook in two shapes
+
+Five of these six years refused to load until 2026-08-25, with
+
+```
+the INE workbook's layout no longer matches the one this loader hard-codes.
+failed check: Tabla1 == Tabla2 + Tabla3 (intermediate block)
+off by 29,086.9212
+```
+
+Nothing about the layout was wrong. The loader knew one shape and the office
+publishes two. Every difference is the older vintage carrying **less**, never
+carrying the same thing somewhere else:
+
+| | 2016–2020 | 2021–2022 |
+|---|---|---|
+| sheets | 5 | 9 |
+| `Tabla2` | technical coefficients | IOT of **domestic** output |
+| `Tabla3` | Leontief inverse | IOT of **imports** |
+| domestic/imports split | **not published** | published |
+| `Importaciones de la UE` / `de terceros países` | labels printed, rows empty | populated |
+| exports | one column, `Total exportaciones` | split UE / third countries |
+| `Total demanda final` | column 76 | column 78 |
+
+So `variant="interior"` is not merely unsupported for 2016–2020 — **the domestic
+table does not exist to be read**. `load_ine_tio` now says that, and says what
+loading `variant="total"` instead would cost: an imported input is treated as if
+it had been produced in Spain, which overstates domestic effects.
+
+The three consequences in the loader are `_ine_vintage()`, which reads each
+file's own `Lista_Tablas` to decide which shape it is holding;
+`_ine_columns()`, which reads header row 7 to pick the column map; and the
+import-split check, which is skipped when both component rows are empty rather
+than failing a populated row against a blank one. **The shape is read from what
+the workbook prints, not inferred from the year in its name** — a third shape
+would be refused, not mismapped.
+
+Note what exports do between the two: in the older files `Total exportaciones`
+is a **leaf**, in the newer ones a **subtotal** of two columns. That is why the
+older column map has one subtotal group fewer rather than a group of one. A
+subtotal checked against itself checks nothing, and would have hidden the
+two-column offset in everything to its right.
+
+### What the seven years say
+
+| year | output at basic prices | shape |
+|---:|---:|---|
+| 2016 | 1,969,898 | total only |
+| 2017 | 2,077,118 | total only |
+| 2018 | 2,171,029 | total only |
+| 2019 | 2,255,859 | total only |
+| 2020 | **2,030,323** | total only |
+| 2021 | 2,280,636 | split |
+| 2022 | 2,664,587 | split |
+
+Rising to 2019, falling in 2020, recovering after: the Spanish economy's actual
+shape, which is the strongest evidence available that the older column map is
+right. A loader that had quietly mismapped a column does not produce a pandemic.
+
+Locked in by `library/validators/run_ine_series.py`.
+
+---
+
 ## `cne_tod_22.xlsx` — **the file that should have been loaded first**
 
 **What it is.** The Spanish **supply and use tables** for 2022 — the statistical
