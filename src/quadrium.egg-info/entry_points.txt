@@ -1,0 +1,2 @@
+[console_scripts]
+quadrium = quadrium.cli:main

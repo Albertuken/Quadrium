@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run Quadrium from a checkout, without installing it."""
+"""Run Quadrium from this checkout, without installing it.
+
+The real entry point is `quadrium.cli:main`, which `pip install quadrium`
+exposes as the `quadrium` command. This wrapper only puts `src/` on the path
+first, so the repository runs as it stands.
+"""
 import sys
 from pathlib import Path
 
