@@ -64,6 +64,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .precision import assertable_tolerance, printed_decimals
 from .models import (AllocationKey, IOTable, ProxyStrength,
                      SupplyUseTables)
 
@@ -207,13 +208,33 @@ def _infer_year(menu: list[str]) -> int:
                       "own fixture is named 2022 and is for 2023 (OQ-D-01).")
 
 
-def _assert_balances(table: IOTable, name: str,
-                     rel_tol: float = 1e-6) -> None:
-    """Gate, not report (MVP_0.1 §5 step 2). PROJECT CHOICE tolerance."""
-    scale = max(float(np.abs(table.X).max()), 1.0)
+def _assert_balances(table: IOTable, name: str) -> None:
+    """Gate, not report (MVP_0.1 §5 step 2).
+
+    The bound is the table's own precision, not a fraction of its largest
+    sector. `1e-6 * max|X|` said nothing about how finely the publisher printed
+    anything, and it refused Portugal's 2020 symmetric table and Spain's own
+    2020 -- both ordinary published files -- over residues an order of
+    magnitude inside what their rounding produces. `OQ-B-02`, closed at v1.57:
+    an identity summing `n` cells published to `d` decimals cannot be checked
+    more tightly than `0.5*10^-d*n`.
+
+    This still catches what it is for. A dropped final-demand column or a block
+    pasted at the wrong offset moves a row by thousands; the INE's `interior`
+    table, which genuinely does not close, is out by 4,921.6 against a floor of
+    about 6 (`OQ-D-04`), and is still refused.
+    """
     row = np.abs(table.Z.sum(axis=1) + table.Y.sum(axis=1) - table.X)
     col = np.abs(table.Z.sum(axis=0) + table.VA.sum(axis=0) - table.X)
-    tol = rel_tol * scale
+    values = np.concatenate([table.Z.ravel(), table.Y.ravel(),
+                             table.VA.ravel(), table.X.ravel()])
+    n_row = table.n + table.Y.shape[1] + 1
+    n_col = table.n + table.VA.shape[0] + 1
+    tol = max(1e-6, float(assertable_tolerance(values, max(n_row, n_col))))
+    d = printed_decimals(values)
+    basis = (f"derived from this file's own {d}-decimal precision over "
+             f"{max(n_row, n_col)} terms — OQ-B-02" if d is not None else
+             "derived from float64 accumulation; this file does not round")
     if row.max() > tol or col.max() > tol:
         i, j = int(row.argmax()), int(col.argmax())
         raise LoaderError(
@@ -221,8 +242,7 @@ def _assert_balances(table: IOTable, name: str,
             f"  worst row: {table.sector_codes[i]} off by {row[i]:,.3f} "
             f"({table.sector_labels[i]})\n"
             f"  worst col: {table.sector_codes[j]} off by {col[j]:,.3f}\n"
-            f"  tolerance {tol:,.3f} (PROJECT CHOICE, {rel_tol:g} of the "
-            f"largest output; no loaded source states one — OQ-B-02)\n"
+            f"  tolerance {tol:,.3f} ({basis})\n"
             f"A table that does not balance is not a table: every number "
             f"downstream would inherit the discrepancy without saying so.")
 

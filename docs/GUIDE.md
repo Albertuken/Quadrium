@@ -11,6 +11,7 @@ command.
 
 **Contents**
 
+0. [Which table do I even need?](#0-which-table-do-i-even-need)
 1. [Install](#1-install)
 2. [Run the worked example](#2-run-the-worked-example-five-minutes)
 3. [Use your own table](#3-use-your-own-table)
@@ -20,6 +21,72 @@ command.
 7. [Split a second sector, later](#7-split-a-second-sector-later)
 8. [When it refuses](#8-when-it-refuses)
 9. [What it will not do](#9-what-it-will-not-do)
+
+---
+
+## 0. Which table do I even need?
+
+You probably did not start with a table. You started with a sector — "I want to
+look at restaurants" — and the first real question is whether anyone publishes
+it separately for your country.
+
+```bash
+quadrium --find I55 --geo ES
+```
+
+```
+  I55 — split
+
+  No ES table here separates I55. The finest that contains it is
+  eurostat:naio_10_cp1700:ES:2022, where it sits inside `I` (Accommodation
+  and food services). That is the sector to divide, and dividing it is what
+  this engine does — bring a proxy that measures the parts. UK publishes it
+  separately, which tells you the split is a real distinction and NOT that
+  you may borrow their figures.
+
+  Put this in the `project` sheet:
+
+      table_kind       eurostat
+      eurostat_geo     ES
+      eurostat_year    2022
+      eurostat_dataset product_by_product
+
+  and divide `I` in the `splits` sheet.
+```
+
+Four answers are possible:
+
+| Answer | What it means |
+|---|---|
+| **load** | Someone publishes it as a sector of its own. You do not need this tool for that sector — take the table and read the row. |
+| **split** | It exists only inside a coarser sector, which is named. That coarser sector is what you divide, and this is the case the engine is built for. |
+| **publisher has it** | Your own office publishes it and this engine currently folds it into a coarser code when it loads the file. Do not estimate what has been measured. |
+| **none** | No table on disk covers the code. Check it against the classification, or fetch a table that might carry it. |
+
+`--geo` is not optional in spirit. Without it nothing is recommended, only
+listed by country — because a finer table for another economy is not a better
+source for your question, it is an answer to a different one.
+
+```bash
+quadrium --sources
+```
+
+lists every table on disk, how many sectors each distinguishes, and how much
+detail the publisher publishes that the loader discards. It also lists the
+sources that **measure** sectors rather than being tables — candidate
+allocation keys for the split you are about to do — and says when one of them
+covers only part of the sector you asked about, which means it cannot drive
+that split on its own.
+
+Two things it counts carefully, because both are easy to get wrong:
+
+- **Sectors are the codes that carry data, not the codes that are listed.**
+  Eurostat's metadata lists the whole CPA hierarchy whether a country publishes
+  at that level or not. Spain's symmetric table lists `CPA_I55` and `CPA_I56`
+  and populates neither.
+- **Resolution is not comparability.** It ranks by how many sectors a table
+  distinguishes, which is the only thing it can see. Two tables with the same
+  classification and the same count were not necessarily made the same way.
 
 ---
 

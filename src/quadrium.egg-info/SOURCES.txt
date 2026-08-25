@@ -4,6 +4,7 @@ pyproject.toml
 src/quadrium/__init__.py
 src/quadrium/acquire.py
 src/quadrium/balancing.py
+src/quadrium/catalogue.py
 src/quadrium/classification.py
 src/quadrium/cli.py
 src/quadrium/config.py

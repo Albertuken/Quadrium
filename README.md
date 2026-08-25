@@ -14,6 +14,16 @@ For an EU country you do not even need a table: name the country and the year
 in the configuration and the engine fetches it from Eurostat, caches it with
 its SHA-256, and never downloads it again.
 
+And you do not need to know which table first:
+
+```bash
+quadrium --find I55 --geo ES
+```
+
+answers whether anyone publishes accommodation separately for Spain — nobody
+does; it sits inside `I`, and that is the sector to divide — and hands back the
+configuration rows to paste.
+
 Python ≥ 3.10, `numpy` and `openpyxl`. Nothing else.
 
 **New here?** [`docs/GUIDE.md`](docs/GUIDE.md) takes you from an empty folder to
@@ -24,7 +34,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Fifty-nine validators run on official data from six statistical offices, and
+Sixty validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -43,6 +53,7 @@ Some of what they establish:
 | The **valuation matrices** total their supply columns to 0.0000 on 65 products, three years | `validators/run_valuation_matrices.py` |
 | A result **read back and split again** keeps its provenance: withholding it would relabel 12 of 36 cells from estimate to observation, with the numbers unchanged | `validators/run_export_roundtrip.py` |
 | Every balance tolerance is **derived from the publisher's own printed precision**. Four gates used flat constants instead, and refused two of three real published tables over residues 10–100× inside what their rounding permits | `validators/run_eurostat_config.py` |
+| The catalogue counts the codes that **carry data**, not the codes a publisher lists. Spain's symmetric table lists `CPA_I55` and `CPA_I56` among 121 categories and populates neither; 9 of 10 countries on disk cannot separate hotels from restaurants | `validators/run_catalogue.py` |
 
 ## Two ideas the engine is built on
 
@@ -66,7 +77,7 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       59 runnable checks against published tables
+validators/       60 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 examples/         four worked pilots

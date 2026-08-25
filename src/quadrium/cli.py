@@ -99,6 +99,103 @@ def _warn_about_substance(cfg: dict) -> None:
         print(f"  - {n}")
 
 
+def _catalogue(args) -> int:
+    """`--sources` and `--find`, which need no configuration and no network."""
+    from quadrium.catalogue import advise, scan
+
+    sources = scan(args.data)
+    if not sources:
+        print(f"No loadable table found under {args.data.resolve()}.\n"
+              f"Nothing is wrong: this looks in `data/eurostat/`, `data/ine/` "
+              f"and for `UK_IOAT_*.xlsx`. A configuration with "
+              f"`table_kind: eurostat` fetches one without any of them.",
+              file=sys.stderr)
+        return 1
+
+    if args.sources:
+        tables = [s for s in sources if s.kind == "table"]
+        proxies = [s for s in sources if s.kind == "proxy"]
+
+        print(f"{len(tables)} table(s) you can load and split\n")
+        print(f"  {'source':56s}{'sectors':>8}{'discarded':>11}")
+        for s in tables:
+            more = f"{len(s.finer)}" if s.finer else "—"
+            print(f"  {s.source_id:56s}{s.resolution:>8}{more:>11}")
+
+        if any(s.finer for s in tables):
+            print("\n  `discarded` is detail the PUBLISHER publishes and this "
+                  "engine drops: where\n  a country serves both a code and its "
+                  "components, the loader keeps the coarser\n  tiling. "
+                  "`--find CODE --geo XX` says when that affects the sector "
+                  "you want.")
+
+        if proxies:
+            print(f"\n{len(proxies)} source(s) that measure sectors — "
+                  f"candidate allocation keys\n")
+            print(f"  {'source':56s}{'sectors':>8}  countries")
+            for s in proxies:
+                geos = (",".join(s.geos[:5]) + ("…" if len(s.geos) > 5 else "")
+                        ) if s.geos else "—"
+                print(f"  {s.source_id:56s}{s.resolution:>8}  {geos}")
+
+        print("\n  Sectors counted are the codes that CARRY DATA. Eurostat "
+              "lists the whole CPA\n  hierarchy in its metadata whether a "
+              "country publishes at that level or not:\n  Spain's symmetric "
+              "table lists CPA_I55 and CPA_I56 and populates neither.")
+        print("\n  Resolution is the only thing this ranks by, and it is NOT "
+              "comparability.\n  Eurostat harmonises the format and neither "
+              "harmonises nor records the method.")
+        return 0
+
+    a = advise(args.find, sources, args.geo)
+    print(f"\n  {a['target']} — {a['action'].replace('_', ' ')}\n")
+    for line in _wrap(a["why"], 74):
+        print(f"  {line}")
+
+    if a["action"] == "choose_country":
+        print(f"\n  {'country':>9}  verdict     finest table")
+        for g, h in sorted(a["by_geo"].items()):
+            where = (h["container"] or "—") if h["verdict"] != "SEPARATE" \
+                else a["target"]
+            print(f"  {g:>9}  {h['verdict']:<10}  {h['source'].source_id} "
+                  f"({where})")
+        print(f"\n  Add --geo XX to get a recommendation.")
+        return 0
+
+    if a["best"] and a["action"] in ("load", "split"):
+        s = a["best"]["source"]
+        print(f"\n  Put this in the `project` sheet:\n")
+        for line in s.config_lines():
+            print(f"      {line}")
+        if a["action"] == "split":
+            print(f"\n  and divide `{a['best']['container']}` in the `splits` "
+                  f"sheet.")
+
+    for pr in a.get("proxies", [])[:4]:
+        print()
+        head = ("A key that measures its parts:" if pr["tiles"] else
+                "Related, but NOT a key for this split:")
+        print(f"  {head}")
+        print(f"      {pr['source'].source_id}")
+        print(f"      measures {', '.join(pr['parts'])}")
+        if not pr["tiles"]:
+            print(f"      — these are parts of {', '.join(pr['covers'])}, not "
+                  f"of `{a['best']['container']}`. They cover one")
+            print(f"        piece of it and say nothing about the rest, so "
+                  f"they cannot drive this split.")
+    if a.get("proxies"):
+        print("\n  A proxy is a candidate, not a recommendation. Whether "
+              "employment is the\n  right key is a judgement about the "
+              "sectors — two subsectors share a\n  headcount far more evenly "
+              "than they share an output.")
+    return 0
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    import textwrap
+    return textwrap.wrap(text, width) or [""]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Run an IO disaggregation from a configuration workbook.")
@@ -111,6 +208,18 @@ def main(argv=None) -> int:
     ap.add_argument("--outputs", type=Path, default=Path("outputs"),
                     help="where project folders are written "
                          "(default: ./outputs)")
+    ap.add_argument("--sources", action="store_true",
+                    help="list every table on disk this engine can load, and "
+                         "how many sectors each distinguishes")
+    ap.add_argument("--find", metavar="CODE",
+                    help="say where a sector code is available, and if "
+                         "nowhere, which coarser code to split")
+    ap.add_argument("--geo", metavar="XX",
+                    help="the country --find is asking about. Without it "
+                         "nothing is recommended, because a finer table for "
+                         "another economy answers a different question")
+    ap.add_argument("--data", type=Path, default=Path("."),
+                    help="where --sources and --find look (default: .)")
     ap.add_argument("--offline", action="store_true",
                     help="never touch the network. A table_kind that would "
                          "need a download fails, naming the URL to fetch by "
@@ -130,6 +239,9 @@ def main(argv=None) -> int:
         # found this telling them to run a file they do not have.
         print(f"    {Path(sys.argv[0]).name} {p}")
         return 0
+
+    if args.sources or args.find:
+        return _catalogue(args)
 
     if not args.config:
         ap.print_help()
