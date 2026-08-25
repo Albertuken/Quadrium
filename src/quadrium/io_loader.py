@@ -64,7 +64,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .precision import assertable_tolerance, printed_decimals
+from .precision import (assertable_tolerance,
+                        assertable_tolerance_mixed,
+                        printed_decimals)
 from .models import (AllocationKey, IOTable, ProxyStrength,
                      SupplyUseTables)
 
@@ -100,21 +102,98 @@ def _num(v) -> float:
 # Layout of the "IOT" sheet, 0-based, established by inspection and re-asserted
 # on every load. Mirrors library/validators/run_uk_iot.py, which is where it was
 # first worked out.
-_UK = dict(
-    row_codes=3, row_names=4, first_row=6, last_row=110,
-    first_col=2, last_col=106,
-    row_imports=111, row_taxes_products=112,
-    row_compensation=114, row_gos=115, row_other_taxes=116,
-    row_gva=117, row_output=118,
-    first_fd_col=107, last_fd_col=117,
-)
+# The ONS workbook announces its own shape and this loader reads it, because
+# the shape is not stable. The 2023 edition merged `CPA_C254` (weapons and
+# ammunition) into `CPA_C25`, so the 2022 tables are 105 x 105 and the 2023
+# ones 104 x 104; the industry-by-industry edition labels its axis `SIC` /
+# `Industry` where the product-by-product one says `CPA` / `Product`. Fixed row
+# and column numbers described one file of nine and read the other eight one
+# line out of true, which the table's own totals then reported as the DATA
+# failing to balance — Construction "off by 406,662" in a file that balances
+# exactly.
+#
+# So: the two axes are found by the `_T` total the sheet prints at the end of
+# each, every primary-input row is found by the label beside it, and the row
+# codes are required to equal the column codes before anything is read.
+_UK_ROWS = {
+    "imports": "use of imported products, cif",
+    "taxes_products": "taxes less subsidies on products",
+    "ic_purchasers": "total intermediate use at purchaser's prices",
+    "compensation": "compensation of employees",
+    "gos": "gross operating surplus and mixed income",
+    "other_taxes": "taxes less subsidies on production",
+    "gva": "gross value added",
+    "output": "total output at basic prices",
+}
+
+
+def _uk_norm(s) -> str:
+    """Lowercase, collapse whitespace — including the sheet's non-breaking
+    spaces, which are why several of these labels do not compare equal to
+    themselves after an ordinary `.strip()`."""
+    import re as _re
+    return _re.sub(r"\s+", " ",
+                   str(s if s is not None else "").replace("\xa0", " ")
+                   ).strip().lower()
+
+
+def _uk_layout(R, name: str) -> dict:
+    """Where the blocks are on the ONS `IOT` sheet, read off the sheet."""
+    header = R[3] if len(R) > 3 else []
+    end_col = next((j for j in range(2, len(header))
+                    if _uk_norm(header[j]) == "_t"), None)
+    end_row = next((i for i in range(6, len(R))
+                    if _uk_norm(R[i][0] if R[i] else "") == "_t"), None)
+    tu_col = next((j for j in range(2, len(header))
+                   if _uk_norm(header[j]) == "tu"), None)
+    if end_col is None or end_row is None or tu_col is None:
+        raise LoaderError(
+            f"{name}: the 'IOT' sheet does not print the totals this loader "
+            f"navigates by — `_T` at the end of the sector rows and columns "
+            f"and `TU` at the end of the final-demand block. Without them "
+            f"there is nothing to find the blocks from except fixed offsets, "
+            f"and those describe one edition of this workbook.")
+
+    codes = [str(R[i][0] or "").strip() for i in range(6, end_row)]
+    head = [str(header[j] or "").strip() for j in range(2, end_col)]
+    if codes != head:
+        first = next((k for k in range(min(len(codes), len(head)))
+                      if codes[k] != head[k]), min(len(codes), len(head)))
+        raise LoaderError(
+            f"{name}: the 'IOT' sheet's row codes are not its column codes. "
+            f"{len(codes)} rows against {len(head)} columns, first "
+            f"disagreement at position {first + 1}: row "
+            f"{codes[first] if first < len(codes) else '—'!r}, column "
+            f"{head[first] if first < len(head) else '—'!r}. A symmetric "
+            f"table has one classification on both axes; this one does not.")
+
+    rows: dict[str, int] = {}
+    for i in range(end_row, len(R)):
+        key = _uk_norm(R[i][1] if len(R[i]) > 1 else "")
+        if key and key not in rows:
+            rows[key] = i
+    out = dict(first_row=6, end_row=end_row, first_col=2, end_col=end_col,
+               row_total=end_row, first_fd_col=end_col + 1, tu_col=tu_col,
+               axis=str(R[5][0] or "").strip() or "SIC",
+               axis_name=str(R[5][1] or "").strip() or "Industry")
+    for key, label in _UK_ROWS.items():
+        if label not in rows:
+            raise LoaderError(
+                f"{name}: the 'IOT' sheet has no primary-input row labelled "
+                f"{label!r} below its sector block. What it does have: "
+                f"{', '.join(sorted(k for k in rows if k)[:8])}…")
+        out["row_" + key] = rows[label]
+    return out
 
 
 def load_uk_analytical_iot(path: Path | str) -> IOTable:
     """Load the UK Input-Output Analytical Tables workbook into an `IOTable`.
 
-    The table is industry-by-industry, DOMESTIC use, at basic prices, GBP
-    million, 104 x 104.
+    Domestic use, at basic prices, GBP million. Both editions the ONS
+    publishes are read: **industry by industry**, whose axis the sheet labels
+    `SIC` / `Industry`, and **product by product**, labelled `CPA` / `Product`.
+    The size is whatever the file says — 104 x 104 for 2023, 105 x 105 for 2016
+    to 2022, because the 2023 edition merged `CPA_C254` into `CPA_C25`.
 
     A note on what goes into `VA`. The model's column identity is
     `Z.sum(0) + VA.sum(0) == X`. For a *domestic* IOT that identity reads
@@ -133,16 +212,13 @@ def load_uk_analytical_iot(path: Path | str) -> IOTable:
         raise LoaderError(f"{path.name} has no 'IOT' sheet; found: "
                           f"{', '.join(sheets)}")
     R = sheets["IOT"]
-    L = _UK
+    L = _uk_layout(R, path.name)
 
-    rows = range(L["first_row"], L["last_row"])
-    cols = range(L["first_col"], L["last_col"])
+    rows = range(L["first_row"], L["end_row"])
+    cols = range(L["first_col"], L["end_col"])
     codes = [str(R[i][0]) for i in rows]
     names = [str(R[i][1]) for i in rows]
     n = len(codes)
-    if n != len(cols):
-        raise LoaderError(f"{n} row labels against {len(cols)} columns — the "
-                          f"hard-coded layout in _UK no longer fits this file")
 
     Z = np.array([[_num(R[i][j]) for j in cols] for i in rows])
     X = np.array([_num(R[L["row_output"]][j]) for j in cols])
@@ -154,13 +230,13 @@ def load_uk_analytical_iot(path: Path | str) -> IOTable:
     # is GBP 259,330 million on one row, and the row identity fails by exactly
     # that amount. Aggregates are dropped, not special-cased: a column whose
     # code is a strict prefix of another column's code is a subtotal of it.
-    all_fd = list(range(L["first_fd_col"], L["last_fd_col"]))
-    all_codes = [str(R[L["row_codes"]][j]) for j in all_fd]
+    all_fd = list(range(L["first_fd_col"], L["tu_col"]))
+    all_codes = [str(R[3][j]) for j in all_fd]
     aggregate = {j for j, c in zip(all_fd, all_codes)
                  if any(o != c and o.startswith(c) for o in all_codes)}
     fd_cols = [j for j in all_fd if j not in aggregate]
     dropped = [c for j, c in zip(all_fd, all_codes) if j in aggregate]
-    Y_labels = [str(R[L["row_codes"]][j]) for j in fd_cols]
+    Y_labels = [str(R[3][j]) for j in fd_cols]
     Y = np.array([[_num(R[i][j]) for j in fd_cols] for i in rows])
 
     VA_labels = ["Imports of goods and services (cif)",
@@ -172,23 +248,52 @@ def load_uk_analytical_iot(path: Path | str) -> IOTable:
                    ("row_imports", "row_taxes_products", "row_compensation",
                     "row_gos", "row_other_taxes")])
 
+    # The derivation is checked against the totals the ONS itself prints, so a
+    # block found one line out of true fails here and not three identities
+    # later as an accusation against the data.
+    printed_t = np.array([_num(R[L["row_total"]][j]) for j in cols])
+    printed_tu = np.array([_num(R[i][L["tu_col"]]) for i in rows])
+    printed_gva = np.array([_num(R[L["row_gva"]][j]) for j in cols])
+    for what, a, b in (
+            ("the printed `_T` row is the sum of the sector columns",
+             printed_t, Z.sum(0)),
+            ("the printed `TU` column is intermediate plus final demand",
+             printed_tu, Z.sum(1) + Y.sum(1)),
+            ("the printed GVA row is its three components", printed_gva,
+             VA[2] + VA[3] + VA[4])):
+        d = float(np.abs(a - b).max())
+        bound = max(1e-6, float(assertable_tolerance(
+            np.concatenate([Z.ravel(), Y.ravel(), VA.ravel()]), n + 1)))
+        if d > bound:
+            raise LoaderError(
+                f"{path.name}: {what} — and it is not, by {d:,.3f} against a "
+                f"bound of {bound:,.3f}. The blocks are located from the "
+                f"labels this sheet prints, so this is the loader having found "
+                f"the wrong ones rather than the data failing to add up.")
+
     menu = []
     if "Menu" in sheets:
         menu = [str(c) for r in sheets["Menu"][:6] for c in r if c]
 
     year = _infer_year(menu)
+    pxp = L["axis"].upper().startswith("CPA")
     table = IOTable(
-        table_id=f"UK-IOT-IXI-{year}", country="United Kingdom", year=year,
+        table_id=f"UK-IOT-{'PXP' if pxp else 'IXI'}-{year}",
+        country="United Kingdom", year=year,
         unit="GBP million, current prices, basic prices",
-        classification="SIC 2007 (104 industries)",
+        classification=(f"{'CPA 2008' if pxp else 'SIC 2007'} "
+                        f"({n} {'products' if pxp else 'industries'})"),
         sector_codes=codes, sector_labels=names,
         Z=Z, Y=Y, Y_labels=Y_labels, VA=VA, VA_labels=VA_labels, X=X,
         source=f"ONS, {menu[1] if len(menu) > 1 else path.name}",
         retrieved_at=datetime.now(timezone.utc),
-        notes=("Industry-by-industry, domestic use, basic prices. The first two "
-               "VA rows are imports and taxes on products, not value added — "
-               "see the loader docstring. Reference year read from the Menu "
-               "sheet, never from the filename (OQ-D-01)."
+        notes=(f"{'Product-by-product' if pxp else 'Industry-by-industry'}, "
+               f"domestic use, basic prices, {n} x {n}. The first two VA rows "
+               f"are imports and taxes on products, not value added — see the "
+               f"loader docstring. Reference year read from the Menu sheet, "
+               f"never from the filename (OQ-D-01); the size and both axes "
+               f"read from the sheet's own `_T` totals, never from a fixed "
+               f"offset — the ONS changed both between editions."
                + (f" Dropped {len(dropped)} final-demand subtotal column(s) "
                   f"({', '.join(dropped)}) to avoid double counting."
                   if dropped else "")))
@@ -226,15 +331,26 @@ def _assert_balances(table: IOTable, name: str) -> None:
     """
     row = np.abs(table.Z.sum(axis=1) + table.Y.sum(axis=1) - table.X)
     col = np.abs(table.Z.sum(axis=0) + table.VA.sum(axis=0) - table.X)
-    values = np.concatenate([table.Z.ravel(), table.Y.ravel(),
-                             table.VA.ravel(), table.X.ravel()])
-    n_row = table.n + table.Y.shape[1] + 1
-    n_col = table.n + table.VA.shape[0] + 1
-    tol = max(1e-6, float(assertable_tolerance(values, max(n_row, n_col))))
-    d = printed_decimals(values)
-    basis = (f"derived from this file's own {d}-decimal precision over "
-             f"{max(n_row, n_col)} terms — OQ-B-02" if d is not None else
-             "derived from float64 accumulation; this file does not round")
+    # Each block is measured on its own, because a table need not be printed to
+    # one precision throughout and the ONS's is not: its intermediate block is
+    # full precision and its final demand, output and total use are integers.
+    # Pooled, the 105 unrounded cells outvote the 10 rounded ones and the whole
+    # identity is judged at float64 accumulation — 5.7e-06 where what the file
+    # can distinguish is 5.0. See `precision.assertable_tolerance_mixed`.
+    tol = max(1e-6, assertable_tolerance_mixed(
+        (table.Z.ravel(), table.n),
+        (table.Y.ravel(), table.Y.shape[1]),
+        (table.X.ravel(), 1)))
+    col_tol = max(1e-6, assertable_tolerance_mixed(
+        (table.Z.ravel(), table.n),
+        (table.VA.ravel(), table.VA.shape[0]),
+        (table.X.ravel(), 1)))
+    tol = max(tol, col_tol)
+    parts = [f"{'unrounded' if printed_decimals(b) is None else str(printed_decimals(b)) + ' dp'} {lbl}"
+             for lbl, b in (("interior", table.Z.ravel()),
+                            ("final demand", table.Y.ravel()),
+                            ("output", table.X.ravel()))]
+    basis = "OQ-B-02, block by block: " + ", ".join(parts)
     if row.max() > tol or col.max() > tol:
         i, j = int(row.argmax()), int(col.argmax())
         raise LoaderError(

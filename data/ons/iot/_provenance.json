@@ -1,0 +1,38 @@
+{
+  "iot_pxp_1719.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2019/nasu1719pr.xlsx",
+    "bytes": 886605,
+    "sha256": "8f3db9968001a623a724d164d0f0c6aec0f9a790b95e7e934f09554c676815db",
+    "retrieved": "2026-08-25"
+  },
+  "iot_pxp_2020.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2020/iot2020product.xlsx",
+    "bytes": 859331,
+    "sha256": "91ae3f45fbbaf963cdc01f6c2dc0bdb2cd9f1600a5305fcc51d7383b8d5875d8",
+    "retrieved": "2026-08-25"
+  },
+  "iot_pxp_2021.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2021/iot2021product.xlsx",
+    "bytes": 847353,
+    "sha256": "aa30405b298fea034db8555374532483b8bb306e447ccb31e6f1df8c7a2f0ecf",
+    "retrieved": "2026-08-25"
+  },
+  "iot_pxp_2022.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2022/iot2022product.xlsx",
+    "bytes": 850031,
+    "sha256": "6631f4d21e32f7f3576f41ad787866bce02c7950b3a04091e7a234e4bc075187",
+    "retrieved": "2026-08-25"
+  },
+  "iot_pxp_2022revised.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2022revised/iot2022revisedproduct.xlsx",
+    "bytes": 852577,
+    "sha256": "c4b0ebf34ccfceb8349de4a727c17618dfbddcaca1d6ae1aa13237641bc93a93",
+    "retrieved": "2026-08-25"
+  },
+  "iot_pxp_2023.xlsx": {
+    "url": "https://www.ons.gov.uk/file?uri=/economy/nationalaccounts/supplyandusetables/datasets/ukinputoutputanalyticaltablesdetailed/2023/iot2023product.xlsx",
+    "bytes": 845524,
+    "sha256": "14d8f4bd2993f8f0cd5339b28056b419c0f5aee15c920ecb4903c78756e29a56",
+    "retrieved": "2026-08-25"
+  }
+}

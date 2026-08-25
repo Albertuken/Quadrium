@@ -36,17 +36,28 @@ precision the source prints. That is this construct, in the source's own hands.
 WHAT THE MEASUREMENT SHOWED, ACROSS EVERY FIXTURE THE PROJECT HOLDS
 -------------------------------------------------------------------
     source              decimals   n    residual    floor
-    ONS UK 2022         unrounded  113  1.16e-10    5.7e-06   float64
+    ONS UK 2022         see below  113  1.16e-10    5.7e-06   float64
     INE TIO ES 2022     1           72  2.91e-11    3.6
     INE TOD ES 2022     1           81  7.28e-11    4.05
     Eurostat ES 2022    1           72  2.91e-11    3.6
     Eurostat IT 2022    2           73  0.08        0.365
 
+**Corrected 2026-08-25.** The first line read `unrounded` and it is wrong. The
+ONS table is not published to one precision: its intermediate block is full
+precision and its final demand, output and total use are **all integers**, in
+every edition from 2019 to 2023. Pooling 105 unrounded cells with 10 rounded
+ones gives 99.1 % unrounded, `printed_decimals` correctly answers `None` for
+the pool, and the identity is then judged at float64 accumulation — 5.7e-06
+where what the file can distinguish is **5.0**. See
+`assertable_tolerance_mixed`, which measures each block separately, and
+`../validators/run_uk_editions.py`, which measures all six editions.
+
 Three things follow, and the third is the one worth carrying.
 
 1. The project's flat `ABS_TOL = 1e-6` is right for four of the five, and it is
-   right BY ACCIDENT. It survived because the founding fixture is the ONS table,
-   which is published unrounded.
+   right BY ACCIDENT — a wider accident than this file thought. It survived
+   because the ONS's rounded margins happen to be mutually consistent in four
+   editions of six, not because the table is unrounded.
 
 2. It is wrong for Italy, and Italy is not at fault: 0.08 across 73 cells
    rounded to two decimals is well inside what that source can distinguish.
@@ -126,6 +137,46 @@ def assertable_tolerance(values, n_terms: int) -> float:
     # alone cannot cover that.
     scale = float(np.abs(v).sum()) if v.size else 1.0
     return max(n_terms * _FLOAT_EPS * scale, np.finfo(float).tiny)
+
+
+def assertable_tolerance_mixed(*populations) -> float:
+    """The floor for an identity whose terms are NOT all printed alike.
+
+    Each argument is a `(values, n_terms)` pair naming one population of terms
+    in the identity. The floor of a sum is the sum of the floors, so the
+    populations are measured separately and added.
+
+    WHY THIS EXISTS, AND WHY THE ONE FIXTURE THAT MOTIVATED THIS MODULE NEEDS IT
+    -----------------------------------------------------------------------------
+    The docstring above records `ONS UK 2022  unrounded  113  1.16e-10  5.7e-06`
+    and says the project's flat `ABS_TOL = 1e-6` "survived because the founding
+    fixture is the ONS table, which is published unrounded."
+
+    **The ONS table is not published unrounded.** Measured across every edition
+    from 2019 to 2023: the intermediate block is full precision — under 0.6 % of
+    its cells are whole numbers — and **final demand, output and total use are
+    every one of them integers**, in all six files. The interior is unrounded
+    and the margins are rounded to whole millions.
+
+    Pooling them hides it. 105 unrounded cells against 10 rounded ones is
+    99.1 % unrounded, well past this module's 99.95 %-coverage rule in the other
+    direction, so `printed_decimals` correctly answers `None` for the pool and
+    the whole identity is then judged at float64 accumulation, **about 5.7e-06
+    where what it can actually distinguish is 5.0** — nine final-demand
+    integers and one output integer, half a unit each. Six orders of magnitude
+    too tight, on the fixture this module was written around.
+
+    It went unnoticed because the ONS's rounded margins happen to be mutually
+    consistent in four editions of six. In the 2022 revised tables two rows are
+    a single unit out and cancel — `CPA_G46` at −1 and `CPA_G47` at +1 — which
+    is one rounding unit doing exactly what rounding units do, and the pooled
+    bound called it a table that does not balance.
+
+    The 2021 tables are refused either way: 83 of 105 rows disagree with their
+    own printed total and `CPA_D351` is out by **259**, which is 259 rounding
+    units and not rounding.
+    """
+    return float(sum(assertable_tolerance(v, n) for v, n in populations))
 
 
 def infeasibility_floor(u, v) -> float:
