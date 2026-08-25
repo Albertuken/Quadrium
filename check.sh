@@ -50,6 +50,44 @@ for arg in "$@"; do
     esac
 done
 
+# ---- the floor the package declares --------------------------------------
+# `pyproject.toml` promises `numpy>=1.24` and `openpyxl>=3.1`. Until
+# 2026-08-25 this machine ran 1.23.5 and 3.0.10 -- BELOW ITS OWN STATED
+# MINIMUM, on both -- so every "all checks passed" here was a statement about
+# an environment no user could reproduce from the metadata. Two numpy 2.3
+# errors sat in the tree for weeks because of it, and CI found them, not this.
+#
+# A floor nobody installs is a guess. This refuses to run below it.
+if ! $PY - <<'PYEOF'
+import sys
+try:
+    from importlib.metadata import version
+except ImportError:
+    sys.exit(0)
+FLOOR = {"numpy": (1, 24), "openpyxl": (3, 1)}
+bad = []
+for pkg, want in FLOOR.items():
+    try:
+        got = tuple(int(x) for x in version(pkg).split(".")[:2])
+    except Exception:
+        continue
+    if got < want:
+        bad.append(f"{pkg} {'.'.join(map(str, got))} < "
+                   f"{'.'.join(map(str, want))}")
+if bad:
+    print("This interpreter is below the floor pyproject.toml declares:")
+    for line in bad:
+        print(f"    {line}")
+    print()
+    print("Anything that passes here says nothing about what a user gets.")
+    print("Use an environment that meets the declared minimum, e.g.")
+    print("    PYTHON=~/.venvs/quadrium/bin/python ./check.sh")
+    sys.exit(1)
+PYEOF
+then
+    exit 1
+fi
+
 echo "== $WHICH, $($PY -V 2>&1)"
 echo
 

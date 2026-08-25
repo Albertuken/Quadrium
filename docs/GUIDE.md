@@ -100,7 +100,9 @@ Two things it counts carefully, because both are easy to get wrong:
 
 ## 1. Install
 
-Python 3.10 or later. Two dependencies, both ordinary: `numpy` and `openpyxl`.
+Python 3.10 or later. Two dependencies, both ordinary: `numpy` 1.24 or later
+and `openpyxl` 3.1 or later. Those floors are tested, not asserted — CI installs
+exactly them on one leg, and the latest on two more.
 
 ```bash
 pip install quadrium
