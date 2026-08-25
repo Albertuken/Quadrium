@@ -656,10 +656,28 @@ growth in value added instead, which IS a target, scores better than the oracle
 did: the conclusion does not rest on it.
 
 The projection is further from the published table than the base year left
-alone. Run on **every country Eurostat serves twice on identical axes — twelve
-tests across eight countries** — it is further in all twelve, on levels and on
-technical coefficients alike, and the single-number baseline beats it every
-time:
+alone. Run on **every pair of years Eurostat serves for one country on identical
+axes — 61 tests across eight countries, horizons of 1 to 12 years** — it loses
+61 of 61 against the single-number baseline and 61 of 61 on scale-free
+coefficients, and **the gap widens with the horizon rather than closing**:
+
+| horizon | tests | projection | base year | base × GVA growth |
+|---|---:|---:|---:|---:|
+| 1–2 yr | 18 | 41.2 % | 20.4 % | 17.3 % |
+| 3–5 yr | 19 | 62.1 % | 27.0 % | 24.7 % |
+| 6–8 yr | 13 | 65.6 % | 37.5 % | 33.4 % |
+| 9–12 yr | 11 | 85.2 % | 43.5 % | 38.5 % |
+
+**29 of the 61 do not converge at 5,000 iterations**, and running them further
+separates two causes. Czechia is only slow — it converges at 18,423. Hungary is
+stuck: `H51`, air transport, has value added of −96.7 in 2021 and +28.3 in 2022,
+and every step of the method scales by `target / base`, so a ratio carries a
+negative base to a negative result whatever the target is. 60,000 iterations
+leave it where 5,000 did. That is `OQ-B-09` in the projection rather than the
+balancing; all 3 sign-crossing tests fail and no other test fails for that
+reason. `sut_euro` now refuses a sign flip up front and names the industry.
+
+The one- and two-year slice in full:
 
 | case | iters | projected | base year | × GVA growth |
 |---|---:|---:|---:|---:|

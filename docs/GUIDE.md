@@ -242,14 +242,23 @@ the 2021 table is not an option however good it is. That consistency is what you
 are buying.
 
 You are not buying a better estimate of the structure. Projecting eight
-countries forward one or two years and scoring the result against the table
-their offices later published, **the projected cells came out further from the
-truth than the base year's own cells in all twelve tests** — and the same on
-technical coefficients, which have no scale in them. Scaling the base year by a
-single number, the growth in value added, beat the projection every time too.
-Twelve tests are twelve tests and no manual claims otherwise, but do not read
+countries forward, over horizons of one to twelve years, and scoring the result
+against the table their offices later published — **61 tests, and the projected
+cells came out further from the truth than the base year's own in every one**,
+on technical coefficients, which have no scale in them, and against a baseline
+that scales the base year by a single number the projection was itself given.
+The gap widens with the horizon rather than closing. Sixty-one tests are one
+method and one publisher, and no manual claims otherwise, but do not read
 "projected to 2026" as "a better picture of 2026 than the latest published
 table".
+
+**And it may simply refuse.** 29 of those 61 runs did not reach the Handbook's
+1 % rule in 5,000 iterations — some are only slow (Czechia converges at 18,423)
+and some cannot get there at all: if an industry's value added changes sign
+between your base year and your target, the method scales by ratios and cannot
+cross zero. Hungary's air transport went from −96.7 to +28.3 between 2021 and
+2022. The refusal names the industry, both figures, and which of the two cases
+you are in.
 
 **If the pair does not close.** The engine checks the publisher's own
 identities before loading anything, against a bound derived from that

@@ -420,14 +420,15 @@ class SupplyUseTables:
         office later published.
 
         **The projected cells came out further from the published year than
-        the base year's own cells, in all twelve tests across eight
-        countries** — 34.0 % against 29.4 % of total domestic intermediate use
-        for Spain 2021 → 2022, 51.6 % against 15.4 % for France — and the same
-        ordering on technical coefficients, which have no scale in them.
-        Scaling the base year by a single number, the growth in value added,
-        beat the projection every time as well. It is not the damping exponent:
-        sweeping `ε` from 0.3 to 1.0 moves the iteration count and not the
-        answer.
+        the base year's own cells, in 61 of 61 tests across eight countries and
+        horizons of one to twelve years** — 34.0 % against 29.4 % of total
+        domestic intermediate use for Spain 2021 → 2022, 51.6 % against 15.4 %
+        for France — on technical coefficients, which have no scale in them,
+        and against a baseline that scales the base year by the growth in value
+        added, one of the four targets the projection was given. The gap widens
+        with the horizon rather than closing. It is not the damping exponent
+        either: sweeping `ε` from 0.3 to 1.0 moves the iteration count and not
+        the answer.
 
         That is not a verdict on the method, and the comparison is not
         symmetric. **The projected pair is consistent with the target
@@ -492,7 +493,9 @@ class SupplyUseTables:
             r = sut_euro(Ud0, Um0, tls0, self.V[_np.ix_(pi, ai)].T,
                          va_target=gva, final_use_target=final_use,
                          tls_target=float(taxes),
-                         imports_target=float(imports), **kw)
+                         imports_target=float(imports),
+                         industry_labels=[self.activity_codes[i] for i in ai],
+                         **kw)
             # `r.V` is industries x products and `r.x` is industry output --
             # taken from the result rather than rebuilt, because rebuilding is
             # how a rounding residue becomes a second opinion.
@@ -511,13 +514,28 @@ class SupplyUseTables:
             # A projection that did not converge is not a projection.
             if not r.converged:
                 worst = max(abs(v - 1.0) for v in r.deviations.values()) * 100
+                trend = ""
+                if getattr(r, "progress", ()):
+                    a, b, span = r.progress
+                    per = (a - b) / span if span else 0.0
+                    moving = "still" if a - b > 1e-9 else "no longer"
+                    trend = (f"\n\nIt was {moving} getting closer: the worst "
+                             f"deviation went {a:.2f} % to {b:.2f} % over the "
+                             f"last {span} iterations")
+                    if per > 1e-9 and b > 1.0:
+                        more = int(max(0.0, (b - 1.0) / per))
+                        trend += (f", about {per * 1000:.2f} points per "
+                                  f"thousand, so reaching 1 % from here would "
+                                  f"take roughly {more:,} more.")
+                    else:
+                        trend += "."
                 raise ValueError(
                     f"the projection did not converge: {r.iterations} "
                     f"iterations and the worst aggregate is still "
                     f"{worst:.2f} % from its target, against the chapter's "
-                    f"own 1 per cent rule (UNH_18 Box 18.8).\n\n"
+                    f"own 1 per cent rule (UNH_18 Box 18.8)." + trend + "\n\n"
                     f"Raise `max_iter` — real supply-use pairs have needed "
-                    f"356 to 2,835 iterations where the chapter's own fixture "
+                    f"356 to 18,423 iterations where the chapter's own fixture "
                     f"takes three — or check the targets: projecting a pair "
                     f"onto its OWN totals must return that pair in one "
                     f"iteration, and if it does not, the targets are in the "
@@ -571,11 +589,11 @@ class SupplyUseTables:
                    f"taxes and imports totals that were supplied. What this "
                    f"buys is consistency with those totals, which the "
                    f"{self.year} table does not have. It is not a better "
-                   f"picture of {label}'s structure: back-tested on twelve "
-                   f"consecutive Eurostat pairs across eight countries, the "
-                   f"projected cells came out FURTHER from the table the "
-                   f"office later published than the base year's own cells "
-                   f"did, every time."
+                   f"picture of {label}'s structure: back-tested on 61 "
+                   f"Eurostat pairs across eight countries and horizons of "
+                   f"one to twelve years, the projected cells came out FURTHER "
+                   f"from the table the office later published than the base "
+                   f"year's own cells did, in every one."
                    + (f" Dropped for having no base-year output, which leaves "
                       f"a market share undefined: {', '.join(dropped)}."
                       if dropped else "")))

@@ -155,6 +155,13 @@ class SutEuroResult:
     converged: bool
     damping_exponent: float
     step1: SutEuroStep1            # the last iteration's inconsistent estimate
+    # Set after the loop, and only when it ran more than once: whether the
+    # worst deviation was still falling over the last fifth of the run, and the
+    # (first, last, span) of that window. A run that stopped short while still
+    # improving needs a higher ceiling; one that stopped short having stalled
+    # needs a different method or a different target.
+    still_improving: bool = True
+    progress: tuple = ()
     assumptions: tuple = field(default=(
         "fixed product sales structure (model D, M-026)",
         "constant market shares (UNH_18 par. 18.89, p. 575)"))
@@ -228,7 +235,8 @@ def _scaled_pair(U0, tls0, va0, rates, n_ind, impose_gva):
 def sut_euro(Ud0, Um0, tls0, V0, *, va_target, final_use_target, tls_target,
              imports_target, damping_exponent: float = 0.9,
              stop_pct: float = STOP_PCT,
-             max_iter: int = PROJECT_MAX_ITER) -> SutEuroResult:
+             max_iter: int = PROJECT_MAX_ITER,
+             industry_labels=None) -> SutEuroResult:
     """Project a square SUT pair. UNH_18 ¶18.89–18.102, pp. 575–577.
 
     Parameters
@@ -288,6 +296,42 @@ def sut_euro(Ud0, Um0, tls0, V0, *, va_target, final_use_target, tls_target,
         "tls": tls0.sum(),
         "imports": Um0.sum(),
     }
+    # A SIGN FLIP IN VALUE ADDED IS NOT SLOW CONVERGENCE — IT IS UNREACHABLE.
+    #
+    # Every step of this method scales by `target / base`. A ratio cannot carry
+    # a negative base to a positive target: it carries it to a negative number
+    # of the target's magnitude, and no number of iterations changes that. This
+    # is `OQ-B-09` — "no specified method can let a cell change sign" — showing
+    # up in the projection rather than in the balancing.
+    #
+    # It is not hypothetical. Hungary's air transport (`H51`) has value added
+    # of -96.7 in 2021 and +28.3 in 2022, which is what a pandemic did to
+    # airlines, and every one of the three back-test runs crossing that sign
+    # stalls: 5,000 iterations at 306 % deviation, 60,000 at 301 %, unmoved.
+    # Every run with a sign flip failed to converge and no run without one
+    # failed for this reason, so the two causes separate cleanly and the
+    # message can say which it is.
+    flip = np.flatnonzero(np.sign(va0) * np.sign(va_target) < 0)
+    if flip.size:
+        def _name(i):
+            if industry_labels is not None and int(i) < len(industry_labels):
+                return str(industry_labels[int(i)])
+            return f"industry {int(i)}"
+        lines = "".join(
+            f"\n      {_name(i):<10} {va0[i]:+,.1f} -> {va_target[i]:+,.1f}"
+            for i in flip[:6])
+        raise SutEuroError(
+            f"{flip.size} industr{'y' if flip.size == 1 else 'ies'} would have "
+            f"to change the SIGN of their value added between the base year "
+            f"and the target, and this method cannot:{lines}\n"
+            f"Every step scales by target/base, and a ratio carries a negative "
+            f"base to a negative result whatever the target is. More "
+            f"iterations will not help — 60,000 leaves it exactly where 5,000 "
+            f"did. See OQ-B-09.\n"
+            f"Either project to a year on the same side of zero for these "
+            f"industries, or set their base-year value added to the target and "
+            f"record that you did.")
+
     target = {
         "va": va_target,
         "va_total": float(va_target.sum()),
@@ -300,6 +344,7 @@ def sut_euro(Ud0, Um0, tls0, V0, *, va_target, final_use_target, tls_target,
     rates["imports_shift"] = 1.0     # see `_scaled_pair`: starts at parity
 
     result = None
+    history: list[float] = []
     for iteration in range(1, max_iter + 1):
         # ---- step 1: scale, average, impose GVA -----------------------------
         impose = target["va"] if iteration == 1 else None
@@ -352,6 +397,7 @@ def sut_euro(Ud0, Um0, tls0, V0, *, va_target, final_use_target, tls_target,
                         for i, val in enumerate(np.atleast_1d(v))},
             iterations=iteration, converged=worst < stop_pct,
             damping_exponent=damping_exponent, step1=step1)
+        history.append(worst)
         if result.converged:
             break
 
@@ -367,4 +413,11 @@ def sut_euro(Ud0, Um0, tls0, V0, *, va_target, final_use_target, tls_target,
                                                         damping_exponent)
         rates["imports_shift"] = rates["imports_shift"] * correction_factor(
             dev["imports"], damping_exponent)
+    # Whether it was still getting closer when it ran out. A caller that has to
+    # refuse a non-converged run can then say which of two different things
+    # happened — "slow, raise the ceiling" or "stalled, do not bother".
+    if result is not None and len(history) >= 2:
+        window = history[-min(len(history), max(1, max_iter // 5)):]
+        result.still_improving = bool(window[0] - window[-1] > 1e-9)
+        result.progress = (float(window[0]), float(window[-1]), len(window))
     return result

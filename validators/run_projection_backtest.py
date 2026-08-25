@@ -37,10 +37,30 @@ AND THE MEASUREMENT, WHICH IS NOT FLATTERING
 ----------------------------------------------
 Against the published later year, with every run converged:
 
-Every country pair Eurostat serves twice on identical axes — **12 tests across
-8 countries**, one- and two-year horizons. Total absolute error on domestic
-intermediate use, as a share of it, and mean |Δa_ij| per thousand on the
-scale-free technical coefficients:
+Every pair of years Eurostat serves for the same country on identical axes —
+**61 tests across 8 countries, horizons of 1 to 12 years**:
+
+    projection worse than the base year left alone, on levels        59 / 61
+    projection worse than the base year x growth in value added      61 / 61
+    projection worse on scale-free technical coefficients            61 / 61
+    runs that do not converge at 5,000 iterations                    29 / 61
+
+**And the horizon does not rescue it.** If the projection were carrying real
+structural change, its advantage should grow as the base year ages. It does the
+opposite — the gap widens:
+
+    horizon    tests   projection   base year   base x GVA growth
+     1-2 yr      18       41.2 %      20.4 %          17.3 %
+     3-5 yr      19       62.1 %      27.0 %          24.7 %
+     6-8 yr      13       65.6 %      37.5 %          33.4 %
+    9-12 yr      11       85.2 %      43.5 %          38.5 %
+
+The two tests where it beats the base year left alone are both Austrian and
+both lose to the one-number rescale anyway (36.6 % against 30.0 %, 32.2 %
+against 29.0 %), and both are worse on coefficients.
+
+A one- and two-year slice of that, in full, for the countries this validator
+names:
 
     case              iters   conv   projected  base year  x GVA   cf proj  cf base
     CZ 2021 -> 2022   5,000    no       68.1 %    21.4 %   13.7 %    1.439    0.651
@@ -71,9 +91,26 @@ Belgium and Slovakia are absent because SUT-EURO refuses a rectangular pair —
 84 industries against 85 products, 81 against 87 — which is the chapter's own
 requirement (¶18.102, p. 577) and a correct refusal, not a gap in the test.
 
-**Czechia and Hungary never converge at all**, at 5,000 iterations, and
-`project` now refuses them rather than returning a table that says it
-converged.
+**Czechia and Hungary do not converge at 5,000 iterations**, and running them
+further separates two different things.
+
+**Czechia is slow.** It converges at **18,423** iterations. The ceiling was the
+only problem.
+
+**Hungary is stuck.** 5,000 iterations leave it 306 % from its target and
+60,000 leave it at 301 %. The cause is nameable: `H51`, air transport, has
+value added of **−96.7 in 2021 and +28.3 in 2022** — what a pandemic did to
+airlines — and every step of this method scales by `target / base`. A ratio
+carries a negative base to a negative result whatever the target is, so no
+number of iterations crosses zero. That is `OQ-B-09` — "no specified method can
+let a cell change sign" — appearing in the projection rather than the
+balancing. Of the 61 tests, **3 cross a value-added sign and all 3 fail; no run
+without a sign flip fails for this reason**, so the two causes separate
+cleanly.
+
+`sut_euro` now refuses a sign flip up front and names the industry and both
+figures, and a run that merely stops short reports whether it was still
+improving and how many more iterations 1 % would take.
 
 The projection is further from the published table than the base year left
 alone, in all five. On levels that could be dismissed as a scale effect — but
@@ -101,12 +138,13 @@ consistency is the whole product. Whoever needs a table that adds up to known
 2022 aggregates cannot use the 2021 table at all, however close its cells are.
 
 What it says is that the consistency is bought, and this is the price: on
-twelve tests across eight countries and one- to two-year horizons, imposing the
-target aggregates moved the individual cells AWAY from what the office later
-published — every time, on levels and on coefficients alike. Twelve is not a
-literature. But nobody should read "projected to 2026" as "a better estimate of
-2026's structure than 2022's table", and until 2026-08-26 nothing in this
-engine said otherwise.
+sixty-one tests across eight countries and horizons from one to twelve years,
+imposing the target aggregates moved the individual cells AWAY from what the
+office later published — every time on coefficients, and every time against a
+baseline using one of the same targets. Sixty-one is not a literature, and it is
+one method and one publisher. But nobody should read "projected to 2026" as "a
+better estimate of 2026's structure than 2022's table", and until 2026-08-26
+nothing in this engine said otherwise.
 
 Run:
     python3 validators/run_projection_backtest.py
