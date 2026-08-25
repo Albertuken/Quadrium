@@ -176,6 +176,54 @@ def fetch(dataset: str, geo: str, year: int, dest: Path | str,
             "n_values": len(doc["value"])}
 
 
+def _shortfall_diagnosis(cube, use_dim, ava_dim, flow, pref, total_code,
+                         codes, got, published, aggregated_away) -> str:
+    """Say WHY the codes do not sum to the total, not just that they do not.
+
+    The message used to end "so the set still mixes levels or still carries a
+    row that is not a sector", which is one hypothesis stated as a conclusion.
+    Swept across every EU country on 2026-08-25, it was the wrong one five
+    times out of five:
+
+        LT   62 codes,  3.02 % short        MT   58 codes,  5.12 % short
+        PL   60 codes,  3.29 % short        NO   63 codes,  1.25 % short
+        IE   51 codes, 50.46 % SHORT
+
+    None of them mixes levels. They publish INCOMPLETE TABLES: codes that the
+    published total counts and that carry no value of their own. Ireland's
+    2020 table accounts for barely half of the total it prints, which is what
+    a country whose sectors are dominated by a few firms looks like once
+    confidentiality has been applied.
+
+    A mixed-level set overshoots by a FACTOR -- Italy's was 2.4x, which is what
+    this branch was written for. An incomplete one undershoots by a few per
+    cent, or by half. The two need opposite responses and the message now
+    tells them apart.
+    """
+    ratio = got / published if published else float("nan")
+    unpopulated = [c for c in cube.index[ava_dim]
+                   if c.startswith(pref) and c != total_code
+                   and c in set(cube.index[use_dim])
+                   and cube.at(stk_flow=flow, **{use_dim: "TU", ava_dim: c})
+                   is None]
+    if ratio > 1.05:
+        return (f". That OVERSHOOTS by a factor of {ratio:.2f}, which is what "
+                f"a set mixing levels of the hierarchy does: some code is "
+                f"being counted inside an aggregate and again on its own. "
+                f"{len(aggregated_away)} were dropped as contained in another "
+                f"and it was not enough. Kept: {', '.join(codes[:8])}…")
+    return (f", which is {100 * (1 - ratio):.2f} % SHORT. This set does not "
+            f"mix levels — it is INCOMPLETE. {len(unpopulated)} code(s) sit on "
+            f"both axes and carry no published total-use value at all"
+            + (f", among them {', '.join(_bare(c) for c in unpopulated[:6])}"
+               if unpopulated else "")
+            + f", while the published total counts them. That is what a table "
+              f"looks like after confidentiality has been applied to it, and "
+              f"loading it would understate this economy by "
+              f"{published - got:,.1f} without saying so. The table is not "
+              f"broken; it is not all there.")
+
+
 def _rounding_tol(n_terms: int, values=None) -> float:
     """The tightest an `n_terms` identity can be held to, for THIS source.
 
@@ -497,11 +545,10 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
             and abs(got - published_total) > 1e-6 * abs(published_total)):
         raise EurostatError(
             f"the {len(codes)} codes that carry values sum to {got:,.1f} "
-            f"against a published total of {published_total:,.1f}. Eurostat "
-            f"serves the whole hierarchy. Dropping the {len(aggregated_away)} "
-            f"code(s) another populated code contains did not make the rest a "
-            f"partition, so the set still mixes levels or still carries a row "
-            f"that is not a sector. Kept: {', '.join(codes[:8])}...")
+            f"against a published total of {published_total:,.1f}"
+            + _shortfall_diagnosis(cube, use_dim, ava_dim, flow, pref,
+                                   total_code, codes, got, published_total,
+                                   aggregated_away))
 
     def col(name, allow_missing=False):
         out = []

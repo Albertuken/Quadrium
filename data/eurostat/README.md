@@ -389,18 +389,28 @@ which fails, because Eurostat answers 200 with an empty result for a year a
 country does not publish. It is the same "listed is not available" trap as
 `CPA_I55` in the Spanish symmetric table, in a third place.
 
-Measured 2026-08-25, with a control:
+**The filter has to name a category that exists on the axis it names.** The
+`cp1700` probe asked `prd_use=CPA_TOTAL`, and `CPA_TOTAL` is the total on the
+*available* axis — the use axis's total is `TU`. Eurostat answers 200 with an
+empty result either way, so the probe reported that **no country publishes a
+symmetric product-by-product table**, and a claim that Germany had no route to
+one was written into four documents before a sweep of 28 countries showed every
+single one reading zero. Spain publishes nine years and Germany thirteen.
 
-| | `cp1700` | `cp1750` | `cp15` | `cp16` | `cp1610` |
-|---|---|---|---|---|---|
-| **DE** | none | none | 2010–2022 | 2010–2022 | **none** |
-| **BE** | none | 2010–2022 | 2010–2022 | 2010–2022 | 2010–2022 |
-| **ES** (control) | 1990–2023 | — | 1990–2024 | 1990–2024 | populated |
+Measured 2026-08-25 across 28 countries, once the probe asked properly. Every
+one publishes supply and use; what differs is the rest:
 
-**Germany has no route to a symmetric table through Eurostat at all.** No
-symmetric table, and no use at basic prices, so the pair it does publish cannot
-be transformed either — the domestic/imported split would have to be assumed,
-and this engine will not assume it.
+| | `cp1700` | `cp1750` | `cp1610` | newest transformable pair |
+|---|---|---|---|---|
+| **DE** | 13 yr | none | **none** | **none** |
+| **ES** | 9 yr | none | 13 yr | 2022 |
+| **DK** | none | 18 yr | 18 yr | 2022 |
+| **CZ** | 9 yr | 9 yr | 34 yr | 2024 |
+| **BG** | 1 yr | none | 1 yr | 2010 |
+
+**Germany is the one country whose pair cannot be transformed** — it publishes
+no use table at basic prices, so the domestic/imported split would have to be
+assumed. Its symmetric table is reachable.
 
 **Belgium's 2022 pair loads for four other countries' worth of checks and then
 is refused**, on the industry column identity: intermediate consumption plus
@@ -447,3 +457,33 @@ divides by that output — and dropped their imported use with them, taking
 products against 84 industries, so models A and C refuse it and B and D do not.
 
 Austria, Spain, France and the Netherlands pass every check Belgium fails.
+
+---
+
+## Five tables the engine will not load, kept as fixtures
+
+Retrieved 2026-08-25 in a sweep of every EU country plus Norway, most recent
+year each. **Nineteen of twenty-seven load and are sound** — spectral radius
+0.33 to 0.65, row residues at the rounding scale. These five do not, for four
+distinct reasons, and each refusal is correct.
+
+| file | why |
+|---|---|
+| `naio_10_cp1700_IE_2020.json` | **50.46 % short**: 51 codes carry values and the published total counts 104 |
+| `naio_10_cp1750_NO_2023.json` | **1.25 % short**, same shape |
+| `naio_10_cp1700_LU_2022.json` | no `P1` output vector for the variant |
+| `naio_10_cp1700_HR_2021.json` | final demand published under no combination the loader reads |
+| `naio_10_cp1700_SE_2023.json` | balances as published, not as rebuilt |
+
+**Ireland's 2020 table accounts for barely half of the total it prints.** That
+is what a country whose sectors are dominated by a few firms looks like once
+confidentiality has been applied — and loading it would understate that economy
+by 362,158 without saying so.
+
+Until this sweep all five refused with the same sentence: *"the set still mixes
+levels or still carries a row that is not a sector"* — one hypothesis stated as
+a conclusion, and wrong five times out of five. A set that mixes levels
+OVERSHOOTS by a factor; Italy's was 2.4×, which is what that branch was written
+for. An incomplete one UNDERSHOOTS. The message now measures which and says so.
+
+`run_eu_sweep.py`.

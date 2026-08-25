@@ -493,8 +493,14 @@ def _inside(container: str, code: str) -> bool:
 # indexes `prd_use`, cp15 `prd_amo`, the use tables `prd_ava`, and cp1750 is on
 # industries. Asking for one total keeps each response near 24 KB instead of
 # several megabytes.
+# `prd_use` is the USE axis and its total is `TU`, not `CPA_TOTAL` -- that is
+# the total on the AVAILABLE axis. Asking for `prd_use=CPA_TOTAL` names a
+# category that does not exist there, and Eurostat answers 200 with an empty
+# result rather than an error, so the probe reported that NO country publishes
+# a symmetric product-by-product table. Spain publishes twenty-two years of
+# one, and `load_iot` reads it with `prd_use="TU"`, three files away.
 _YEAR_PROBE = {
-    "product_by_product": ("prd_use", "CPA_TOTAL"),
+    "product_by_product": ("prd_use", "TU"),
     "industry_by_industry": ("ind_use", "TOTAL"),
     "supply": ("prd_amo", "CPA_TOTAL"),
     "use_purchasers": ("prd_ava", "CPA_TOTAL"),

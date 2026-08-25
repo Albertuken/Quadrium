@@ -39,7 +39,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Sixty-six validators run on official data from six statistical offices, and
+Sixty-seven validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -58,6 +58,7 @@ Some of what they establish:
 | The **valuation matrices** total their supply columns to 0.0000 on 65 products, three years | `validators/run_valuation_matrices.py` |
 | A result **read back and split again** keeps its provenance: withholding it would relabel 12 of 36 cells from estimate to observation, with the numbers unchanged | `validators/run_export_roundtrip.py` |
 | Every balance tolerance is **derived from the publisher's own printed precision**. Four gates used flat constants instead, and refused two of three real published tables over residues 10–100× inside what their rounding permits | `validators/run_eurostat_config.py` |
+| **Nineteen of twenty-seven** published EU symmetric tables load and are sound; the eight that refuse do so for four distinct reasons, and all eight refusals are correct — Ireland's 2020 table prints a total twice what its own codes carry | `validators/run_eu_sweep.py` |
 | A refused table is **diagnosed, not just measured**: Belgium's pair is +0.8 on `L68A` and −0.8 on `L68B` and 0.000 on the other 87 — a boundary between two halves of one sector, which "off by 0.8000" could not say | `validators/run_sut_closure.py` |
 | Availability is read from the **value map, not the `time` dimension** — which said Germany had data to 2024 and produced a configuration that fails. Germany in fact has no route to a symmetric table through Eurostat at all | `validators/run_availability.py` |
 | The **allocation key moves sizes one-for-one and multipliers not at all** — 1.84800 at every weight from 50/50 to 80/20, so the error bar is arithmetic and a perturbation study would have reported zero and been read as robustness | `validators/run_key_sensitivity.py` |
@@ -88,7 +89,7 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       66 runnable checks against published tables
+validators/       67 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 examples/         four worked pilots

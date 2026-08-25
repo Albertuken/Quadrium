@@ -21,18 +21,38 @@ The years now come from the VALUE map, exactly as the product codes do. It is
 the same trap as `CPA_I55` and `CPA_I56` being listed in Spain's symmetric table
 and populated in neither, met for the third time in this module.
 
-WHAT IT SHOWS, WITH A CONTROL
--------------------------------
-    geo    cp1700      cp1750      cp15        cp16        cp1610
-    DE     none        none        2010-2022   2010-2022   none
-    BE     none        2010-2022   2010-2022   2010-2022   2010-2022
-    ES     1990-2023   -           1990-2024   1990-2024   populated
+AND THE SAME TRAP A FOURTH TIME, IN THE FIX ITSELF
+----------------------------------------------------
+The filter that keeps each probe small has to name a category that EXISTS on
+the axis it names. For `naio_10_cp1700` this asked `prd_use=CPA_TOTAL` — but
+`CPA_TOTAL` is the total on the AVAILABLE axis, and the use axis's total is
+`TU`. `load_iot` reads that same file with `prd_use="TU"`, three files away.
 
-**Germany has no route to a symmetric table through Eurostat at all**: no
-symmetric table, and no use at basic prices, so the pair it does publish cannot
-be transformed either — the domestic/imported split would have to be assumed,
-and this engine will not assume it. Saying that plainly is worth more than a
-configuration that would have failed.
+Eurostat answers 200 with an empty result for a category that does not exist,
+exactly as it does for a year a country does not publish. So the probe reported
+that NO country publishes a symmetric product-by-product table, and this file
+asserted, in those words, that **Germany has no route to a symmetric table
+through Eurostat at all**. Germany publishes THIRTEEN YEARS of one, and the
+2022 file loads here in 65 sectors.
+
+The claim was wrong and it was committed. An empty answer meaning "you asked
+the wrong question" is indistinguishable from one meaning "there is nothing
+there", and what separates them is a control that is known to be populated.
+
+WHAT IT SHOWS ONCE THE PROBE ASKS PROPERLY
+--------------------------------------------
+Twenty-eight countries, every one of which publishes supply and use. What
+differs is the symmetric table and the basic-price use table:
+
+    DE     pxp 13 years   ixi none      cp1610 NONE   -> pair not transformable
+    ES     pxp  9 years   ixi none      cp1610 13
+    DK     pxp none       ixi 18 years  cp1610 18
+    BG     pxp  1 year    ixi none      cp1610 1
+
+Germany is still the one country whose supply-use pair cannot be transformed —
+it publishes no use table at basic prices, so the domestic/imported split would
+have to be assumed — but its symmetric table is reachable, and saying otherwise
+was a bug here.
 
 Run:
     python3 validators/run_availability.py
@@ -97,19 +117,18 @@ def main() -> int:
 
     de = DATA / "_availability_DE.json"
     if not de.exists():
-        skip("Germany has no route to a symmetric table",
+        skip("Germany publishes a symmetric table",
              "DE has not been asked about in this checkout")
     else:
         d = json.loads(de.read_text())
-        check("Germany has no route to a symmetric table through Eurostat",
-              not d.get("product_by_product")
-              and not d.get("industry_by_industry")
-              and not d.get("use_basic")
-              and d.get("supply"),
-              f"supply and use for {d['supply'][0]}–{d['supply'][-1]} and "
-              f"nothing else — no symmetric table, and no use at basic prices, "
-              f"so the pair cannot be transformed either. The answer is that "
-              f"there is no route, not that we failed to look")
+        check("Germany publishes a symmetric table, and the probe sees it",
+              bool(d.get("product_by_product")) and not d.get("use_basic"),
+              f"product-by-product for "
+              f"{d['product_by_product'][0]}–{d['product_by_product'][-1]}, "
+              f"and no use at basic prices — the SYMMETRIC table is reachable "
+              f"and the PAIR is not transformable. This file asserted the "
+              f"opposite until 2026-08-25, because the probe named "
+              f"`prd_use=CPA_TOTAL` on an axis whose total is `TU`")
 
     es = DATA / "_availability_ES.json"
     if es.exists():
