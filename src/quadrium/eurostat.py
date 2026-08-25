@@ -224,6 +224,36 @@ def _shortfall_diagnosis(cube, use_dim, ava_dim, flow, pref, total_code,
               f"broken; it is not all there.")
 
 
+def _tiling_verdict(got: float, published: float, dropped: int,
+                    axis: str = "CPA") -> str:
+    """Over or under, and they are opposite problems with the same maximum.
+
+    `_shortfall_diagnosis` established this for the symmetric route and the
+    supply-use route went on asserting the mixed-levels hypothesis as a
+    conclusion in both of its checks. A set that MIXES LEVELS counts a code
+    inside an aggregate and again on its own, so it overshoots by a factor. A
+    set that is INCOMPLETE undershoots, by a few per cent or by half, and no
+    amount of dropping aggregates will fix it.
+    """
+    ratio = got / published if published else float("nan")
+    if ratio > 1.05:
+        return (f". That OVERSHOOTS by a factor of {ratio:.2f}, which is what "
+                f"a set mixing levels of the {axis} hierarchy does: some code "
+                f"is counted inside an aggregate and again on its own. "
+                f"{dropped} were already dropped as contained in another and "
+                f"it was not enough.")
+    if ratio < 0.999:
+        return (f", which is {100 * (1 - ratio):.2f} % SHORT. This set does "
+                f"not mix levels — it is INCOMPLETE: codes the published "
+                f"total counts carry no value of their own, which is what a "
+                f"table looks like after confidentiality has been applied. "
+                f"Loading it would understate this economy by "
+                f"{published - got:,.1f} without saying so.")
+    return (f". It is neither short enough to be an incomplete table nor over "
+            f"enough to be a mixed-level one, so it is a disagreement between "
+            f"the components and the total this source publishes for them.")
+
+
 def _rounding_tol(n_terms: int, values=None) -> float:
     """The tightest an `n_terms` identity can be held to, for THIS source.
 
@@ -801,24 +831,36 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     # other fixture here populates one level and this drops nothing. The filter
     # was in `load_iot` and not here, and in `load_iot` it had never actually
     # run: it was being handed `CPA_`-prefixed codes and reads bare notation.
+    _sup_values = [v for v in sup.doc["value"].values()
+                   if isinstance(v, (int, float))]
+    _use_values = [v for v in use.doc["value"].values()
+                   if isinstance(v, (int, float))]
     products, aggregated_away, product_notes = _finest_tiling(
         products, lambda c: sup.at(ind_impv="TS_BP", prd_amo=c),
-        lambda n: _rounding_tol(n, [v for v in sup.doc["value"].values()
-                                    if isinstance(v, (int, float))]))
+        lambda n: _rounding_tol(n, _sup_values))
     published = sup.at(ind_impv="TS_BP", prd_amo="CPA_TOTAL")
     got = sum(sup.at(ind_impv="TS_BP", prd_amo=c) for c in products)
-    # Relative, unlike every other tolerance in this module, and for a reason
-    # that is measured: Eurostat rounds each cell to two decimals and publishes
-    # the aggregate independently, so a 65-term sum lands 0.03 from the printed
-    # `CPA_TOTAL` on Austria 2022 -- 2.5e-8 of it. An absolute 1e-3 rejects a
-    # table that is fine. A mixed-level product set, which is what this check
-    # exists to catch, would be out by a whole aggregate.
-    if published is not None and abs(got - published) > 1e-6 * abs(published):
+    # DERIVED, like every other bound in this module. It was `1e-6 * published`
+    # -- relative, and defended in a comment as measured: Austria 2022 lands
+    # 0.03 from its printed `CPA_TOTAL` across a 65-term sum, 2.5e-8 of it, so
+    # a relative constant looked safe where an absolute 1e-3 was not.
+    #
+    # A relative constant is a bound on the wrong quantity. Rounding error
+    # grows with the NUMBER OF TERMS and the precision they are printed to; it
+    # does not grow with the size of the economy. Malta's 2010 supply table
+    # sums to 27,583.1 against a printed 27,583.0 -- one decimal, 65 products,
+    # a gap of 0.1 where the printing allows 3.3 -- and 0.1/27,583 is 3.6e-6,
+    # so it was REFUSED, and refused with an accusation of double counting for
+    # being 0.0004 % over. Austria survived the same rule only by being fifteen
+    # times larger.
+    tol_tiling = _rounding_tol(len(products) + 1, _sup_values)
+    if published is not None and abs(got - published) > tol_tiling:
         raise EurostatError(
             f"the {len(products)} populated products sum to {got:,.1f} against "
-            f"a published total supply of {published:,.1f}: the set mixes "
-            f"levels of the CPA hierarchy and would double count. "
-            f"{len(aggregated_away)} aggregate(s) were already dropped.")
+            f"a published total supply of {published:,.1f} — off by "
+            f"{abs(got - published):,.2f}, where this source's own precision "
+            f"over {len(products) + 1} terms allows {tol_tiling:,.2f}"
+            + _tiling_verdict(got, published, len(aggregated_away)))
 
     # Industries: the bare codes that carry output in the use table.
     # `P` followed by a DIGIT is a final-demand category (`P3`, `P5`, `P6`).
@@ -839,15 +881,17 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     # industries, which is a matrix with 585 holes in it.
     industries, _, _ = _finest_tiling(
         industries, lambda j: use.at(ind_use=j, prd_ava="P1"),
-        lambda n: _rounding_tol(n, [v for v in use.doc["value"].values()
-                                    if isinstance(v, (int, float))]))
+        lambda n: _rounding_tol(n, _use_values))
     g = np.array([use.at(ind_use=j, prd_ava="P1") for j in industries], float)
     published_g = use.at(ind_use="TOTAL", prd_ava="P1")
-    if published_g is not None and abs(g.sum() - published_g) > 1e-6 * abs(published_g):
+    tol_ind = _rounding_tol(len(industries) + 1, _use_values)
+    if published_g is not None and abs(g.sum() - published_g) > tol_ind:
         raise EurostatError(
             f"the {len(industries)} populated industries' output sums to "
-            f"{g.sum():,.1f} against a published {published_g:,.1f}; the set "
-            f"mixes levels of the NACE hierarchy.")
+            f"{g.sum():,.1f} against a published {published_g:,.1f} — off by "
+            f"{abs(g.sum() - published_g):,.2f}, where this source's own "
+            f"precision over {len(industries) + 1} terms allows {tol_ind:,.2f}"
+            + _tiling_verdict(g.sum(), published_g, 0, axis="NACE"))
 
     V = np.array([[sup.at(ind_impv=j, prd_amo=p) or 0.0 for j in industries]
                   for p in products], float)

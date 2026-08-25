@@ -179,9 +179,14 @@ def _catalogue(args) -> int:
 
     if a["best"] and a["action"] in ("load", "split"):
         s = a["best"]["source"]
+        note = _year_advice(s, args.geo, args.data) if args.geo else ""
         print(f"\n  Put this in the `project` sheet:\n")
         for line in s.config_lines():
+            if note and line.startswith("eurostat_year"):
+                line = line.split()[0] + f"    {note[0]}"
             print(f"      {line}")
+        if note:
+            print(f"\n  {note[1]}")
         if a["action"] == "split":
             print(f"\n  and divide `{a['best']['container']}` in the `splits` "
                   f"sheet.")
@@ -289,6 +294,50 @@ def _availability(args, a) -> None:
             print(f"  it carries no usable supply-use pair either.")
 
 
+def _year_advice(source, geo: str, data_root):
+    """Do not print a configuration for a year that is known to refuse.
+
+    The recommendation names whatever file happens to be cached, and for
+    Ireland that was its 2020 symmetric table — 50 % short of its own printed
+    total, refused at every year tried. Handing a user a configuration for it
+    and letting the refusal explain itself later is not advice.
+
+    Returns `(year, sentence)` when the recommended year refuses and something
+    can be said about it, or `""` when the recommendation stands as it is.
+    """
+    import json
+
+    route = "symmetric" if getattr(source, "dataset", "") in (
+        "naio_10_cp1700", "naio_10_cp1750") else "pair"
+    if getattr(source, "table_kind", "") != "eurostat":
+        return ""
+    try:
+        rec = json.loads((Path(data_root) / "data" / "eurostat"
+                          / "_verdicts.json").read_text()).get(geo.upper())
+    except (OSError, ValueError, AttributeError):
+        return ""
+    e = (rec or {}).get(route) or {}
+    if not e or e.get("verdict") == "loads" or e.get("year") != source.year:
+        return ""
+    good = sorted(y for y, v in (e.get("also_tried") or {}).items()
+                  if v == "loads")
+    if good:
+        return (good[-1],
+                f"{source.year} is refused for this country — {e['cause']} — "
+                f"so the year above is {good[-1]}, the newest that was tried "
+                f"and loaded"
+                + (f" (also {', '.join(good[:-1])})" if len(good) > 1 else "")
+                + ".")
+    tried = sorted(e.get("also_tried") or {})
+    return (source.year,
+            f"**{source.year} is refused for this country** — {e['cause']}: "
+            f"{e['detail']}"
+            + (f", and so {'is' if len(tried) == 1 else 'are'} "
+               f"{', '.join(tried)}" if tried else "")
+            + ". The configuration above is what you would write if it "
+              "loaded; it will refuse, and say why.")
+
+
 def _verdicts(geo: str, data_root) -> None:
     """What the newest table of each kind actually did, when it was checked.
 
@@ -297,9 +346,16 @@ def _verdicts(geo: str, data_root) -> None:
     country's newest table by both routes, so the verdict can be named instead
     of hedged.
 
-    EVIDENCE, NOT PREDICTION. Each line says which year was checked. Ireland's
-    2020 symmetric table is 50 % short of its own printed total; whether 2019
-    is too was not tested and is not claimed here.
+    EVIDENCE, NOT PREDICTION. Each line says which year was checked, and which
+    others were. That caveat used to be the whole of this docstring and it was
+    load-bearing: **three of the ten symmetric refusals turned out to be about
+    the year and not the country.** France's 2022 table is refused for sparse
+    final demand and its 2010, 2016 and 2021 tables load — twelve usable years
+    behind a verdict that said "France refuses". Slovakia and Croatia are the
+    same. Ireland, Lithuania, Luxembourg, Malta, Norway, Poland and Sweden
+    refuse in every year tried, which is a different fact and now a stated one.
+
+    Years not tried are still not claimed either way.
     """
     import json
 
@@ -321,6 +377,9 @@ def _verdicts(geo: str, data_root) -> None:
         if not e:
             continue
         year = e.get("year")
+        also = e.get("also_tried") or {}
+        good = sorted(y for y, v in also.items() if v == "loads")
+        bad = sorted(y for y, v in also.items() if v != "loads")
         if e["verdict"] == "loads":
             print(f"      {label:16s} {year}   LOADS")
         elif e["verdict"] == "not published":
@@ -328,8 +387,18 @@ def _verdicts(geo: str, data_root) -> None:
         else:
             print(f"      {label:16s} {year}   REFUSED — {e['cause']}: "
                   f"{e['detail']}")
-    print(f"\n  Checked on the year named, and on that year only — evidence, "
-          f"not a\n  prediction about the others.")
+        # A refusal at the newest year is not a refusal of the country, and
+        # saying so is the difference between France having no table and
+        # France having twelve.
+        if good:
+            print(f"      {'':16s}        but {', '.join(good)} "
+                  f"{'LOADS' if len(good) == 1 else 'LOAD'} — set the year in "
+                  f"your configuration")
+        elif bad and e["verdict"] not in ("loads", "not published"):
+            verb = "does" if len(bad) == 1 else "do"
+            print(f"      {'':16s}        and so {verb} {', '.join(bad)}")
+    print(f"\n  Checked on the years named and on those only — evidence, not "
+          f"a\n  prediction about the rest.")
 
 
 def _wrap(text: str, width: int) -> list[str]:

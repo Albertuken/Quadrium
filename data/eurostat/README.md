@@ -563,3 +563,57 @@ published numbers.
 
 With this, **every refusal across both sweeps is explained and every one is the
 data.** `run_eu_sweep.py`.
+
+---
+
+## Five files kept because they are the years that WORK
+
+`naio_10_cp1700_FR_2021.json`, `naio_10_cp1700_SK_2015.json` and Croatia's 2010
+trio (`cp15`, `cp16`, `cp1610`). Retrieved 2026-08-26; URL, bytes and SHA-256
+in the `.provenance` sidecar beside each.
+
+The sweep of 2026-08-25 checked each country's **newest** table and recorded a
+verdict, with the caveat — in the record itself — that a verdict is about the
+year checked and not a prediction about the others. Tried on three other years
+per refusing country on 2026-08-26:
+
+| route | refuses at the newest year | of which some other year loads |
+|---|---:|---|
+| symmetric | 10 | **3** — FR, HR, SK |
+| supply-use pair | 14 | **2** — HR, PT |
+
+France publishes thirteen years of symmetric tables. Its 2022 is refused for
+sparse final demand and 2010, 2016 and 2021 all load — so "France refuses" was
+a statement about one file. Slovakia's 2020 publishes no output vector and its
+2010 and 2015 are fine. Croatia refuses at 2021 on both routes and loads at 2010
+on both.
+
+The reach is **21 of 28 countries by the symmetric route and 16 of 28 by the
+pair**, at some year, provided the user is told which — which `--find` now is.
+
+The other seven and twelve refuse in every year tried. Ireland is 50 % short of
+its own printed total in 2010, 2011, 2015 and 2020 alike. That is structural,
+and it is now measured rather than assumed.
+
+About ninety files were fetched for this and are not kept. These five are, because
+they are the evidence for the claim, and a claim whose evidence lives in a
+temporary directory is a claim on trust. `library/validators/run_year_axis.py`
+re-derives it from them.
+
+### And the defect the probe found
+
+Malta's 2010 supply table was refused with *"the 65 populated products sum to
+27,583.1 against a published total supply of 27,583.0: the set mixes levels of
+the CPA hierarchy and would double count."* **0.1 on 27,583.**
+
+The comparison was `1e-6 * published` — relative, and defended in a comment as
+measured, because Austria 2022 lands 0.03 from its own printed total and an
+absolute `1e-3` would refuse it. But rounding error grows with the number of
+terms and the precision they are printed to, not with the size of the economy:
+Austria survived that rule by being fifteen times larger than Malta. Both of
+`load_sut`'s tiling checks now derive the bound the way the rest of the module
+does, and both say whether the set OVERSHOOTS (mixes levels) or falls SHORT
+(incomplete) instead of asserting the first.
+
+Malta is still refused, on the industry axis, 20.08 % short — correctly, and now
+for the reason that is true.

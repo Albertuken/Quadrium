@@ -1,0 +1,10 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp15?format=JSON&geo=HR&time=2010&unit=MIO_EUR",
+  "dataset": "naio_10_cp15",
+  "geo": "HR",
+  "year": 2010,
+  "bytes": 72917,
+  "sha256": "35b846ac2c6c0584e101496595801faf3c6265055d15e7df38ac3bdcc89a492c",
+  "retrieved": "2026-08-26",
+  "why": "kept because it is a year that LOADS for a country whose newest year refuses \u2014 the evidence that a verdict is about the year and not the country"
+}

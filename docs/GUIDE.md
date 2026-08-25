@@ -271,6 +271,14 @@ January and another in June with nothing in the output to say why.
 - `--offline` refuses to fetch anything and prints the URL, so you can bring
   the file in by hand.
 
+**If your country's newest table refuses, try an earlier year.** `--find` with
+`--geo` prints what happened when each route was last loaded, and for three
+countries the answer is "the newest refuses and an earlier one loads" — France's
+2022 symmetric table is refused for sparse final demand and its 2010, 2016 and
+2021 load. The adviser names the year and puts it in the configuration it
+prints. For seven other countries every year tried refuses, and it says that
+too, rather than handing you a configuration that will fail.
+
 One caveat worth knowing before you plan a project around it. Eurostat
 harmonises the **format**, not the method: the same dataset codes and the same
 classification for every member state, with no record of how each office got

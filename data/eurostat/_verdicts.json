@@ -1,12 +1,14 @@
 {
   "AT": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -16,12 +18,14 @@
   },
   "BE": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -31,12 +35,14 @@
   },
   "BG": {
     "pair": {
+      "also_tried": {},
       "cause": "files disagree",
       "detail": "its own files give different figures for the same quantity",
       "verdict": "refuses",
       "year": 2010
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -46,12 +52,18 @@
   },
   "CY": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2016": "refuses",
+        "2021": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -61,12 +73,14 @@
   },
   "CZ": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2024
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -82,6 +96,7 @@
       "year": null
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -91,12 +106,18 @@
   },
   "DK": {
     "pair": {
+      "also_tried": {
+        "2005": "refuses",
+        "2013": "refuses",
+        "2021": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1750",
       "detail": "",
@@ -106,12 +127,14 @@
   },
   "EE": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2021
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -121,12 +144,14 @@
   },
   "EL": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -136,12 +161,14 @@
   },
   "ES": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -151,12 +178,18 @@
   },
   "FI": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2016": "refuses",
+        "2022": "refuses"
+      },
       "cause": "sparse final demand",
       "detail": "final demand is published too sparsely to assemble",
       "verdict": "refuses",
       "year": 2023
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1750",
       "detail": "",
@@ -166,12 +199,18 @@
   },
   "FR": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "loads",
+        "2016": "loads",
+        "2021": "loads"
+      },
       "cause": "sparse final demand",
       "dataset": "cp1700",
       "detail": "final demand is published too sparsely to assemble",
@@ -181,12 +220,22 @@
   },
   "HR": {
     "pair": {
+      "also_tried": {
+        "2010": "loads",
+        "2015": "loads",
+        "2020": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2021
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "loads",
+        "2015": "refuses",
+        "2020": "refuses"
+      },
       "cause": "sparse final demand",
       "dataset": "cp1700",
       "detail": "final demand is published too sparsely to assemble",
@@ -196,12 +245,14 @@
   },
   "HU": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2023
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -211,12 +262,22 @@
   },
   "IE": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2011": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2011": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "dataset": "cp1700",
       "detail": "the table's codes do not sum to the total it prints",
@@ -226,12 +287,14 @@
   },
   "IT": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -241,12 +304,21 @@
   },
   "LT": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2017": "refuses",
+        "2021": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "dataset": "cp1700",
       "detail": "the table's codes do not sum to the total it prints",
@@ -256,12 +328,22 @@
   },
   "LU": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2016": "refuses",
+        "2021": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2016": "refuses",
+        "2021": "refuses"
+      },
       "cause": "no output vector",
       "dataset": "cp1700",
       "detail": "no output vector is published at all",
@@ -271,12 +353,14 @@
   },
   "LV": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -286,12 +370,22 @@
   },
   "MT": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2014": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {
+        "2013": "refuses",
+        "2014": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "dataset": "cp1700",
       "detail": "the table's codes do not sum to the total it prints",
@@ -301,12 +395,14 @@
   },
   "NL": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2024
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1750",
       "detail": "",
@@ -316,12 +412,21 @@
   },
   "NO": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2017": "refuses",
+        "2022": "refuses"
+      },
       "cause": "incomplete",
       "dataset": "cp1750",
       "detail": "the table's codes do not sum to the total it prints",
@@ -331,12 +436,20 @@
   },
   "PL": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "detail": "the table's codes do not sum to the total it prints",
       "verdict": "refuses",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2015": "refuses"
+      },
       "cause": "incomplete",
       "dataset": "cp1700",
       "detail": "the table's codes do not sum to the total it prints",
@@ -346,12 +459,18 @@
   },
   "PT": {
     "pair": {
+      "also_tried": {
+        "2010": "loads",
+        "2016": "refuses",
+        "2022": "refuses"
+      },
       "cause": "sparse final demand",
       "detail": "final demand is published too sparsely to assemble",
       "verdict": "refuses",
       "year": 2023
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -361,12 +480,14 @@
   },
   "RO": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1750",
       "detail": "",
@@ -376,12 +497,22 @@
   },
   "SE": {
     "pair": {
+      "also_tried": {
+        "2010": "refuses",
+        "2020": "refuses",
+        "2022": "refuses"
+      },
       "cause": "files disagree",
       "detail": "its own files give different figures for the same quantity",
       "verdict": "refuses",
       "year": 2023
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "refuses",
+        "2016": "refuses",
+        "2022": "refuses"
+      },
       "cause": "files disagree",
       "dataset": "cp1700",
       "detail": "its own output and total use disagree",
@@ -391,12 +522,14 @@
   },
   "SI": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2020
     },
     "symmetric": {
+      "also_tried": {},
       "cause": "",
       "dataset": "cp1700",
       "detail": "",
@@ -406,12 +539,17 @@
   },
   "SK": {
     "pair": {
+      "also_tried": {},
       "cause": "",
       "detail": "",
       "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
+      "also_tried": {
+        "2010": "loads",
+        "2015": "loads"
+      },
       "cause": "no output vector",
       "dataset": "cp1700",
       "detail": "no output vector is published at all",

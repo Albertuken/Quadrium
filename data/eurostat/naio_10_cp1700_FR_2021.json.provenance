@@ -1,0 +1,10 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&geo=FR&time=2021&unit=MIO_EUR",
+  "dataset": "naio_10_cp1700",
+  "geo": "FR",
+  "year": 2021,
+  "bytes": 491207,
+  "sha256": "b7e5ca785bc4dd31e23e51533ae46f8baf09e1a22cb06e9dd6e78c8afe6f7672",
+  "retrieved": "2026-08-26",
+  "why": "kept because it is a year that LOADS for a country whose newest year refuses \u2014 the evidence that a verdict is about the year and not the country"
+}
