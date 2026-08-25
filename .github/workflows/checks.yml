@@ -44,10 +44,13 @@ jobs:
       # and a package that imports from a checkout but does not install is a
       # package nobody can use -- which is how `--template` came to tell
       # installed users to run a file they do not have.
+      # `.[dev]` and not `.` — scipy is a CHECKING dependency, not a runtime one.
+      # The engine degrades without it and says so; the validator that tests
+      # that degradation cannot.
       - name: install
         run: |
           python -m pip install --upgrade pip
-          pip install . pytest
+          pip install ".[dev]"
 
       - name: the console script exists and answers
         run: quadrium --help

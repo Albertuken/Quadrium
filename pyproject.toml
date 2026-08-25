@@ -23,6 +23,12 @@ dependencies = ["numpy>=1.24", "openpyxl>=3.1"]
 
 [project.optional-dependencies]
 pdf = ["pymupdf>=1.23"]
+# The engine is numpy-only on purpose and stays that way: `sign_pattern_feasible`
+# falls back to its per-line test when scipy is absent, and says so. But the
+# VALIDATOR for that function cannot do its job without the exact test, so scipy
+# is a checking dependency. It was undeclared until CI ran without it and the
+# validator failed, correctly, rather than passing on a test it had not run.
+dev = ["pytest>=7", "scipy>=1.10"]
 
 [project.scripts]
 quadrium = "quadrium.cli:main"

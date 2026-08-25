@@ -137,9 +137,27 @@ def main() -> int:
         worst = max(float(np.abs(a - b).max()) for a, b in
                     ((back.Z, g1.table.Z), (back.Y, g1.table.Y),
                      (back.VA, g1.table.VA), (back.X, g1.table.X)))
-        check("every number survives the round trip exactly", worst == 0.0,
-              f"Z, Y, VA and Output all reload to {worst:g} of the table in "
-              f"memory — written at full precision, not at the display format")
+        # WHAT THIS IS ACTUALLY TESTING, and it is not bit-identity.
+        #
+        # The failure it exists to catch is a workbook written at the DISPLAY
+        # precision -- the sheets carry `number_format = "#,##0.00"` -- which
+        # would reload two decimals out, of order 5e-3. What it must tolerate
+        # is the last bit of a float64 surviving a trip through openpyxl's
+        # serialiser, which is not guaranteed to be exact.
+        #
+        # `worst == 0.0` conflated the two. It held on macOS and failed in CI
+        # on Linux at 8.88e-16, one ULP on a value near 4 — the first thing
+        # continuous integration found, on its first run, which is the whole
+        # argument for having it. The bound below sits eleven orders of
+        # magnitude below the defect and a few ULP above the noise.
+        scale = max(float(np.abs(g1.table.Z).max()),
+                    float(np.abs(g1.table.X).max()), 1.0)
+        bound = 16 * float(np.finfo(float).eps) * scale
+        check("every number survives the round trip to the last bit",
+              worst <= bound,
+              f"Z, Y, VA and Output reload to {worst:.3g}, against a bound of "
+              f"{bound:.3g} — full precision, not the two decimals the sheets "
+              f"are FORMATTED to, which would be out by ~5e-3")
         check("and so do the codes and the labels",
               back.sector_codes == g1.table.sector_codes
               and back.sector_labels == g1.table.sector_labels,
