@@ -18,27 +18,43 @@ Models A (product technology) and B (industry technology) applied to four real
 2022 supply-use pairs from Eurostat, in total flows, on the 64 sectors that carry
 output:
 
-    country   secondary production   model A negatives   worst cell
-    FR                 1.23 %              0.121 %          -829.4
-    AT                10.36 %              1.664 %          -840.9
-    ES                 9.59 %              1.840 %        -2,201.9
-    NL                15.38 %              4.568 %        -3,805.2
+    country   sectors   secondary production   model A negatives   worst cell
+    FR           86             1.23 %              0.317 %        -3,219.8
+    AT           64            10.36 %              1.664 %          -840.9
+    ES           64             9.59 %              1.840 %        -2,201.9
+    NL           64            15.38 %              4.568 %        -3,805.2
 
 **Model B produces exactly zero negatives in all four**, which is what the
 algebra says and is now observed rather than assumed.
 
-**Model A's negatives span a factor of thirty-eight between France and the
+**Model A's negatives span a factor of fourteen between France and the
 Netherlands.** So CORE_005's argument is not wrong and not universally strong:
-it is worth 0.12 % of the interindustry matrix in France and 4.6 % in the
+it is worth 0.3 % of the interindustry matrix in France and 4.6 % in the
 Netherlands. A project deciding "which model" without saying "for which country"
 is answering a question that has four different answers.
+
+FRANCE'S FIGURE MOVED ON 2026-08-25, AND THE REASON IS WORTH KEEPING
+----------------------------------------------------------------------
+It read **0.121 % on 64 sectors** here until the loaders began keeping the
+FINEST tiling a publisher offers instead of the coarsest. France transmits both
+levels — `C10`, `C11`, `C12` beside `C10-12` — and was being read at the coarse
+one, so this file was measuring a France that France does not publish. At the
+detail it does publish, 86 sectors survive the squaring and model A's negatives
+weigh 0.317 %, not 0.121 %, with the worst cell four times deeper.
+
+The conclusion holds and the headline number does not: the spread across
+countries is a factor of about fourteen, not thirty-eight. Aggregation hides
+negatives, which is the expected direction — offsetting entries inside an
+aggregate cancel — and it is a reminder that every figure in this table is a
+statement about a table at a level of detail, not about an economy.
 
 WHY FRANCE IS DIFFERENT, AND IT IS NOT AN ACCIDENT
 ---------------------------------------------------
 `M-059` records CORE_008 Box 5.1, p. 144: France redefines until its supply table
 is diagonal, so "the second step (compiling the IOTs) becomes superfluous."
-Measured here at the 64-sector level, French secondary production is 1.23 %
-against 9.6–15.4 % elsewhere. **The negatives were removed upstream, by hand, in
+Measured at the detail France publishes, French secondary production is 1.23 %
+against 9.6–15.4 % elsewhere — and unlike the negatives, that figure is
+unchanged by the move from 64 sectors to 86. **The negatives were removed upstream, by hand, in
 compilation** — which is exactly the treatment CORE_008 ¶5.54, p. 143 says is
 preferred because automatic methods "give rise to negative elements".
 
@@ -54,8 +70,10 @@ WHAT IS **NOT** CLAIMED
 That negatives are a function of secondary production. The four points rise
 together and the ratio rises with them — 0.099, 0.161, 0.192, 0.297 — but
 **n = 4, and Austria and Spain swap places**: Austria has more secondary
-production than Spain and fewer negatives. A Pearson correlation of 0.93 on four
-observations is not evidence of a law. What the four support is a tendency and an
+production than Spain and fewer negatives. A Pearson correlation on four
+observations is not evidence of a law — and the four points are not even
+measured at one level of detail, since France is read at 86 sectors and the
+others at 64. What the four support is a tendency and an
 order of magnitude, and that is all this file claims.
 
 Nor does anything here choose a model. `OQ-T-03` asked what the recorded
@@ -94,9 +112,28 @@ def _blocks(geo: str):
     if not (sup.exists() and use.exists()):
         return None
     s = load_sut(sup, use)
-    k = (s.q > 0) & (s.g > 0)
-    return (s.V[np.ix_(k, k)], s.U[np.ix_(k, k)], s.Y[k], s.W[:, k],
-            s.g[k], s.q[k], int(k.sum()))
+    # SQUARING A RECTANGULAR SYSTEM, EXPLICITLY. The arithmetic below indexes
+    # the product and industry axes with one mask, which held while every
+    # fixture was square and stopped holding on 2026-08-25, when the loaders
+    # began keeping the finest tiling a publisher offers. France publishes 89
+    # products against 88 industries: `T98`, services of households producing
+    # for own use, is a product and not an industry. That is an ordinary
+    # supply-use table, not a defect.
+    #
+    # Models A and C need a square system, so the comparison is made on the
+    # codes that appear on BOTH axes -- one product dropped for France, none
+    # for anyone else -- rather than by dropping France, whose 0.121 % is the
+    # low end of the spread this file measures.
+    codes = [c.replace("CPA_", "") for c in s.product_codes]
+    both = set(codes) & set(s.activity_codes)
+    pi = [i for i, c in enumerate(codes) if c in both]
+    ai = [s.activity_codes.index(c) for c in codes if c in both]
+    s_q, s_g = s.q[pi], s.g[ai]
+    k = (s_q > 0) & (s_g > 0)
+    pk = [pi[i] for i, keep in enumerate(k) if keep]
+    ak = [ai[i] for i, keep in enumerate(k) if keep]
+    return (s.V[np.ix_(pk, ak)], s.U[np.ix_(pk, ak)], s.Y[pk], s.W[:, ak],
+            s.g[ak], s.q[pk], len(pk))
 
 
 def main() -> int:
@@ -147,8 +184,11 @@ def main() -> int:
 
     worst = max(e["A"][2] for e in rows.values())
     best = min(e["A"][2] for e in rows.values())
-    check("but its WEIGHT is national, and spans a factor of about forty",
-          worst / best > 20,
+    # `> 20` until 2026-08-25, when France began loading at the detail it
+    # publishes and its 0.121 % became 0.317 %. The threshold follows the
+    # measurement rather than the measurement being trimmed to the threshold.
+    check("but its WEIGHT is national, and spans a factor of about fourteen",
+          worst / best > 10,
           f"{best:.3%} in "
           f"{min(rows, key=lambda g: rows[g]['A'][2])} against {worst:.3%} in "
           f"{max(rows, key=lambda g: rows[g]['A'][2])} — 'which model' has four "

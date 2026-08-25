@@ -90,9 +90,18 @@ def main() -> int:
         if not (sup.exists() and use.exists()):
             continue
         s = load_sut(sup, use)
-        k = (s.q > 0) & (s.g > 0)
-        V0, U = s.V[np.ix_(k, k)], s.U[np.ix_(k, k)]
-        Y, W, g, q = s.Y[k], s.W[:, k], s.g[k], s.q[k]
+        # Squared on the codes present on both axes -- see run_model_axioms.
+        # France publishes 89 products against 88 industries; `T98` is a
+        # product and not an industry.
+        codes = [c.replace("CPA_", "") for c in s.product_codes]
+        both = set(codes) & set(s.activity_codes)
+        pi = [i for i, c in enumerate(codes) if c in both]
+        ai = [s.activity_codes.index(c) for c in codes if c in both]
+        k = (s.q[pi] > 0) & (s.g[ai] > 0)
+        pi = [pi[i] for i, keep in enumerate(k) if keep]
+        ai = [ai[i] for i, keep in enumerate(k) if keep]
+        V0, U = s.V[np.ix_(pi, ai)], s.U[np.ix_(pi, ai)]
+        Y, W, g, q = s.Y[pi], s.W[:, ai], s.g[ai], s.q[pi]
         zero = np.zeros_like(U)
         d = printed_decimals(V0)
         band = 0.5 * 10.0 ** -d if d is not None else 0.0

@@ -57,7 +57,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .eurostat import DATASETS, _bare, _covers, _drop_aggregates
+from .eurostat import (DATASETS, _bare, _covers, _finest_tiling,
+                       _rounding_tol)
 
 # Which `table_kind` a configuration would need, per publisher.
 # The dimension names Eurostat uses for a classification axis, in the order
@@ -84,12 +85,20 @@ class Source:
     kind: str = "table"
     codes: list[str] = field(default_factory=list)
     labels: dict = field(default_factory=dict)
-    # Codes the PUBLISHER publishes and the loader discards. Eurostat serves
-    # both levels where a country publishes both, and `_drop_aggregates` keeps
-    # the coarser tiling, so France's supply table arrives at 73 products when
-    # 97 were published. Recorded rather than hidden: a catalogue that reported
-    # only what the loader delivers would tell an analyst to estimate something
-    # their own statistical office has already measured.
+    # Codes the PUBLISHER publishes that this entry's tiling does not carry.
+    #
+    # It was the point of this field until 2026-08-25: the loaders kept the
+    # COARSER tiling, so France's supply table arrived at 65 products when 89
+    # were published, and an analyst wanting food manufacturing would have been
+    # told to estimate what their own office had measured. The loaders now keep
+    # the finest tiling whose components verifiably sum to their parent, so for
+    # a table this is normally empty.
+    #
+    # It stays populated here because the catalogue reads the file directly and
+    # can still see a level the loader declined — where the components do NOT
+    # sum to their parent, the parent is kept and the partial set is dropped,
+    # and an analyst asking for one of those codes deserves to be told that it
+    # exists and why it is not loadable rather than told to split.
     finer: list[str] = field(default_factory=list)
     # Every country in the response. A table is one country; a proxy cube is
     # often eleven, and taking the first of them -- as this did until the SBS
@@ -156,11 +165,33 @@ def _eurostat_source(path: Path) -> Source | None:
     live = [inverse[i] for i in sorted(live_positions) if i in inverse]
 
     bare_live = [_bare(c) for c in live]
-    kept, dropped = _drop_aggregates(bare_live)
-    # The mirror rule: the codes that are not aggregates of anything else
-    # present, i.e. the finest complete tiling the publisher offers.
-    finest = [c for c in bare_live if not any(_covers(c, o) for o in bare_live)]
-    finer_only = sorted(set(finest) - set(kept))
+
+    # THE SAME RULE THE LOADERS USE, so the catalogue reports what the engine
+    # will actually deliver. The components replace their parent when their
+    # totals sum to its total; where they do not, the parent stays.
+    #
+    # The total per code here is the sum of ITS OWN published cells across the
+    # rest of the cube, because a bare scan does not know which column is the
+    # published total and must not guess. That is close to what `load_iot` and
+    # `load_sut` compute from `TU` and `TS_BP` and not identical to it — those
+    # also intersect the supply and use files — so a count here can differ from
+    # the loaded table's by a few codes. It is a catalogue, and the question it
+    # answers is whether a code is reachable at all.
+    values = [v for v in value.values() if isinstance(v, (int, float))]
+    totals: dict = {}
+    for k, v in value.items():
+        if not isinstance(v, (int, float)):
+            continue
+        c = inverse.get((int(k) // stride) % size[pos])
+        if c:
+            totals[_bare(c)] = totals.get(_bare(c), 0.0) + v
+    kept, dropped, _notes = _finest_tiling(
+        bare_live, totals.get, lambda n: _rounding_tol(n, values))
+    # What is published and still not carried: a partial set of components,
+    # kept out because taking them would lose whatever the publisher did not
+    # serve. An analyst asking for one of those deserves to hear that it exists
+    # and why it is not loadable, rather than be told to split.
+    finer_only = sorted(c for c in dropped if any(_covers(o, c) for o in kept))
     geo = doc["dimension"].get("geo", {}).get("category", {}).get("index", {})
     time = doc["dimension"].get("time", {}).get("category", {}).get("index", {})
     geo_all = sorted(geo)

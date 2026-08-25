@@ -60,7 +60,7 @@ Four answers are possible:
 |---|---|
 | **load** | Someone publishes it as a sector of its own. You do not need this tool for that sector — take the table and read the row. |
 | **split** | It exists only inside a coarser sector, which is named. That coarser sector is what you divide, and this is the case the engine is built for. |
-| **publisher has it** | Your own office publishes it and this engine currently folds it into a coarser code when it loads the file. Do not estimate what has been measured. |
+| **publisher has it** | Your office publishes the code, but only as part of a set whose pieces do not add up to their parent — so taking them would lose whatever was not published. It exists; it is not loadable. Do not estimate it with a proxy without looking at the file first. |
 | **none** | No table on disk covers the code. Check it against the classification, or fetch a table that might carry it. |
 
 `--geo` is not optional in spirit. Without it nothing is recommended, only
@@ -72,7 +72,15 @@ quadrium --sources
 ```
 
 lists every table on disk, how many sectors each distinguishes, and how much
-detail the publisher publishes that the loader discards. It also lists the
+detail the publisher publishes that is nonetheless not loadable.
+
+Where a publisher serves both a code and its components — France transmits
+`C10`, `C11` and `C12` alongside `C10-12` — **the engine keeps the components**,
+provided their published totals add up to the parent's. It checks that
+arithmetically rather than trusting the notation, because a publisher may serve
+only some of an aggregate's pieces, and taking those would silently lose the
+rest. France's supply-use pair therefore loads at 89 products by 88 industries
+rather than 65 by 65. It also lists the
 sources that **measure** sectors rather than being tables — candidate
 allocation keys for the split you are about to do — and says when one of them
 covers only part of the sector you asked about, which means it cannot drive

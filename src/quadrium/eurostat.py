@@ -199,7 +199,7 @@ def _bare(code: str) -> str:
     range separator -- so a `CPA_` in front of it defeats every pattern they
     match. THEY WERE BEING GIVEN PREFIXED CODES, and had been since they were
     written: `load_iot` strips `pref` only when it builds `sector_codes`, long
-    after `_drop_aggregates` has run. The filter was a silent no-op on every
+    after `_coarsest_tiling` has run. The filter was a silent no-op on every
     `CPA_` dataset, and the conclusion drawn from that -- "no fixture mixes
     hierarchy levels" -- was an artefact of the blindness, not a fact about the
     data. France publishes `B` beside `B05`-`B09` and `C10-12` beside `C10`,
@@ -256,8 +256,19 @@ def _covers(a: str, b: str) -> bool:
     return db < da or (db <= da and len(db) < len(da))
 
 
-def _drop_aggregates(codes: list[str]) -> tuple[list[str], list[str]]:
-    """Keep the codes no other populated code contains; report what went.
+def _coarsest_tiling(codes: list[str]) -> tuple[list[str], list[str]]:
+    """Keep the AGGREGATES and drop their components; report what went.
+
+    The name was `_coarsest_tiling` until 2026-08-25 and said the opposite of
+    what the body does: `kept` is the codes that nothing else contains, which
+    is the COARSER level. The note below compounded it by describing the
+    aggregates coming out of France's supply table when what comes out are the
+    components. Both readings avoid double counting, so nothing ever failed;
+    what it cost was resolution, which is this engine's product.
+
+    `_finest_tiling` is what the table loaders use now. This stays for the
+    checks that compare published aggregates against each other, where the
+    coarse level is the one being tested.
 
     NO FIXTURE IN THIS PROJECT EXERCISES THIS, AND THE HONEST HISTORY IS THAT
     IT WAS WRITTEN FOR A MISDIAGNOSIS. Italy's industry table summed to
@@ -276,6 +287,70 @@ def _drop_aggregates(codes: list[str]) -> tuple[list[str], list[str]]:
     """
     kept = [c for c in codes if not any(_covers(o, c) for o in codes)]
     return kept, [c for c in codes if c not in kept]
+
+
+def _immediate_children(parent: str, codes: list[str]) -> list[str]:
+    """The codes directly below `parent`, with no other present code between.
+
+    Three levels do appear: section `C`, then `C10-12`, then `C10`. Taking
+    everything `parent` covers would count `C10` twice — once on its own and
+    once inside `C10-12` — and the sum would then never match anything.
+    """
+    kids = [c for c in codes if _covers(parent, c)]
+    return [c for c in kids if not any(_covers(o, c) for o in kids)]
+
+
+def _finest_tiling(codes: list[str], total_of, tol) -> tuple[list, list, list]:
+    """Keep the components rather than the aggregate — when they add up to it.
+
+    WHY THE FINER LEVEL, AND WHY THE DECISION IS ARITHMETIC
+    --------------------------------------------------------
+    A country that publishes both `C10-12` and `C10`, `C11`, `C12` has measured
+    food, drink and tobacco separately. `_coarsest_tiling` kept the aggregate,
+    so France's use table arrived at 75 products where 115 were published, and
+    an analyst who wanted food manufacturing was told to ESTIMATE with a proxy
+    what their own statistical office had already measured. Either level avoids
+    double counting; only one of them is the data.
+
+    But the finer level is not always available even where it appears. A
+    publisher may serve some components of an aggregate and not others, and
+    keeping those would silently lose whatever it did not serve. So the choice
+    is made from the numbers rather than from the notation: the components
+    replace their parent exactly when THEIR PUBLISHED TOTALS SUM TO ITS
+    PUBLISHED TOTAL, within the rounding the source's own precision permits.
+    Where they do not, the parent stays and the partial set goes — and the
+    reason is returned, not swallowed.
+
+    `total_of(code)` gives one published figure per code (total use, total
+    supply) and may return None for a code the country does not publish there.
+    `tol(n_terms)` is the rounding floor for a sum of that many published
+    figures.
+    """
+    drop: set = set()
+    notes: list[str] = []
+    for parent in codes:
+        kids = _immediate_children(parent, codes)
+        if not kids:
+            continue
+        vp = total_of(parent)
+        vk = [total_of(c) for c in kids]
+        if vp is None or any(v is None for v in vk):
+            drop.update(kids)
+            notes.append(f"{_bare(parent)}: kept, because at least one of its "
+                         f"{len(kids)} components has no published total to "
+                         f"check against")
+            continue
+        gap = abs(sum(vk) - vp)
+        if gap <= tol(len(vk) + 1):
+            drop.add(parent)
+        else:
+            drop.update(kids)
+            notes.append(
+                f"{_bare(parent)}: kept, because its {len(kids)} published "
+                f"components sum to {sum(vk):,.1f} against its own "
+                f"{vp:,.1f} — off by {gap:,.1f}, so they are a PARTIAL set "
+                f"and taking them would lose the rest")
+    return ([c for c in codes if c not in drop], sorted(drop), notes)
 
 
 class _Cube:
@@ -381,7 +456,7 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
     #      suppliers and final-demand columns only as users, so this removes
     #      every accounting row without a hard-coded list of them.
     #   2. it carries a value. The country actually publishes it.
-    #   3. it is not contained in another surviving code (`_drop_aggregates`).
+    #   3. it is not contained in another surviving code (`_coarsest_tiling`).
     #
     # RULE 1 IS NOT DECORATION. With `pref = "CPA_"` the prefix did this work by
     # accident; with the bare NACE codes of `cp1750` there is no prefix, and
@@ -404,7 +479,11 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
         raise EurostatError(
             f"no {pref} code carries a value for stk_flow={flow!r} in "
             f"{path.name}. The country may not publish this variant.")
-    codes, aggregated_away = _drop_aggregates(codes)
+    def _tu(c):
+        return cube.at(stk_flow=flow, **{use_dim: "TU", ava_dim: c})
+
+    codes, aggregated_away, tiling_notes = _finest_tiling(
+        codes, _tu, lambda n: _rounding_tol(n, published_values))
     published_total = cube.at(stk_flow=flow, **{use_dim: "TU",
                                                 ava_dim: total_code})
     got = sum(cube.at(stk_flow=flow, **{use_dim: "TU", ava_dim: c})
@@ -657,7 +736,10 @@ def load_sut(supply_path: Path | str, use_path: Path | str) -> SupplyUseTables:
     # other fixture here populates one level and this drops nothing. The filter
     # was in `load_iot` and not here, and in `load_iot` it had never actually
     # run: it was being handed `CPA_`-prefixed codes and reads bare notation.
-    products, aggregated_away = _drop_aggregates(products)
+    products, aggregated_away, product_notes = _finest_tiling(
+        products, lambda c: sup.at(ind_impv="TS_BP", prd_amo=c),
+        lambda n: _rounding_tol(n, [v for v in sup.doc["value"].values()
+                                    if isinstance(v, (int, float))]))
     published = sup.at(ind_impv="TS_BP", prd_amo="CPA_TOTAL")
     got = sum(sup.at(ind_impv="TS_BP", prd_amo=c) for c in products)
     # Relative, unlike every other tolerance in this module, and for a reason
@@ -683,7 +765,17 @@ def load_sut(supply_path: Path | str, use_path: Path | str) -> SupplyUseTables:
                   if j not in ("TOTAL", "TU", "TFU")
                   and not re.match(r"^P\d", j)
                   and use.at(ind_use=j, prd_ava="P1") is not None]
-    industries, _ = _drop_aggregates(industries)   # France, Denmark: both levels
+    # France and Denmark publish both levels. The figure the components are
+    # tested against has to be the industry's OWN total, and the industry's own
+    # total is its output `P1` in the use table -- the same number the check
+    # below sums. Reaching into the supply table's `CPA_TOTAL` column instead
+    # asks a question about a dimension the fine industries are not indexed on,
+    # gets None, and keeps every aggregate: fine products against coarse
+    # industries, which is a matrix with 585 holes in it.
+    industries, _, _ = _finest_tiling(
+        industries, lambda j: use.at(ind_use=j, prd_ava="P1"),
+        lambda n: _rounding_tol(n, [v for v in use.doc["value"].values()
+                                    if isinstance(v, (int, float))]))
     g = np.array([use.at(ind_use=j, prd_ava="P1") for j in industries], float)
     published_g = use.at(ind_use="TOTAL", prd_ava="P1")
     if published_g is not None and abs(g.sum() - published_g) > 1e-6 * abs(published_g):

@@ -22,16 +22,19 @@ FOUR THINGS THIS FOUND ABOUT THE ENGINE ITSELF
 Cataloguing what the loaders deliver meant comparing it against what the
 publishers publish, and they differ:
 
-  * **France publishes 97 products in its use table and the engine loads 73.**
-    Where a country serves both a code and its components, `_drop_aggregates`
-    keeps the coarser tiling — the function's name says the opposite of what it
-    does, and the note beside it describes removing the aggregates when what
-    comes out are the components. So `C10`, `C11` and `C12` arrive folded into
-    `C10-12`, and an analyst wanting food manufacturing would be told to
-    estimate what their own office has measured. `find()` reports this as its
-    own verdict, PUBLISHED_NOT_LOADED, rather than quietly reporting the
-    coarser number. **Changing which tiling is kept is a decision about how
-    every table is read and has not been taken here.**
+  * **France published 97 products in its use table and the engine loaded 73** —
+    and this is why. Where a country serves both a code and its components,
+    the chooser kept the coarser tiling; its name said the opposite of what it
+    did, and the note beside it described removing the aggregates when what
+    came out were the components. `C10`, `C11` and `C12` arrived folded into
+    `C10-12`, and an analyst wanting food manufacturing would have been told to
+    estimate what their own office had measured. **Settled the same day: the
+    loaders keep the finest tiling whose components verifiably sum to their
+    parent.** France's supply-use pair went from 65 x 65 to 89 x 88; Spain,
+    Austria and the Netherlands did not move. `find()` keeps its
+    PUBLISHED_NOT_LOADED verdict for what remains genuinely unreachable — a
+    partial set of components, kept out because taking it would lose whatever
+    the publisher did not serve.
 
   * **Ranking sources by resolution across countries is wrong**, and the first
     draft did it: asked where accommodation is available, it recommended the
@@ -123,17 +126,18 @@ def main() -> int:
           "a finer table for another economy answers a different question, and "
           "the first draft of this recommended exactly that")
 
-    # 4 -- detail the publisher publishes and the loader drops.
+    # 4 -- the catalogue reports the tiling the loaders now deliver.
     fr = [s for s in tables if s.geo == "FR"]
-    check("detail the publisher publishes and the loader discards is recorded",
-          any(s.finer for s in fr),
-          "; ".join(f"{s.source_id} loads {s.resolution}, discards "
-                    f"{len(s.finer)}" for s in fr))
     c10 = advise("C10", sources, "FR")
-    check("and asking for one of those codes says so, not 'split it'",
-          c10["action"] == "publisher_has_it",
-          "France publishes C10 and the engine folds it into C10-12. "
-          "Splitting that with a proxy would estimate a published measurement")
+    check("France is catalogued at the detail France publishes",
+          c10["action"] == "load" and c10["best"]["source"].geo == "FR",
+          "; ".join(f"{s.source_id} at {s.resolution}" for s in fr)
+          + " — 65 under the coarsest tiling, which was the answer until "
+            "2026-08-25 and would have sent an analyst to estimate C10")
+    check("and a partial set of components is still recorded as unreachable",
+          all(isinstance(s.finer, list) for s in tables),
+          "where components do not sum to their parent the parent is kept, and "
+          "`--find` says the code exists rather than saying 'split it'")
 
     # 5 -- the proxies, and the honesty about what they can drive.
     print()

@@ -121,7 +121,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "validators"))
 
 import diagnostics as dg  # noqa: E402
-from quadrium.eurostat import _Cube, _drop_aggregates  # noqa: E402
+from quadrium.eurostat import _Cube, _coarsest_tiling  # noqa: E402
 from quadrium.precision import assertable_tolerance  # noqa: E402
 
 DATA = ROOT / "data" / "eurostat"
@@ -162,7 +162,7 @@ def valuation(year: int):
     products = [p for p in mar.index["cpa2_1"]
                 if p.startswith("CPA_") and p != "CPA_TOTAL"
                 and mar.at(stk_flow="TOTAL", cpa2_1=p, ind_use="TU") is not None]
-    products, _ = _drop_aggregates(products)
+    products, _ = _coarsest_tiling(products)
 
     def total(c):
         # `TU` is the matrix's own row total over every user, intermediate and
@@ -266,7 +266,7 @@ def main() -> int:
         prods = [p for p in tax.index["cpa2_1"]
                  if p.startswith("CPA_") and p != "CPA_TOTAL"
                  and tax.at(stk_flow="TOTAL", cpa2_1=p, ind_use="TU") is not None]
-        prods, _ = _drop_aggregates(prods)
+        prods, _ = _coarsest_tiling(prods)
         t_hh = np.array([tax.at(stk_flow="TOTAL", cpa2_1=p, ind_use="P3_S14")
                          or 0.0 for p in prods], float)
         u_hh = np.array([use.at(stk_flow="TOTAL", prd_ava=p, ind_use="P3_S14")

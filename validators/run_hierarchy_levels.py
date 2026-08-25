@@ -11,7 +11,7 @@ could not see the codes it was given.**
 
 `_covers` and `_divisions` read the classification NOTATION — a letter, two
 digits, a range separator. `load_iot` strips the `CPA_` prefix only when it
-builds `sector_codes`, long after `_drop_aggregates` has run, so on every `CPA_`
+builds `sector_codes`, long after `_coarsest_tiling` has run, so on every `CPA_`
 dataset the filter was handed `CPA_B05` and matched nothing. It returned "no
 aggregates found" on all input, and the sweep that produced the "one level"
 conclusion used prefixed codes too, so it was blind in exactly the same way. A
@@ -70,7 +70,7 @@ def _populated(path: Path):
 
 
 def main() -> int:
-    from quadrium.eurostat import _covers, _drop_aggregates, load_sut
+    from quadrium.eurostat import _covers, _coarsest_tiling, load_sut
 
     print(__doc__.strip().split("Run:")[0].rstrip())
     print("\n" + "=" * 78)
@@ -96,7 +96,7 @@ def main() -> int:
             continue
         _, pop = _populated(p)
         overlaps = sum(1 for a in pop for b in pop if _covers(a, b))
-        kept, dropped = _drop_aggregates(pop)
+        kept, dropped = _coarsest_tiling(pop)
         counts[geo] = (len(pop), overlaps, len(dropped))
     print()
     print(f"    {'country':<9}{'populated':>11}{'containments':>14}{'dropped':>9}")
@@ -119,10 +119,16 @@ def main() -> int:
     if all(p.exists() for p in fr):
         import numpy as np
         s = load_sut(*fr)
-        check("France's supply-use pair loads, which it could not before",
-              s.n_products == 65 and s.n_activities == 65,
-              f"{s.n_products}x{s.n_activities}, output {s.q.sum():,.0f} "
-              f"million EUR — the unfiltered set summed to 7,939,582.2 against "
+        # 65x65 until 2026-08-25, when the loaders began keeping the FINEST
+        # tiling a publisher offers rather than the coarsest. France publishes
+        # both levels, so it now arrives with the detail it actually
+        # transmits: 89 products against 88 industries, `T98` being a product
+        # and not an industry. The old assertion pinned the coarse shape and
+        # would have quietly protected the resolution loss.
+        check("France's supply-use pair loads at the detail France publishes",
+              s.n_products == 89 and s.n_activities == 88,
+              f"{s.n_products}x{s.n_activities} — 65x65 under the coarsest "
+              f"tiling, and the unfiltered set summed to 7,939,582.2 against "
               f"a published 6,121,102.4")
         check("and ID-07 holds on it",
               float(np.abs(s.V.sum(1) - s.q).max()) < 1e-6,

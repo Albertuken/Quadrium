@@ -80,7 +80,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "validators"))
 
 import diagnostics as dg  # noqa: E402
-from quadrium.eurostat import _Cube, _drop_aggregates  # noqa: E402
+from quadrium.eurostat import _Cube, _coarsest_tiling  # noqa: E402
 
 DATA = ROOT / "data" / "eurostat"
 COUNTRIES = (("AT", "Austria"), ("ES", "Spain"))
@@ -110,12 +110,12 @@ def six_pack(geo: str):
 
     products = [p for p in a.index["prd_ava"]
                 if p.startswith("CPA_") and p != "CPA_TOTAL"]
-    products, _ = _drop_aggregates(products)
+    products, _ = _coarsest_tiling(products)
     industries = [i for i in a.index["ind_use"]
                   if not i.startswith(("TU", "P3", "P5", "P6", "P7", "TOTAL"))
                   and a.at(stk_flow="TOTAL", prd_ava=products[0], ind_use=i)
                   is not None]
-    industries, _ = _drop_aggregates(industries)
+    industries, _ = _coarsest_tiling(industries)
 
     def at(cb, row, ind):
         v = cb.at(stk_flow="TOTAL", prd_ava=row, ind_use=ind)

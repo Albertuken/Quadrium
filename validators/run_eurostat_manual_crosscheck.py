@@ -99,12 +99,12 @@ def _shares(geo: str, tag: str, use_dim: str, ava_dim: str, pref: str):
             by_use[label] = i / t
 
     # import intensity of each industry's intermediate inputs
-    from quadrium.eurostat import _drop_aggregates
+    from quadrium.eurostat import _coarsest_tiling
     on_both = set(cube.index[use_dim])
     codes = [c for c in cube.index[ava_dim]
              if c != total_code and c.startswith(pref) and c in on_both
              and at("TOTAL", c) is not None]
-    codes, _ = _drop_aggregates(codes)
+    codes, _ = _coarsest_tiling(codes)
     intensity = []
     for j in codes:
         t, i = at("TOTAL", j), at("IMP", j)

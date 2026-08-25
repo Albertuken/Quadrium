@@ -79,7 +79,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "validators"))
 
 import diagnostics as dg  # noqa: E402
-from quadrium.eurostat import _Cube, _drop_aggregates  # noqa: E402
+from quadrium.eurostat import _Cube, _coarsest_tiling  # noqa: E402
 
 DATA = ROOT / "data" / "eurostat"
 YEAR, PRIOR = 2022, 2021
@@ -141,7 +141,7 @@ def main() -> int:
                       and not i.startswith(("P3", "P5", "P6", "P7"))
                       and cur.at(stk_flow="TOTAL", prd_ava="CPA_A01",
                                  ind_use=i) is not None]
-        industries, _ = _drop_aggregates(industries)
+        industries, _ = _coarsest_tiling(industries)
         labels = cur.doc["dimension"]["ind_use"]["category"]["label"]
 
         print(f"\n    {name} {YEAR} against {PRIOR}")

@@ -81,9 +81,28 @@ def _blocks(geo: str):
     if not (sup.exists() and use.exists()):
         return None
     s = load_sut(sup, use)
-    k = (s.q > 0) & (s.g > 0)
-    return (s.V[np.ix_(k, k)], s.U[np.ix_(k, k)], s.Y[k], s.W[:, k],
-            s.g[k], s.q[k])
+    # SQUARING A RECTANGULAR SYSTEM, EXPLICITLY. The arithmetic below indexes
+    # the product and industry axes with one mask, which held while every
+    # fixture was square and stopped holding on 2026-08-25, when the loaders
+    # began keeping the finest tiling a publisher offers. France publishes 89
+    # products against 88 industries: `T98`, services of households producing
+    # for own use, is a product and not an industry. That is an ordinary
+    # supply-use table, not a defect.
+    #
+    # Models A and C need a square system, so the comparison is made on the
+    # codes that appear on BOTH axes -- one product dropped for France, none
+    # for anyone else -- rather than by dropping France, whose 0.121 % is the
+    # low end of the spread this file measures.
+    codes = [c.replace("CPA_", "") for c in s.product_codes]
+    both = set(codes) & set(s.activity_codes)
+    pi = [i for i, c in enumerate(codes) if c in both]
+    ai = [s.activity_codes.index(c) for c in codes if c in both]
+    s_q, s_g = s.q[pi], s.g[ai]
+    k = (s_q > 0) & (s_g > 0)
+    pk = [pi[i] for i, keep in enumerate(k) if keep]
+    ak = [ai[i] for i, keep in enumerate(k) if keep]
+    return (s.V[np.ix_(pk, ak)], s.U[np.ix_(pk, ak)], s.Y[pk], s.W[:, ak],
+            s.g[ak], s.q[pk])
 
 
 def main() -> int:
