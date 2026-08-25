@@ -32,6 +32,14 @@ else
 fi
 
 PY=${PYTHON:-python3}
+
+# numpy deprecated converting an array with ndim > 0 to a scalar in 1.25 and
+# made it an ERROR in 2.3. Between those two releases it is a warning nobody
+# reads, so a `float(one_element_array)` sits in the tree passing every check
+# until someone with a current numpy runs it. Two were found that way, by CI,
+# on a machine that was not this one. Raising it here means the next one fails
+# on whoever writes it.
+export PYTHONWARNINGS="${PYTHONWARNINGS:-error:Conversion of an array with ndim > 0 to a scalar:DeprecationWarning}"
 ONLY_TESTS=0
 QUICK=0
 for arg in "$@"; do

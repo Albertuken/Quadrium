@@ -72,7 +72,9 @@ def main() -> int:
     all_ok = True
     for G, a_prev, c, flip_expected, a_next_expected in TABLE_1:
         r = sign_flip_scaler(np.array([G]), np.array([a_prev]), c)
-        a_next = float(apply_sign_flip(np.array([G]), np.array([a_prev]), c))
+        # `.item()` rather than `float()`: numpy 2.3 raises on converting a
+        # one-element array to a scalar. See run_gls_reconcile.py.
+        a_next = apply_sign_flip(np.array([G]), np.array([a_prev]), c).item()
         flip_observed = np.sign(a_next) != np.sign(a_prev)
         row_ok = (abs(a_next - a_next_expected) < 1e-9
                   and flip_observed == flip_expected)

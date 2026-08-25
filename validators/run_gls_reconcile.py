@@ -104,8 +104,13 @@ def main() -> int:
           f"the trusted figure")
     check("and the constraint is still satisfied exactly, regardless of the "
           "weights",
-          abs(float(G @ unequal - g)) < 1e-9,
-          f"G @ theta = {float(G @ unequal):.9f} against target {g[0]} — "
+          # `.item()`, not `float()`. numpy deprecated converting an array
+          # with ndim > 0 to a scalar in 1.25 and made it an ERROR in 2.3, so
+          # `float(G @ unequal)` -- a one-element array, not a 0-d one -- dies
+          # on any machine with a current numpy. Found by CI on Python 3.13
+          # while this machine, pinned at numpy 1.23, saw nothing.
+          abs((G @ unequal - g).item()) < 1e-9,
+          f"G @ theta = {(G @ unequal).item():.9f} against target {g[0]} — "
           f"binding (Veps=0) means exact, not approximate, satisfaction")
 
     # ---- a larger, more realistic case: three constraints, five cells -----
