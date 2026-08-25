@@ -102,10 +102,9 @@ https://www.ine.es/daco/daco42/cne24/cne_tio_16.xlsx
 https://www.ine.es/daco/daco42/cne24/cne_tio_21.xlsx
 ```
 
-The matching `cne_tod_YY.xlsx` supply-use files for 2016–2021 were retrieved and
-their hashes recorded in the same sidecar, but only `cne_tod_22.xlsx` is kept in
-the repository: nothing reads the earlier ones yet, and hashes are enough to
-re-fetch them exactly.
+The matching `cne_tod_YY.xlsx` supply-use files for 2016–2021 are here too,
+under the same URL pattern and recorded in the same sidecar. Every one of the
+fourteen files reproduces its recorded SHA-256.
 
 ### The INE publishes this workbook in two shapes
 
@@ -188,7 +187,8 @@ https://www.ine.es/daco/daco42/cne24/cne_tod_22.xlsx
 statement that it compiles at 91 products and publishes at 64, and asked whether
 the honest next step for Spain was a data request. It was not. **Two of these
 tables are published at 110 products by 81 branches** and were downloadable all
-along:
+along — **in this edition**. The 2016–2020 files are 65 x 64, and the
+qualification matters more than it looks: see the next section.
 
 | sheet | contents | detail |
 |---|---|---|
@@ -207,7 +207,63 @@ as the IOT's working level, 64 as the IOT published.
 alojamiento` (CPA 55) and `74. Servicios de comidas y bebidas` (CPA 56) are
 separate, and their outputs are 30,717.7 and 97,548.8 — summing to 128,266.5,
 the output of product 36 in the 64-product IOT, **to the last decimal**. The
-split the pilot spent its effort estimating is published.
+split the pilot spent its effort estimating is published — **for 2021 and 2022.
+For 2016 to 2020 it is not**, and product 36 is a single undivided
+`Servicios de alojamiento y de comidas y bebidas`.
+
+---
+
+## `cne_tod_16.xlsx` … `cne_tod_21.xlsx` — and the same two shapes again
+
+The supply-use workbook changes edition in the same year and the same
+direction:
+
+| | 2016–2020 | 2021–2022 |
+|---|---|---|
+| supply and use | **65 products x 64 activities** | 110 x 81 |
+| basic-price, domestic and import use tables | not published | 64 x 64 |
+| import origin, EU / third countries | not published | published |
+| exports | one leaf column | subtotal of two |
+| accommodation and food service | **one product** | two |
+
+`load_ine_tod` had been written against `cne_tod_22.xlsx` and did not refuse the
+older five — it raised a bare `IndexError` from inside a list comprehension.
+Three things it had hard-coded are not constant:
+
+1. **The two sheets of one workbook start in different columns.** In the older
+   files the supply sheet has no leading blank column and the use sheet does. A
+   single `first_col` reads the older supply table one column to the left of
+   where it is.
+2. **The activity index row is not 1, 2, 3, …** It carries `44a` — imputed
+   rents of owner-occupied dwellings, split out of real estate — where the label
+   column two rows below writes `44 bis.`. Two conventions for one thing, in one
+   file. A run that accepts only the next integer stops at 44 and reads a
+   65-activity table as a 44-activity one, which stays rectangular and is caught
+   by nothing but an identity.
+3. **Exports are a leaf, not a subtotal**, as in the symmetric workbook.
+
+Every position is now found by the label the INE prints. The final-demand
+subtotals are named; their *components* are not — they are whatever columns lie
+between one subtotal and the next, which is how one rule reads a vintage that
+splits exports in two and one that does not — and each inference is checked
+against the subtotal it was inferred from before the subtotal is dropped.
+
+### The cross-check that makes all of it readable
+
+The supply table's total output and the input-output table's total output agree
+**to 0.0000 in every one of the seven years**:
+
+| year | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 |
+|---|---|---|---|---|---|---|---|
+| output | 1,969,898 | 2,077,118 | 2,171,029 | 2,255,859 | 2,030,323 | 2,280,636 | 2,664,587 |
+
+These are two workbooks, compiled and published separately, read by two
+different loaders through two different column maps. Trade and transport margins
+sum to zero economy-wide in all seven, which is `ID-19` — the identity an
+analytical input-output table cannot be asked at all, because its margins have
+already been reallocated.
+
+Locked in by `library/validators/run_ine_series.py`.
 
 ---
 

@@ -283,7 +283,10 @@ Set `table_kind` in the configuration workbook to one of:
 
 The Spanish restriction is the publisher's, not the loader's: before 2021 the
 INE does not publish the domestic/imports split at all, so there is no domestic
-table to read. Point `ine_interior` at a 2016–2020 file and the engine says so
+table to read. The same edition boundary runs through the Spanish supply-use
+files (§3, Route A note): 2021 and 2022 come at 110 products by 81 activities,
+2016 to 2020 at 65 by 64, where accommodation and food service are still one
+product. Point `ine_interior` at a 2016–2020 file and the engine says so
 and tells you that `ine_total` will load instead — at the cost of treating an
 imported input as if it had been produced in Spain, which overstates domestic
 effects. All seven years are in `data/ine/`; change only the `table_path`.

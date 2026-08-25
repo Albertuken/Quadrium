@@ -51,6 +51,49 @@ Rising to 2019, falling in 2020, recovering after. That is the Spanish economy's
 actual shape, and a loader that had silently mismapped a column would not
 produce it.
 
+AND THE SAME THING AGAIN, ONE SHEET OVER
+-----------------------------------------
+`load_ine_tod` had also been run on exactly one file, and it did not refuse the
+older ones — it raised a bare `IndexError` from inside a list comprehension.
+That is the one failure this project does not accept: a loader that cannot read
+a file has to say why.
+
+The supply-use workbook changes shape in the same edition and for the same
+reason, and the older one is again the smaller:
+
+    2016-2020    65 products x 64 activities
+    2021-2022   110 products x 81 activities
+
+Three things had been hard-coded that are not constant. **The supply sheet of
+the older files has no leading blank column and the use sheet does**, so the two
+sheets of one workbook are offset from each other by one. **The activity index
+row is not 1, 2, 3, …**: it carries `44a` where the label column two rows below
+writes `44 bis.` — two conventions for one thing in one file — and a run that
+accepts only the next integer stops at 44 and reads a 65-activity table as a
+44-activity one, which stays rectangular and is caught by nothing but an
+identity. **Exports are again a leaf rather than a subtotal.**
+
+Every position is now found by the label the INE prints. The final-demand
+subtotals are named; their COMPONENTS are not, because they are whatever
+columns lie between one subtotal and the next — which is how one rule reads a
+vintage that splits exports in two and one that does not — and each inference
+is then checked against the subtotal it was inferred from.
+
+WHAT THAT BUYS, AND WHAT IT COSTS
+----------------------------------
+The supply-use pair is where the margin identities are arithmetic instead of
+`NOT APPLICABLE` (`OQ-D-03`), so this is five more years of the only fixture the
+project has for them.
+
+It also corrects something this repository asserted. `OQ-S-05` closed on the
+finding that the INE publishes 110 products, so the accommodation/food split the
+pilot spends its effort estimating is simply published and need not be
+requested. **That is true for 2021 and 2022 and false before them.** In the
+2016-2020 edition product 36 is `Servicios de alojamiento y de comidas y
+bebidas`, undivided. For those years the estimation route is the only route, and
+a user asking for 2019 has to be told so rather than handed a table that looks
+the same and is coarser.
+
 Run:
     python3 validators/run_ine_series.py
 """
@@ -159,10 +202,81 @@ def main() -> int:
           "publication is, and a third shape would be refused rather than "
           "mismapped")
 
+    # 4 -- the supply-use pair, same seven years, same two shapes.
+    from quadrium.io_loader import load_ine_tod
+
+    print()
+    print(f"    {'year':>6}{'products':>10}{'activities':>12}"
+          f"{'supply q':>14}{'q - X(TIO)':>12}")
+    sut, detail = {}, {}
+    for y in years:
+        f = DATA / f"cne_tod_{y % 100}.xlsx"
+        if not f.exists():
+            continue
+        s = load_ine_tod(f)
+        sut[y] = s
+        detail[y] = (len(s.product_codes), len(s.activity_codes))
+        gap = abs(float(s.q.sum()) - out[y])
+        print(f"    {y:>6}{detail[y][0]:>10}{detail[y][1]:>12}"
+              f"{s.q.sum():>14,.0f}{gap:>12,.4f}")
+
+    check("the supply-use pair loads for every year too",
+          len(sut) == len(years),
+          "it read one file and raised a bare IndexError on the other five — "
+          "not a refusal, a crash")
+    check("and two independent workbooks agree on Spain's output exactly",
+          all(abs(float(s.q.sum()) - out[y]) < 1e-6 for y, s in sut.items()),
+          "supply-table output equals input-output-table output to 0.0000 in "
+          "all seven years; the tio and the tod are compiled and published "
+          "separately, so this is a real cross-check and not a tautology")
+    check("the older edition is 65 x 64 and the newer 110 x 81",
+          all(detail[y] == (65, 64) for y in years if y <= 2020)
+          and all(detail[y] == (110, 81) for y in years if y >= 2021),
+          "the finest detail the INE publishes is not a constant of the INE; "
+          "it is a property of the edition")
+
+    # 5 -- the axis trap, stated as the number it would have produced.
+    from quadrium.io_loader import _open_workbook, _tod_axes
+    ax = _tod_axes(_open_workbook(DATA / "cne_tod_20.xlsx")["Tabla1"], "supply")
+    check("the activity axis is read past its 44a continuation",
+          ax["n_activities"] == 64 and ax["label_col"] == 0,
+          f"{ax['n_activities']} activities, label column "
+          f"{ax['label_col'] + 1} — a run that accepts only the next integer "
+          f"stops at 44, and a 44-column block is still rectangular")
+    ax2 = _tod_axes(_open_workbook(DATA / "cne_tod_20.xlsx")["Tabla2"], "use")
+    check("and the two sheets of one workbook start in different columns",
+          ax["first_col"] != ax2["first_col"],
+          f"supply at column {ax['first_col'] + 1}, use at "
+          f"{ax2['first_col'] + 1} — one `first_col` for the workbook reads "
+          f"the older supply table one column to the left of where it is")
+
+    # 6 -- what OQ-S-05 concluded, and for which years it holds.
+    print()
+    if 2020 in sut and 2021 in sut:
+        old_lbl = [l for l in sut[2020].product_labels
+                   if "alojamiento" in l.lower() and "comidas" in l.lower()]
+        new_lbl = [l for l in sut[2021].product_labels
+                   if l.strip() in ("Servicios de alojamiento",
+                                    "Servicios de comidas y bebidas")]
+        check("accommodation and food are separate products from 2021",
+              len(new_lbl) == 2, " and ".join(new_lbl))
+        check("and are ONE product before it",
+              len(old_lbl) == 1,
+              f"{old_lbl[0]!r} — OQ-S-05 closed on the split being published "
+              f"rather than needing a request. For 2016-2020 it is not "
+              f"published, and the pilot's estimation route is the only one")
+
+    check("margins still sum to zero economy-wide in every year",
+          all(abs(float(s.total_margins.sum())) < 1e-3 for s in sut.values()),
+          "ID-19 — a margin column redistributes and does not create; this is "
+          "the identity an analytical IOT cannot be asked, and there are now "
+          "seven years of it instead of one")
+
     print()
     print("    Five of seven years were refused with 'the layout no longer")
     print("    matches', and the layout was fine. What had changed was what")
-    print("    the office publishes.")
+    print("    the office publishes. On the supply-use sheet next door the")
+    print("    same five years did not even refuse — they raised IndexError.")
 
     print("\n" + "=" * 78)
     if FAIL:

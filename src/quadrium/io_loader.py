@@ -681,34 +681,145 @@ def load_ine_tio(path: Path | str, variant: str = "interior",
 # The Spanish supply-use tables (INE)
 # ---------------------------------------------------------------------------
 
-# Layout of `cne_tod_22.xlsx`, 0-based. Same discipline as `_INE`: every index
-# is re-derived from an identity on load.
-_TOD = dict(
-    col_label=1, first_row=9, n_products=110,
-    first_col=2, n_activities=81,
-    row_activity_labels=7, row_activity_index=8,
-    # supply sheet
-    s_output=83, s_imports=84, s_imports_eu=85, s_imports_nonue=86,
-    s_supply_basic=87, s_trade=88, s_transport=89, s_taxes=90,
-    s_supply_purch=91,
-    # use sheet
-    u_intermediate=83, u_final=94, u_uses=95,
-    u_ic_total=124, u_compensation=126, u_wages=127, u_social=128,
-    u_other_taxes=129, u_gos=130, u_mixed=131, u_gva=132, u_output=133,
-)
-_TOD_FD_GROUPS = ((84, (85, 86, 87)), (88, (89, 90)), (91, (92, 93)))
-_TOD_FD_COLS = (85, 86, 87, 89, 90, 92, 93)
+# Layout of `cne_tod_YY.xlsx`, 0-based — DERIVED from each workbook, not
+# hard-coded. See `_tod_layout`. The constants that used to sit here described
+# `cne_tod_22.xlsx` alone and crashed with a bare IndexError on the five older
+# years, which is the one failure mode this project does not accept: a loader
+# that cannot read a file must say why.
+
+# The three final-demand subtotals, by the label the INE prints. Their
+# COMPONENTS are not listed: they are whatever columns sit between one head and
+# the next, which is how the same rule reads a vintage that splits exports into
+# two columns and one that does not. Each head is then checked against the
+# components inferred for it, so a wrong inference fails the load rather than
+# silently double-counting.
+_TOD_FD_HEADS = ("total gasto en consumo final", "formación bruta de capital",
+                 "total exportaciones")
+
+
+def _tod_norm(s) -> str:
+    """Collapse whitespace, lowercase, drop a trailing footnote marker."""
+    import re as _re
+    t = _re.sub(r"\s+", " ", str(s if s is not None else "")).strip()
+    t = _re.sub(r"\s*\(\d+\)\s*$", "", t)
+    return t.lower()
+
+
+def _tod_axes(R, what: str) -> dict:
+    """Where the numbers are on one INE supply-use sheet, read off the sheet.
+
+    The INE prints an index row — 1, 2, 3, … — across the activity columns and
+    a numbered label down the product column, so both axes announce their own
+    extent. Nothing here is a constant except the two header rows, which are
+    the same in every vintage.
+
+    The axes are NOT the same in every vintage, and not even the same on both
+    sheets of one workbook: in the 2016–2020 files the supply sheet has no
+    leading blank column and the use sheet does, so the two are offset by one.
+    A loader with a single `first_col` reads the older supply table one column
+    to the left of where it is.
+    """
+    idx = R[8] if len(R) > 8 else []
+    first_col = next((j for j, c in enumerate(idx)
+                      if _tod_norm(c) == "1"), None)
+    if first_col is None or first_col == 0:
+        raise LoaderError(
+            f"the {what} sheet has no activity index row. Row 9 should number "
+            f"the activity columns 1, 2, 3, … and it reads "
+            f"{[str(c) for c in idx[:6]]!r}. This loader expects the INE's "
+            f"`cne_tod_YY.xlsx` layout.")
+    # The index row is NOT 1, 2, 3, …: like the product numbering it carries a
+    # continuation, because imputed rents of owner-occupied dwellings are split
+    # out of real estate. The label column writes that product '44 bis.' and
+    # the index row above it writes '44a' — two conventions for one thing, in
+    # one file. A run that accepts only the next integer stops dead at 44 and
+    # reads a 65-activity table as a 44-activity one; the block stays
+    # rectangular, so nothing but an identity catches it.
+    import re as _re
+    n_act, last = 0, 0
+    while first_col + n_act < len(idx):
+        cell = _tod_norm(idx[first_col + n_act])
+        if cell == str(last + 1):
+            last += 1
+        elif last and _re.fullmatch(rf"{last}\s*(bis|a|b)", cell):
+            pass
+        else:
+            break
+        n_act += 1
+
+    label_col = first_col - 1
+    first_row = next((i for i in range(8, min(len(R), 24))
+                      if _tod_norm(R[i][label_col] if label_col < len(R[i])
+                                   else "").startswith("1.")), None)
+    if first_row is None:
+        raise LoaderError(
+            f"the {what} sheet has no product labelled '1. …' in column "
+            f"{label_col + 1} within its first 24 rows. This loader expects "
+            f"the INE's `cne_tod_YY.xlsx` layout.")
+    n_prod = 0
+    while (first_row + n_prod < len(R)
+           and _tod_norm(R[first_row + n_prod][label_col]
+                         if label_col < len(R[first_row + n_prod]) else "")):
+        n_prod += 1
+    return dict(label_col=label_col, first_row=first_row, n_products=n_prod,
+                first_col=first_col, n_activities=n_act)
+
+
+def _tod_header(R, ax, what: str) -> dict:
+    """The aggregate columns to the right of the activity block, by label."""
+    header = R[7] if len(R) > 7 else []
+    out: dict[str, int] = {}
+    for j in range(ax["first_col"] + ax["n_activities"], len(header)):
+        key = _tod_norm(header[j])
+        if key and key not in out:
+            out[key] = j
+    return out
+
+
+def _tod_labels(R, ax) -> dict:
+    """The rows below the product block, by label, from the label column."""
+    out: dict[str, int] = {}
+    for i in range(ax["first_row"] + ax["n_products"], len(R)):
+        cell = R[i][ax["label_col"]] if ax["label_col"] < len(R[i]) else ""
+        key = _tod_norm(cell)
+        if key and key not in out:
+            out[key] = i
+    return out
+
+
+def _tod_need(d: dict, key: str, what: str, kind: str):
+    if key not in d:
+        near = ", ".join(sorted(d)[:8])
+        raise LoaderError(
+            f"the INE supply-use workbook has no {kind} labelled {key!r} on "
+            f"its {what} sheet.\n  what it does have: {near}…\n"
+            f"Every position this loader uses is found by the label the INE "
+            f"prints, so a renamed line stops the load instead of shifting "
+            f"the block underneath it.")
+    return d[key]
 
 
 def load_ine_tod(path: Path | str) -> SupplyUseTables:
-    """Load the INE's supply and use tables at their published detail.
+    """Load the INE's supply and use tables at whatever detail they publish.
 
-    **110 products by 81 activities** — the finest table the INE publishes, and
-    far finer than either its own input-output table or Eurostat's, both of
-    which come at 64. `OQ-S-05` opened on the assumption that more detail would
-    have to be requested; it did not, and this is the file that settled it.
+    **110 products by 81 activities for 2021 and 2022**, and **65 by 64 for
+    2016 to 2020** — the INE moved to the finer table with the 2021 edition,
+    and every position in this loader is found by the label the workbook prints
+    so that both are read rather than one being hard-coded and the other
+    crashing. `OQ-S-05` opened on the assumption that more detail than the
+    64-product input-output table would have to be requested; for 2021 onward
+    it does not, and this is the file that settled it. **For 2016 to 2020 it
+    would**: those years are published at the same 64 activities as the IOT.
 
-    Two things it gives the project that no IOT can.
+    That distinction is not bookkeeping. At 110 products `55 Servicios de
+    alojamiento` and `56 Servicios de comidas y bebidas` are separate and their
+    outputs sum to the 64-product product 36 to the last decimal, so the split
+    this project's pilot estimates is simply published. At 65 products it is
+    not, for any year before 2021 — the estimation route is the only one there,
+    and a user asking for 2019 must be told that rather than handed a table
+    that looks the same and is coarser.
+
+    Two things a supply-use pair gives the project that no IOT can.
 
     **The margin identities become testable.** A supply table carries trade
     margins, transport margins and taxes less subsidies on products as explicit
@@ -723,9 +834,9 @@ def load_ine_tod(path: Path | str) -> SupplyUseTables:
     Where a clean Spanish domestic table is wanted, this is the source.
 
     Loaded at purchasers' prices, because that is the valuation at which the
-    110-product detail exists. The basic-price, domestic and import versions are
-    published only at 64 (sheets `Tabla3`, `Tabla4`, `Tabla5`) and are not
-    loaded here.
+    finest detail exists. The basic-price, domestic and import versions are
+    published only at 64 products, and only from 2021 (sheets `Tabla3`,
+    `Tabla4`, `Tabla5`); they are not loaded here.
     """
     path = Path(path)
     S = _open_workbook(path)
@@ -734,77 +845,133 @@ def load_ine_tod(path: Path | str) -> SupplyUseTables:
             raise LoaderError(f"{path.name} has no {sheet!r}; found: "
                               f"{', '.join(S)}. This loader expects the INE's "
                               f"`cne_tod_YY.xlsx` layout.")
-    L = _TOD
     sup, use = S["Tabla1"], S["Tabla2"]
-    rows = range(L["first_row"], L["first_row"] + L["n_products"])
-    cols = range(L["first_col"], L["first_col"] + L["n_activities"])
+    sa, ua = _tod_axes(sup, "supply"), _tod_axes(use, "use")
+    if (sa["n_products"], sa["n_activities"]) != (ua["n_products"],
+                                                 ua["n_activities"]):
+        raise LoaderError(
+            f"{path.name}: the supply and use sheets disagree on the size of "
+            f"the table. Supply is {sa['n_products']} products by "
+            f"{sa['n_activities']} activities, use is {ua['n_products']} by "
+            f"{ua['n_activities']}. A supply-use pair is one table read twice; "
+            f"if the two axes differ, nothing downstream means anything.")
 
-    V = _ine_block(sup, rows, cols)
-    U = _ine_block(use, rows, cols)
-    Y = _ine_block(use, rows, _TOD_FD_COLS)
-    P = lambda g, c: _ine_row_col(g, rows, c)
-    q, imports = P(sup, L["s_output"]), P(sup, L["s_imports"])
-    trade, transport = P(sup, L["s_trade"]), P(sup, L["s_transport"])
-    taxes = P(sup, L["s_taxes"])
-    W = np.vstack([_ine_row(use, L[k], cols) for k in
-                   ("u_compensation", "u_other_taxes", "u_gos", "u_mixed")])
-    g = _ine_row(use, L["u_output"], cols)
+    n_p, n_a = sa["n_products"], sa["n_activities"]
+    s_rows = range(sa["first_row"], sa["first_row"] + n_p)
+    s_cols = range(sa["first_col"], sa["first_col"] + n_a)
+    u_rows = range(ua["first_row"], ua["first_row"] + n_p)
+    u_cols = range(ua["first_col"], ua["first_col"] + n_a)
+
+    sh = _tod_header(sup, sa, "supply")
+    uh = _tod_header(use, ua, "use")
+    ur = _tod_labels(use, ua)
+    SC = lambda k: _tod_need(sh, k, "supply", "column")
+    UC = lambda k: _tod_need(uh, k, "use", "column")
+    UR = lambda k: _tod_need(ur, k, "use", "row")
+
+    # Final demand: the heads are named, their components are inferred as the
+    # columns between one head and the next, and each inference is checked.
+    fd_first, fd_last = UC(_TOD_FD_HEADS[0]), UC("total demanda final")
+    heads = [j for j in range(fd_first, fd_last)
+             if _tod_norm(use[7][j]) in _TOD_FD_HEADS]
+    fd_groups, fd_cols = [], []
+    for k, h in enumerate(heads):
+        stop = heads[k + 1] if k + 1 < len(heads) else fd_last
+        comp = list(range(h + 1, stop))
+        if comp:
+            fd_groups.append((h, comp))
+            fd_cols.extend(comp)
+        else:
+            fd_cols.append(h)          # a leaf, not a subtotal of itself
+
+    V = _ine_block(sup, s_rows, s_cols)
+    U = _ine_block(use, u_rows, u_cols)
+    Y = _ine_block(use, u_rows, fd_cols)
+    P = lambda g, rows, c: _ine_row_col(g, rows, c)
+    q = P(sup, s_rows, SC("total producción"))
+    imports = P(sup, s_rows, SC("total importaciones"))
+    trade = P(sup, s_rows, SC("márgenes comerciales"))
+    transport = P(sup, s_rows, SC("márgenes de transporte"))
+    taxes = P(sup, s_rows, SC("impuestos netos sobre los productos"))
+    basic = P(sup, s_rows, SC("total oferta a precios básicos"))
+    purch = P(sup, s_rows, SC("total oferta a precios de adquisición"))
+    uses = P(use, u_rows, UC("total empleos"))
+    inter = P(use, u_rows, UC("total demanda intermedia"))
+
+    W = np.vstack([_ine_row(use, UR(k), u_cols) for k in
+                   ("remuneración de asalariados",
+                    "otros impuestos netos sobre la producción",
+                    "excedente bruto de explotación")]
+                  + [_ine_row(use, next(i for lbl, i in ur.items()
+                                        if lbl.startswith("renta mixta")),
+                              u_cols)])
+    g = _ine_row(use, UR("producción a precios básicos"), u_cols)
+    # Intermediate consumption by activity is the TOTAL line under the product
+    # block. The 2021+ files leave its label cell EMPTY and the older ones
+    # write 'TOTAL', so it is anchored on the line above it, which both name.
+    ic_row = UR("compras de residentes fuera del territorio económico") + 1
+    ic = _ine_row(use, ic_row, u_cols)
 
     checks = [
         ("supply rows sum to product output", V.sum(1), q),
-        ("supply at basic prices = output + imports",
-         P(sup, L["s_supply_basic"]), q + imports),
+        ("supply at basic prices = output + imports", basic, q + imports),
         ("supply at purchasers' = basic + margins + taxes",
-         P(sup, L["s_supply_purch"]),
-         P(sup, L["s_supply_basic"]) + trade + transport + taxes),
-        ("imports EU + non-EU = total imports",
-         P(sup, L["s_imports_eu"]) + P(sup, L["s_imports_nonue"]), imports),
-        ("use rows sum to intermediate demand", U.sum(1),
-         P(use, L["u_intermediate"])),
+         purch, basic + trade + transport + taxes),
+        ("use rows sum to intermediate demand", U.sum(1), inter),
         ("final-demand components sum to total final demand", Y.sum(1),
-         P(use, L["u_final"])),
-        ("total uses = intermediate + final", P(use, L["u_uses"]),
-         P(use, L["u_intermediate"]) + Y.sum(1)),
+         P(use, u_rows, fd_last)),
+        ("total uses = intermediate + final", uses, inter + Y.sum(1)),
         ("compensation = wages + social contributions",
-         _ine_row(use, L["u_compensation"], cols),
-         _ine_row(use, L["u_wages"], cols)
-         + _ine_row(use, L["u_social"], cols)),
+         _ine_row(use, UR("remuneración de asalariados"), u_cols),
+         _ine_row(use, UR("sueldos y salarios brutos"), u_cols)
+         + _ine_row(use, UR("cotizaciones sociales"), u_cols)),
         ("gross value added = its four components",
-         _ine_row(use, L["u_gva"], cols), W.sum(0)),
-        ("use columns sum to intermediate consumption",
-         _ine_row(use, L["u_ic_total"], cols), U.sum(0)),
-        ("output = intermediate consumption + value added", g,
-         _ine_row(use, L["u_ic_total"], cols) + W.sum(0)),
+         _ine_row(use, UR("valor añadido bruto a precios básicos"), u_cols),
+         W.sum(0)),
+        ("use columns sum to intermediate consumption", ic, U.sum(0)),
+        ("output = intermediate consumption + value added", g, ic + W.sum(0)),
         # THE central identity of the framework, and the reason a supply-use
         # pair is worth more than an IOT: supply and use meet product by
         # product, at purchasers' prices, before anyone assumes anything.
-        ("supply at purchasers' prices == total uses",
-         P(sup, L["s_supply_purch"]), P(use, L["u_uses"])),
+        ("supply at purchasers' prices == total uses", purch, uses),
     ]
-    for sub, comp in _TOD_FD_GROUPS:
-        checks.append((f"final-demand subtotal in column {sub}",
-                       P(use, sub), sum(P(use, c) for c in comp)))
+    # Only where the vintage publishes them. An absent split is not a failure;
+    # a split that does not add up is.
+    if "importaciones países u.e." in sh and "importaciones terceros países" in sh:
+        checks.append(("imports EU + non-EU = total imports",
+                       P(sup, s_rows, SC("importaciones países u.e."))
+                       + P(sup, s_rows, SC("importaciones terceros países")),
+                       imports))
+    for sub, comp in fd_groups:
+        checks.append((f"final-demand subtotal "
+                       f"{_tod_norm(use[7][sub])!r} = its {len(comp)} parts",
+                       P(use, u_rows, sub),
+                       sum(P(use, u_rows, c) for c in comp)))
     for what, a, b in checks:
         d = float(np.abs(np.asarray(a) - np.asarray(b)).max())
         if d > _INE_TOL:
             raise LoaderError(
-                f"the INE supply-use workbook's layout no longer matches the "
-                f"one this loader hard-codes.\n  failed check: {what}\n"
+                f"{path.name} does not satisfy an identity the INE's own "
+                f"printed totals should give it.\n  failed check: {what}\n"
                 f"  off by {d:,.4f} (tolerance {_INE_TOL:g}, million EUR)\n"
-                f"Fix _TOD in io_loader.py against the actual sheet.")
+                f"The block positions are read from the labels this workbook "
+                f"prints, so this is a disagreement in the figures rather than "
+                f"a layout the loader has misread.")
 
-    p_codes, p_labels = _ine_codes(use, rows)
-    a_labels = [str(sup[L["row_activity_labels"]][j] or "").strip() for j in cols]
-    a_codes = [str(sup[L["row_activity_index"]][j] or "").strip() for j in cols]
+    p_codes, p_labels = _ine_codes(use, u_rows)
+    a_labels = [str(sup[7][j] or "").strip() for j in s_cols]
+    a_codes = [str(sup[8][j] or "").strip() for j in s_cols]
     year = _infer_ine_year(S)
+    finest = n_p > 65
     return SupplyUseTables(
         table_id=f"ES-SUT-{year}", country="España", year=year,
         unit="millones de euros, precios corrientes",
-        classification="CPA 2008 (110 productos) x CNAE 2009 (81 ramas)",
+        classification=(f"CPA 2008 ({n_p} productos) x CNAE 2009 "
+                        f"({n_a} ramas)"),
         product_codes=p_codes, product_labels=p_labels,
         activity_codes=a_codes, activity_labels=a_labels,
         V=V, U=U, Y=Y,
-        Y_labels=[str(use[7][c] or "").strip() for c in _TOD_FD_COLS],
+        Y_labels=[str(use[7][c] or "").strip() for c in fd_cols],
         W=W, W_labels=["Remuneración de los asalariados",
                        "Otros impuestos netos sobre la producción",
                        "Excedente bruto de explotación", "Renta mixta bruta"],
@@ -815,13 +982,21 @@ def load_ine_tod(path: Path | str) -> SupplyUseTables:
                 f"Estadística 2024. Tablas de Origen y Destino {year} "
                 f"({path.name})"),
         retrieved_at=datetime.now(timezone.utc),
-        notes=("Origen a precios básicos y destino a precios de adquisición, "
-               "110 productos x 81 ramas — el mayor detalle que publica el INE. "
-               "Las columnas de márgenes e impuestos vienen explícitas, así que "
-               "las identidades de valoración son comprobables aquí y no en una "
-               "TIO analítica (OQ-D-03). Las versiones a precios básicos, "
-               "interior e importaciones sólo se publican a 64 productos y no "
-               "se cargan."))
+        notes=(f"Origen a precios básicos y destino a precios de adquisición, "
+               f"{n_p} productos x {n_a} ramas"
+               + (" — el mayor detalle que publica el INE, muy por encima de "
+                  "los 64 productos de su propia TIO. "
+                  if finest else
+                  " — el detalle que el INE publicaba antes de 2021, el mismo "
+                  "que su TIO. Alojamiento (CPA 55) y comidas y bebidas "
+                  "(CPA 56) NO vienen separados en esta edición: para estos "
+                  "años la partición fina no está publicada. ")
+               + "Las columnas de márgenes e impuestos vienen explícitas, así "
+                 "que las identidades de valoración son comprobables aquí y no "
+                 "en una TIO analítica (OQ-D-03). Todas las posiciones se "
+                 "localizan por la etiqueta que imprime el INE, no por índices "
+                 "fijos, porque las dos ediciones no coinciden ni siquiera en "
+                 "la columna donde empieza cada hoja."))
 
 
 # ---------------------------------------------------------------------------
