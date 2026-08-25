@@ -1,5 +1,5 @@
 """
-What "off by 0.8000" was hiding — three findings from one refused pair.
+What "off by 0.8000" was hiding — and the refusal itself was the last of it.
 
 Following the adviser's own advice pointed the engine at Belgium's 2022
 supply-use pair, and `load_sut` refused it with a maximum and nothing else:
@@ -7,8 +7,25 @@ supply-use pair, and `load_sut` refused it with a maximum and nothing else:
     failed (as rebuilt): intermediate consumption plus value added equals output
     off by 0.8000 (tolerance 0.46, 0.005 x 92 summed cells at two decimals)
 
-The refusal is correct and stays. Everything else about that message was
-wrong or missing.
+Four things were wrong with that, and they came off one at a time.
+
+0. THE REFUSAL — dissolved 2026-08-26, and it was the tolerance a third time
+Belgium is **not a two-decimal source**. Its supply table is 2,553 one-decimal
+figures, 274 whole numbers, and **two** cells carrying a second decimal, out of
+2,829. France is the same with 14 cells in 1,346, and so is Spain's 2020
+symmetric table with 14 in 13,096.
+
+`printed_decimals` asked which precision REPRESENTS 99.95 % of the values —
+which those two anomalies decide, because a one-decimal figure is representable
+at two decimals and an anomaly is not representable at one. So it answered "two
+decimals" for a one-decimal file, and Belgium was held to 0.465 when its own
+printing allows 3.450. It now asks which precision the values actually USE,
+measured on 46 Eurostat cubes where the answer is unchanged across a 25-fold
+band of thresholds.
+
+**Belgium's pair loads by default.** 0.8 across 92 one-decimal cells is not a
+discrepancy; it is what one decimal cannot distinguish. The residue is still
+there and still worth knowing — see 1 — but it is reported, not refused.
 
 1. THE RESIDUE IS TWO CELLS, EQUAL AND OPPOSITE
     L68A  imputed rents of owner-occupied dwellings   +0.800
@@ -18,9 +35,12 @@ Sum exactly +0.000. Not a table that fails to add up: a BOUNDARY between two
 halves of one sector. `L68A` is the same sector that produces all 19 negative
 cells in the UK analytical table's Leontief inverse, and the subject of
 `OQ-D-02`. "off by 0.8000" and "+0.8 on L68A, -0.8 on L68B, cancelling" are
-the same number and completely different findings.
+the same number and completely different findings — and the second survives
+finding 0, because it is a fact about where the residue sits and not about
+whether it clears a bound.
 
 2. THE BOUND WAS ASSUMED, NOT DERIVED -- THE FIFTH INSTANCE
+   (and deriving it was not enough; see 0)
 `0.005 * n_terms` hard-codes two decimals for every publisher, while
 `load_iot`, `io_loader._assert_balances` and `validation.validate_original` all
 derive it (`OQ-B-02`). It errs TIGHT, which is the direction that refuses valid
@@ -92,42 +112,98 @@ def main() -> int:
     print(__doc__.strip().split("Run:")[0].rstrip())
     print("\n" + "=" * 78)
 
-    # 1 -- the refusal, and what it now says.
+    # 0 -- Belgium is a one-decimal source, and the refusal was the bound.
+    import json
+    from quadrium.precision import (_decimals_needed, assertable_tolerance,
+                                    printed_decimals)
     sup, use, basic = files("BE")
+    be_vals = np.array([v for v in json.loads(sup.read_text())["value"].values()
+                        if isinstance(v, (int, float))], float)
+    nz = be_vals[be_vals != 0]
+    nd = _decimals_needed(nz)
+    hist = {int(k): int(c) for k, c in zip(*np.unique(nd, return_counts=True))}
+    check("Belgium's supply table is a one-decimal file",
+          printed_decimals(be_vals) == 1 and hist.get(2, 0) <= 5,
+          f"{hist.get(1, 0):,} one-decimal figures, {hist.get(0, 0):,} whole "
+          f"numbers and {hist.get(2, 0)} with a second decimal, out of "
+          f"{nz.size:,} — asking which precision REPRESENTS 99.95 % of them "
+          f"lets those {hist.get(2, 0)} decide, and answered two")
+    bound = assertable_tolerance(be_vals, 92)
+    check("so the identity that refused it allows 0.8 comfortably",
+          bound > 3.0,
+          f"92 summed cells at one decimal is {bound:.3f}; the bound applied "
+          f"was 0.465, and the residue is 0.800")
+
+    s = load_sut(sup, use, basic)
+    check("and the pair loads by default, with no opt-in at all",
+          s is not None and s.admitted_residue == 0.0,
+          "0.8 across 92 one-decimal cells is not a discrepancy — it is what "
+          "one decimal cannot distinguish")
+
+    # 1 -- the residue is still there, still two cells, and still worth saying.
+    resid = s.U.sum(0) + s.W.sum(0) - s.g
+    over = np.flatnonzero(np.abs(resid) > 0.5)
+    named = {s.activity_codes[i]: float(resid[i]) for i in over}
+    check("the residue is two lines, equal and opposite, not a loose table",
+          set(named) == {"L68A", "L68B"} and abs(sum(named.values())) < 1e-6,
+          ", ".join(f"{k} {v:+.3f}" for k, v in sorted(named.items()))
+          + f"; the other {resid.size - len(named)} are inside half a unit, "
+            f"and the two sum to {sum(named.values()):+.3f}")
+    check("and it sits on the sector this project keeps arriving at",
+          "L68A" in named,
+          "imputed rents of owner-occupied dwellings — the same sector that "
+          "produces all 19 negative cells in the UK analytical table's "
+          "Leontief inverse, and the subject of OQ-D-02")
+
+    # 2 -- the opt-in still works, on a case built to need it.
+    #
+    # Nothing the project holds needs `sut_unbalanced: cancelling` any more:
+    # the case it was written for turned out to be inside its source's own
+    # precision. Rather than let the branch pass vacuously, it is exercised on
+    # a fixture MADE to need it — Belgium's own use table with +5 and -5 moved
+    # onto two industries' compensation, which is above what one decimal allows
+    # over these terms and still cancels exactly.
+    print()
+    scratch = ROOT / "outputs" / "_scratch"
+    scratch.mkdir(parents=True, exist_ok=True)
+    doc = json.loads(use.read_text())
+    ind = list(doc["dimension"]["ind_use"]["category"]["index"])
+    prd = list(doc["dimension"]["prd_ava"]["category"]["index"])
+    n_p = len(prd)
+    d1 = prd.index("D1")
+    for code, delta in (("L68A", +5.0), ("L68B", -5.0)):
+        k = str(ind.index(code) * n_p + d1)
+        doc["value"][k] = float(doc["value"].get(k, 0.0)) + delta
+    forged = scratch / "naio_10_cp16_XX_2022.json"
+    forged.write_text(json.dumps(doc), encoding="utf-8")
+
     try:
-        load_sut(sup, use)
+        load_sut(sup, forged, basic)
         msg = ""
     except EurostatError as exc:
         msg = str(exc)
-    check("Belgium is still refused by default", bool(msg),
-          "an identity beyond the source's own precision stops the load, as "
-          "it does everywhere else in this engine")
-    check("and the message names the industries, not just the maximum",
-          "L68A" in msg and "L68B" in msg and "+0.800" in msg,
-          "; ".join(ln.strip() for ln in msg.splitlines()
-                    if "L68" in ln))
-    check("and says the residues cancel, which is the whole finding",
-          "CANCEL" in msg and "+0.000" in msg,
-          "a boundary between two halves of one sector, not a table that "
-          "fails to add up")
-    check("and names the way in, rather than leaving it to be discovered",
-          "sut_unbalanced: cancelling" in msg,
-          msg.splitlines()[-1].strip()[:80])
+    check("a residue that IS beyond the source's precision still refuses",
+          bool(msg) and "L68A" in msg and "L68B" in msg,
+          f"+5.0 and -5.0 on a one-decimal source whose bound over these "
+          f"{92} terms is {bound:.3f}")
+    check("and the message names the lines and says they cancel",
+          "CANCEL" in msg.upper() and "sut_unbalanced: cancelling" in msg,
+          "a maximum is not a diagnosis, and a way in nobody is told about is "
+          "not a way in")
 
-    # 2 -- the opt-in admits that case and records what it admitted.
-    s = load_sut(sup, use, basic, unbalanced="cancelling")
+    s2 = load_sut(sup, forged, basic, unbalanced="cancelling")
     check("`cancelling` admits it and carries the residue on the pair",
-          abs(s.admitted_residue - 0.8) < 1e-6
-          and "ADMITTED" in (s.notes or ""),
-          f"admitted_residue = {s.admitted_residue:.3f}, and the note names "
-          f"L68A and L68B and their sum")
+          s2.admitted_residue > 3.0 and "ADMITTED" in (s2.notes or ""),
+          f"admitted_residue = {s2.admitted_residue:.3f}, and the note names "
+          f"both industries and their sum")
 
-    t = s.to_iot("D")
+    t = s2.to_iot("D")
     check("and the table it produces inherits it, so the gates account for it",
-          abs(t.inherited_residue - 0.8) < 1e-6,
+          abs(t.inherited_residue - s2.admitted_residue) < 1e-6,
           f"{t.inherited_residue:.3f} carried into `IOTable.inherited_residue` "
           f"— a transformed table cannot be measured for this, because the "
           f"transformation has already redistributed the residue")
+    forged.unlink()
 
     # 3 -- the bound is derived, and the difference is a hundredfold.
     print()

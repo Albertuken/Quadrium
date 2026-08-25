@@ -73,36 +73,79 @@ from __future__ import annotations
 
 import numpy as np
 
-# The share of non-zero values that must be representable at `d` decimals before
-# `d` is accepted as the published precision. Not 1.0: a single cell carried
-# through from another vintage at a different precision should not defeat the
-# detection, and it does happen. PROJECT CHOICE, and the only one in this file.
-_COVERAGE = 0.9995
+# The share of a source's values that must actually USE a precision level
+# before that level is accepted as the source's own. PROJECT CHOICE, and the
+# only one in this file.
+#
+# Measured across the 46 Eurostat cubes the project holds: 45 of them classify
+# IDENTICALLY at every threshold from 0.02 to 0.50 — a 25-fold band — and the
+# forty-sixth (`naio_10_cp15_FR_2022`) differs only below 0.02. The choice is
+# unobservable across that band, which is the same argument `OQ-B-02` made for
+# the acceptance threshold itself.
+_LEVEL_SHARE = 0.05
+
+# The rule this replaced asked the opposite question: the smallest `d` at which
+# 99.95 % of values are REPRESENTABLE. That reads a file's precision off its
+# rarest cells rather than its bulk, and five of those 46 cubes are misread by
+# it — Belgium's supply and use tables are 90.2 % one-decimal figures with
+# **two** two-decimal cells in 2,829, and were judged as two-decimal files and
+# therefore held ten times too tight. France and Spain's 2020 symmetric table
+# are the same, at 14 cells each.
+_COVERAGE = 0.9995     # kept for reference; no longer used to choose `d`
 
 _MAX_DECIMALS = 6      # beyond this a source is treated as unrounded
 _FLOAT_EPS = np.finfo(float).eps
 
 
-def printed_decimals(values, coverage: float = _COVERAGE) -> int | None:
+def _decimals_needed(v: np.ndarray) -> np.ndarray:
+    """How many decimals each value actually uses, `_MAX_DECIMALS + 1` if more."""
+    out = np.full(v.shape, _MAX_DECIMALS + 1)
+    for d in range(_MAX_DECIMALS + 1):
+        m = ((out > _MAX_DECIMALS)
+             & (np.abs(v - np.round(v, d)) < 1e-7 * np.maximum(1.0, np.abs(v))))
+        out[m] = d
+    return out
+
+
+def printed_decimals(values, level_share: float = _LEVEL_SHARE) -> int | None:
     """The number of decimals a source publishes to, read off the values.
 
-    Returns `None` when the values are not rounded at all — the ONS table is
-    like this, and it is why a flat tolerance in currency units appeared to work
-    for as long as it did.
+    **The finest level a meaningful share of the values actually use**, not the
+    finest level that covers almost all of them. A file of one-decimal figures
+    carrying two stray two-decimal cells is a one-decimal file; asking which
+    precision *represents* 99.95 % of the values answers "two", because a
+    one-decimal figure is representable at two decimals and the two anomalies
+    are not representable at one.
+
+    That distinction is not academic. It decided Belgium: 2,829 figures in its
+    supply table, 2,553 of them one-decimal, 274 whole numbers, and **two** with
+    a second decimal. Judged as a two-decimal file its supply-use pair was held
+    to 0.465 and refused for a 0.8 discrepancy; judged as the one-decimal file
+    it is, the bound is 4.65 and the pair loads.
+
+    Returns `None` when the values are not rounded at all — the ONS
+    intermediate block is like this, and it is why a flat tolerance in currency
+    units appeared to work for as long as it did. "Unrounded" is treated as one
+    more level and tested by the same rule, so a table with a scattering of
+    whole numbers in an otherwise full-precision block is not mistaken for an
+    integer table.
 
     Read off the data rather than taken from the documentation because the
     documentation does not say, and because it varies **within one dataset**:
     Eurostat serves Spain at one decimal and Italy at two, from the same
-    `naio_10_*` family under the same regulation.
+    `naio_10_*` family under the same regulation. It also varies **within one
+    table**: the ONS publishes an unrounded interior and integer margins.
     """
     v = np.asarray(values, float).ravel()
     v = v[np.isfinite(v)]
     v = v[v != 0.0]
     if v.size == 0:
         return None
-    for d in range(_MAX_DECIMALS + 1):
-        near = np.abs(v - np.round(v, d)) < 1e-7 * np.maximum(1.0, np.abs(v))
-        if near.mean() >= coverage:
+    nd = _decimals_needed(v)
+    if float((nd > _MAX_DECIMALS).mean()) >= level_share:
+        return None
+    for d in range(_MAX_DECIMALS, -1, -1):
+        if float((nd == d).mean()) >= level_share:
             return d
     return None
 

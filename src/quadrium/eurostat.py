@@ -1082,6 +1082,16 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     # bound being right; a publisher rounding to integers with ordinary
     # rounding residue would have been refused.
     #
+    # CORRECTED 2026-08-26: BELGIUM AND FRANCE ARE NOT TWO-DECIMAL SOURCES.
+    # Belgium's supply table is 2,553 one-decimal figures, 274 whole numbers
+    # and **two** cells carrying a second decimal, out of 2,829; France has 14
+    # such cells in 1,346. The old `printed_decimals` asked which precision
+    # REPRESENTS 99.95 % of the values, which those two anomalies decide, and
+    # answered "two decimals" for a one-decimal file — so both were still held
+    # ten times too tight after the bound was derived rather than assumed.
+    # `printed_decimals` now asks which precision the values actually USE.
+    # Belgium's bound is 3.450, not 0.465, and its 0.8 residue is inside it.
+    #
     # AND THE MESSAGE SAID ONLY THE MAXIMUM. "off by 0.8000" and "+0.8 on
     # L68A, -0.8 on L68B, cancelling" are the same number and completely
     # different findings, and only the second lets a reader decide what to do.

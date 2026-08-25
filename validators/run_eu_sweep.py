@@ -71,7 +71,7 @@ other, and it is the one covering more years — Spain publishes 22 of the first
 and 35 of the second. It had been exercised on five countries. Swept across all
 28:
 
-    13 of 28 load, transform by model D, and close their identities.
+    14 of 28 load, transform by model D, and close their identities.
 
     9  INCOMPLETE, the same story as the symmetric route
     2  a cross-check between the three files: BG out by 3.24 against a bound
@@ -79,8 +79,14 @@ and 35 of the second. It had been exercised on five countries. Swept across all
        again, seen from the other route
     2  final demand too sparse to assemble: Portugal's 2023 basic-price table
        publishes NO final-demand column at all, Finland's covers 1 product in 14
-    1  BE, the closing identity, admittable with `sut_unbalanced: cancelling`
     1  DE, which publishes no basic-price use table
+
+Belgium was the fifteenth refusal until 2026-08-26 — the closing identity, out
+by 0.8 — and it is now the fourteenth country that loads. Not because anything
+was relaxed: its supply table is a ONE-decimal file, 2,553 one-decimal figures
+and two cells carrying a second, and `printed_decimals` was reading the
+precision off those two. 0.8 across 92 one-decimal cells is inside what one
+decimal can distinguish. See `run_sut_closure.py`.
 
 Bulgaria's 3.24 was the last of the fifteen with no explanation, and it is the
 data too: `cp15` gives `R90-92` a domestic output of 793.37 and `cp1610` a

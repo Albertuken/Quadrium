@@ -231,9 +231,13 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
             f"`cancelling` admits ONE case: a closing identity out beyond what "
             f"the source's own precision allows, whose residues SUM TO ZERO "
             f"and sit in lines the message names — a boundary between two "
-            f"industries rather than a table that fails to add up. Belgium's "
-            f"2022 pair is +0.8 on L68A and -0.8 on L68B, and 0.000 on the "
-            f"other 87.\n\n"
+            f"industries rather than a table that fails to add up.\n\n"
+            f"No source this project holds currently needs it. It was written "
+            f"for Belgium's 2022 pair, +0.8 on L68A and -0.8 on L68B and 0.000 "
+            f"on the other 87, which turned out to be INSIDE what Belgium's "
+            f"one-decimal printing allows once the precision was read off the "
+            f"figures the file actually uses rather than off two anomalous "
+            f"cells in 2,829.\n\n"
             f"It does not admit residues that accumulate. Whatever is missing "
             f"from a table as a whole stays missing, and the load stops.")
 

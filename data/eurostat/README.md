@@ -412,17 +412,18 @@ one publishes supply and use; what differs is the rest:
 no use table at basic prices, so the domestic/imported split would have to be
 assumed. Its symmetric table is reachable.
 
-**Belgium's 2022 pair loads for four other countries' worth of checks and then
-is refused**, on the industry column identity: intermediate consumption plus
-value added misses output by **0.80** against the **0.46** its two-decimal
-precision allows, a factor of 1.74. Austria, Spain, France and the Netherlands
-all pass the same check. The refusal is correct and the message says by how
-much; it is recorded here because "the adviser named a config and the config did
-not load" is worth knowing about before it surprises someone.
+**Belgium's 2022 pair was refused until 2026-08-26**, on the industry column
+identity: intermediate consumption plus value added missing output by **0.80**
+against the **0.46** its precision was said to allow. The refusal was wrong, and
+the bound was the reason. Belgium publishes to **one** decimal — 2,553
+one-decimal figures, 274 whole numbers and **two** cells with a second decimal,
+out of 2,829 — and `printed_decimals` was asking which precision *represents*
+99.95 % of the values, which those two cells decide. One decimal over 92 summed
+cells cannot distinguish anything below 4.6. The pair loads.
 
 ---
 
-## `naio_10_cp15/cp16/cp1610_BE_2022.json` — the pair that is refused
+## `naio_10_cp15/cp16/cp1610_BE_2022.json` — the pair that was refused
 
 **What they are.** Belgium's 2022 supply-use system, 89 products by 89
 industries. Retrieved 2026-08-25; URLs, byte counts and SHA-256 in the
@@ -442,8 +443,16 @@ industries. Retrieved 2026-08-25; URLs, byte counts and SHA-256 in the
 Sum exactly 0.000. A boundary between two halves of one sector, not a table
 that fails to add up — and `L68A` is the same sector that produces all 19
 negative cells in the UK analytical table's Leontief inverse, and the subject
-of `OQ-D-02`. It is refused by default; `sut_unbalanced: cancelling` admits
-this shape and only this shape, and records what it admitted.
+of `OQ-D-02`.
+
+It is **inside** what one decimal allows, so the pair loads and the residue is
+reported rather than refused. That is not a relaxation: 0.8 across 92
+one-decimal cells is what one decimal cannot distinguish, and the finding —
+where the residue sits and that it cancels — survives intact. Where a residue
+is genuinely beyond a source's precision and still cancels this way,
+`sut_unbalanced: cancelling` admits that shape and only that shape, and records
+what it admitted. Nothing in this folder needs it now; `run_sut_closure.py`
+exercises it on a fixture built to.
 
 **Two.** `B06`, crude petroleum and natural gas, has **zero domestic output and
 20,342 of imports**, of which 20,238 goes to `C19`, refining. Belgium imports
@@ -456,16 +465,22 @@ divides by that output — and dropped their imported use with them, taking
 **Three.** It is the first pair here that is rectangular *after* masking, 85
 products against 84 industries, so models A and C refuse it and B and D do not.
 
-Austria, Spain, France and the Netherlands pass every check Belgium fails.
+Austria, Spain, France and the Netherlands were the control that made Belgium's
+0.8 look like a failure: they pass the same check exactly. What separates them
+is that Austria prints two decimals and Belgium one, which is the thing the
+bound is supposed to notice and did not.
 
 ---
 
 ## Five tables the engine will not load, kept as fixtures
 
 Retrieved 2026-08-25 in a sweep of every EU country plus Norway, most recent
-year each. **Nineteen of twenty-seven load and are sound** — spectral radius
+year each. **Eighteen of twenty-eight load and are sound** — spectral radius
 0.33 to 0.65, row residues at the rounding scale. These five do not, for four
-distinct reasons, and each refusal is correct.
+distinct reasons, and each refusal is correct. The live count for both routes
+is in `_verdicts.json`, which `run_docs_current.py` checks `library/INDEX.md`
+against; a count in prose beside a count in a file is a count that will
+disagree, and these two already had.
 
 | file | why |
 |---|---|

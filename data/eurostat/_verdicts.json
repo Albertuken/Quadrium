@@ -16,9 +16,9 @@
   },
   "BE": {
     "pair": {
-      "cause": "does not close",
-      "detail": "a closing identity fails beyond its own precision",
-      "verdict": "refuses",
+      "cause": "",
+      "detail": "",
+      "verdict": "loads",
       "year": 2022
     },
     "symmetric": {
