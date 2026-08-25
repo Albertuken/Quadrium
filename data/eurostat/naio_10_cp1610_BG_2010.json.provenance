@@ -1,0 +1,10 @@
+{
+  "dataset": "naio_10_cp1610",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1610?format=JSON&lang=EN&geo=BG&time=2010&unit=MIO_EUR",
+  "geo": "BG",
+  "year": 2010,
+  "bytes": 232891,
+  "sha256": "418c16d032384e6f78f356bbc34e9f96ecdf815f99f61fe78bf99b612efec1a1",
+  "retrieved_at": "2026-08-25T20:50:11.277986+00:00",
+  "n_values": 17450
+}

@@ -988,12 +988,30 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
                  Um.sum(1) + Ym.sum(1), imports, tol_row),
                 ("use at basic prices plus taxes rebuilds industry output",
                  Ud.sum(0) + Um.sum(0) + tax_by_act + W.sum(0), g, tol_col)):
-            dev = float(np.abs(got - want).max())
+            diff = np.asarray(got, float) - np.asarray(want, float)
+            dev = float(np.abs(diff).max())
             if dev > tol:
+                # NAME THE LINES AND BOTH FIGURES. "out by 3.2400" is a number;
+                # "Bulgaria's cp15 gives R90-92 an output of 793.37 and its
+                # cp1610 a total use of 790.11" is the finding, and it is the
+                # source's. Spain agrees to 0.0000 on all 65, which is the
+                # control that makes the 3.26 readable.
+                names = (list(products) if diff.size == len(products)
+                         else list(industries))
+                over = np.flatnonzero(np.abs(diff) > tol)
+                worst = over[np.argsort(-np.abs(diff[over]))][:5]
                 raise EurostatError(
                     f"{Path(use_basic_path).name} does not belong to this "
                     f"pair: {label} is out by {dev:,.4f} against a bound of "
-                    f"{tol:,.4f} derived from the source's own precision.")
+                    f"{tol:,.4f} derived from the source's own precision.\n"
+                    f"  {len(over)} of {diff.size} beyond it:\n"
+                    + "".join(f"      {_bare(names[i]):12s} "
+                              f"{np.asarray(got, float)[i]:14,.2f} against "
+                              f"{np.asarray(want, float)[i]:14,.2f}   "
+                              f"({diff[i]:+,.2f})\n" for i in worst)
+                    + f"  These are figures the SOURCE publishes in two files "
+                      f"for the same quantity, and no tolerance reconciles "
+                      f"two published numbers.")
 
     sut = SupplyUseTables(
         table_id=f"EUROSTAT-SUT-{geo}-{year}",

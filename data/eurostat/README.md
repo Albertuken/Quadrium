@@ -521,3 +521,30 @@ Across all 28 countries, **13 supply-use pairs load and transform**. The other
 assemble, Sweden's own output/total-use disagreement, Bulgaria 3.24 outside its
 bound, Belgium's closing identity, and Germany, which publishes no basic-price
 use table.
+
+---
+
+## `naio_10_cp15/cp16/cp1610_BG_2010.json` — two files that disagree
+
+Retrieved 2026-08-25. Bulgaria's 2010 supply-use system, the only year it
+publishes a use table at basic prices.
+
+It was the last refusal across both sweeps with no explanation: a cross-check
+out by **3.24** against a bound of 0.365 — nine times the bound and trivial in
+absolute terms, which is exactly the shape of thing that gets waved through.
+
+It is the data. For `R90-92`, arts and entertainment:
+
+| file | figure |
+|---|---|
+| `naio_10_cp15` | domestic product output **793.37** |
+| `naio_10_cp1610` | domestic total use **790.11** |
+
+Two figures the same source publishes, for the same country, year and product,
+**3.26 apart**. Every other Bulgarian product agrees to 0.01, and Spain agrees
+to **0.0000** on all 65 of its own — which is the control that makes 3.26
+readable rather than suspicious of this engine. No tolerance reconciles two
+published numbers.
+
+With this, **every refusal across both sweeps is explained and every one is the
+data.** `run_eu_sweep.py`.

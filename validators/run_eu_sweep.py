@@ -82,6 +82,11 @@ and 35 of the second. It had been exercised on five countries. Swept across all
     1  BE, the closing identity, admittable with `sut_unbalanced: cancelling`
     1  DE, which publishes no basic-price use table
 
+Bulgaria's 3.24 was the last of the fifteen with no explanation, and it is the
+data too: `cp15` gives `R90-92` a domestic output of 793.37 and `cp1610` a
+total use of 790.11. Spain agrees with itself to 0.0000 on all 65 of its
+products, which is what makes 3.26 readable rather than suspicious of us.
+
 AND THE SWEEP FOUND A DEFECT OF MINE, TWO DAYS OLD
 ----------------------------------------------------
 The final-demand columns were chosen from `naio_10_cp16` and then read out of
@@ -249,6 +254,40 @@ def main() -> int:
               col < 1.0 and it.n > 80,
               f"{s.V.shape[0]}×{s.V.shape[1]} → {it.n} sectors, column "
               f"residue {col:.3f}")
+
+    # 5 -- Bulgaria: the last refusal that was neither explained nor large.
+    print()
+    bg = [DATA / f"naio_10_{d}_BG_2010.json" for d in ("cp15", "cp16", "cp1610")]
+    if not all(f.exists() for f in bg):
+        SKIPPED.append("BG")
+        print("  --   BG — SKIPPED: the 2010 trio is not in this checkout")
+    else:
+        from quadrium.eurostat import EurostatError, load_sut
+        try:
+            load_sut(*bg)
+            msg = ""
+        except EurostatError as exc:
+            msg = str(exc)
+        check("Bulgaria's two files disagree with each other, and it says so",
+              "R90-92" in msg and "793.37" in msg and "790.1" in msg,
+              "cp15 gives R90-92 a domestic output of 793.37 and cp1610 a "
+              "total use of 790.11 — 3.26 apart, in two files the same source "
+              "publishes for the same country and year")
+        # The control is the argument. Without it 3.26 could be ours.
+        s = load_sut(DATA / "naio_10_cp15_ES_2022.json",
+                     DATA / "naio_10_cp16_ES_2022.json")
+        from quadrium.eurostat import _Cube
+        import json as _json
+        ub = _Cube(_json.loads(
+            (DATA / "naio_10_cp1610_ES_2022.json").read_text()))
+        worst = max(abs(s.q[i] - (ub.at(stk_flow="DOM", ind_use="TU",
+                                        prd_ava="CPA_" + c) or 0.0))
+                    for i, c in enumerate(s.product_codes))
+        check("and Spain, the control, agrees with itself exactly",
+              worst < 1e-9,
+              f"max |output − total use| = {worst:.4g} across all "
+              f"{len(s.product_codes)} products. Without that number, 3.26 "
+              f"could as easily have been this engine's arithmetic")
 
     print()
     print("    Five or six files is not a claim about published data. Eight")
