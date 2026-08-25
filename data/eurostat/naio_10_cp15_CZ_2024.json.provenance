@@ -1,0 +1,10 @@
+{
+  "dataset": "naio_10_cp15",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp15?format=JSON&lang=EN&geo=CZ&time=2024&unit=MIO_EUR",
+  "geo": "CZ",
+  "year": 2024,
+  "bytes": 152209,
+  "sha256": "8bd38f97ad0789dffd279254723f4136e16479e384ce896b448d02c73a38c0ba",
+  "retrieved_at": "2026-08-25T20:28:55.498729+00:00",
+  "n_values": 12413
+}

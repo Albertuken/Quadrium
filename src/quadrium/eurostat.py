@@ -864,17 +864,64 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     # it 0.10 out where the published aggregates are exact.
     q = P("TS_BP") - imports
 
+    # THE FINAL-DEMAND COLUMNS HAVE TO SUIT BOTH FILES, not just the first.
+    #
+    # This chose them from `naio_10_cp16` alone and then read the same names
+    # out of `naio_10_cp1610`. The two do not agree on which components they
+    # publish: Czechia and Estonia give exports as `P6` and not as the
+    # `P6_B0`/`P6_D0` split that cp16 carries, so exports were read as zero and
+    # the domestic rebuild came out 50,837 and 2,267 short. Portugal populated
+    # none of cp16's choice at all, and was 36,187 out.
+    #
+    # An alternative is now accepted only if EVERY file that will be read with
+    # it has every one of its columns, for every product.
+    _cubes = [use] + ([_Cube(json.loads(Path(use_basic_path).read_text()))]
+                      if use_basic_path is not None else [])
+
+    def _populated(cand):
+        for cube_ in _cubes:
+            dim = "ind_use" if "ind_use" in cube_.ids else "prd_use"
+            # The flow each cube ACTUALLY carries. `cp16` has a `stk_flow`
+            # dimension too, whose only value is `TOTAL`, so asking it for
+            # `DOM` returns None for every cell and refuses every country
+            # including the ones that already worked.
+            #
+            # And on the basic-price cube, DOM only: the IMPORTED block
+            # legitimately has empty cells -- a product with no imported
+            # household consumption -- so requiring them populated refuses
+            # everybody. What polices the zero-substitution there is not this
+            # test but the three cross-checks below, which require the imported
+            # blocks to rebuild published imports.
+            if "stk_flow" not in cube_.ids:
+                flows = [None]
+            else:
+                have = list(cube_.index["stk_flow"])
+                flows = ["DOM"] if "DOM" in have else have[:1]
+            for f_ in flows:
+                kw = {} if f_ is None else {"stk_flow": f_}
+                for c in cand:
+                    if any(cube_.at(**kw, **{dim: c, "prd_ava": p}) is None
+                           for p in products):
+                        return False
+        return True
+
     fd, dropped = [], []
     for alternatives in _FD_ALTERNATIVES:
         for cand in alternatives:
-            if all(all(use.at(ind_use=c, prd_ava=p) is not None
-                       for p in products) for c in cand):
+            if _populated(cand):
                 fd += cand
                 dropped += [c for alt in alternatives for c in alt
                             if c not in cand]
                 break
         else:
-            raise EurostatError(f"none of {alternatives} is fully populated")
+            raise EurostatError(
+                f"none of {alternatives} is fully populated in "
+                + " and ".join(("the use table" if c_ is use
+                                else "the basic-price use table")
+                               for c_ in _cubes)
+                + ". The two files must agree on which final-demand "
+                  "components they publish, or a column read from one is a "
+                  "column of zeros in the other.")
     Y = np.column_stack([[use.at(ind_use=c, prd_ava=p) for p in products]
                          for c in fd]).astype(float)
     W = np.array([[use.at(ind_use=j, prd_ava=r) or 0.0 for j in industries]
@@ -892,7 +939,7 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     # a supply-use pair has. It just cannot be transformed, and says so.
     Ud = Um = Yd = Ym = tax_by_act = tax_by_fd = None
     if use_basic_path is not None:
-        ub = _Cube(json.loads(Path(use_basic_path).read_text()))
+        ub = _cubes[1]
         for dim in ("stk_flow", "ind_use", "prd_ava"):
             if dim not in ub.ids:
                 raise EurostatError(

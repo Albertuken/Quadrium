@@ -496,3 +496,28 @@ OVERSHOOTS by a factor; Italy's was 2.4×, which is what that branch was written
 for. An incomplete one UNDERSHOOTS. The message now measures which and says so.
 
 `run_eu_sweep.py`.
+
+
+---
+
+## `naio_10_cp15/cp16/cp1610_CZ_2024.json` — the trio that found a defect
+
+Retrieved 2026-08-25. Czechia's 2024 supply-use system, 89 × 89, the newest
+transformable pair Eurostat carries for anyone.
+
+It is here because it refused to load, and the reason was ours. The final-demand
+columns were chosen from `cp16` and then read out of `cp1610` by the same names,
+and **the two files do not agree on which components they publish**: Czechia
+gives exports as `P6`, not as the `P6_B0`/`P6_D0` split that `cp16` carries. The
+missing names read as zero, and the domestic rebuild came out **50,837 short**.
+Estonia was 2,267 short for the same reason.
+
+Columns are now chosen to satisfy every file that will be read with them.
+Czechia loads at 89 × 89 and transforms into 87 sectors with a column residue of
+0.111.
+
+Across all 28 countries, **13 supply-use pairs load and transform**. The other
+15 are limits of the data — nine incomplete, two with final demand too sparse to
+assemble, Sweden's own output/total-use disagreement, Bulgaria 3.24 outside its
+bound, Belgium's closing identity, and Germany, which publishes no basic-price
+use table.

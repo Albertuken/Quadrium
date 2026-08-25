@@ -64,6 +64,39 @@ opposite responses, and the message now measures which it is and says so.
 The refusals are all correct. Loading Ireland's table would understate that
 economy by 362,158 without saying so.
 
+THE OTHER ROUTE IN, SWEPT THE SAME WAY
+----------------------------------------
+A symmetric table is one way into this engine. The supply-use pair is the
+other, and it is the one covering more years — Spain publishes 22 of the first
+and 35 of the second. It had been exercised on five countries. Swept across all
+28:
+
+    13 of 28 load, transform by model D, and close their identities.
+
+    9  INCOMPLETE, the same story as the symmetric route
+    2  a cross-check between the three files: BG out by 3.24 against a bound
+       of 0.365, SE by 394.58 — Sweden's own output and total-use disagreement
+       again, seen from the other route
+    2  final demand too sparse to assemble: Portugal's 2023 basic-price table
+       publishes NO final-demand column at all, Finland's covers 1 product in 14
+    1  BE, the closing identity, admittable with `sut_unbalanced: cancelling`
+    1  DE, which publishes no basic-price use table
+
+AND THE SWEEP FOUND A DEFECT OF MINE, TWO DAYS OLD
+----------------------------------------------------
+The final-demand columns were chosen from `naio_10_cp16` and then read out of
+`naio_10_cp1610` by the same names. The two files do not agree on which
+components they publish: **Czechia and Estonia give exports as `P6` and not as
+the `P6_B0`/`P6_D0` split cp16 carries**, so exports were read as zero and the
+domestic rebuild came out 50,837 and 2,267 short. The columns are now chosen to
+satisfy every file that will be read with them, and both countries load.
+
+Two attempts at that fix failed first, and both are recorded in the code: `cp16`
+carries a `stk_flow` dimension whose only value is `TOTAL`, so requiring `DOM`
+of it refused every country including the ones that already worked; and
+requiring the IMPORTED block populated refuses everybody, because a product with
+no imported household consumption is an empty cell that means zero.
+
 Run:
     python3 validators/run_eu_sweep.py
 """
@@ -195,6 +228,27 @@ def main() -> int:
           f"{len(rhos)} tables, spectral radius "
           f"{min(rhos.values()):.2f} to {max(rhos.values()):.2f} — the "
           f"condition every multiplier rests on, met by all of them")
+
+    # 4 -- the supply-use route, and the defect the sweep of it found.
+    print()
+    cz = [DATA / f"naio_10_{d}_CZ_2024.json" for d in ("cp15", "cp16", "cp1610")]
+    if not all(f.exists() for f in cz):
+        SKIPPED.append("CZ")
+        print("  --   CZ — SKIPPED: the 2024 trio is not in this checkout")
+    else:
+        from quadrium.eurostat import load_sut
+        s = load_sut(*cz)
+        check("Czechia's pair loads with the final-demand set BOTH files carry",
+              "P6" in s.Y_labels and "P6_B0" not in s.Y_labels,
+              f"{s.Y_labels} — cp16 publishes the `P6_B0`/`P6_D0` split and "
+              f"cp1610 does not, and choosing from cp16 alone read Czech "
+              f"exports as zero: the domestic rebuild came out 50,837 short")
+        it = s.to_iot("D")
+        col = float(np.abs(it.Z.sum(0) + it.VA.sum(0) - it.X).max())
+        check("and transforms into a table that closes",
+              col < 1.0 and it.n > 80,
+              f"{s.V.shape[0]}×{s.V.shape[1]} → {it.n} sectors, column "
+              f"residue {col:.3f}")
 
     print()
     print("    Five or six files is not a claim about published data. Eight")
