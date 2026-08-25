@@ -310,7 +310,7 @@ class MarginImbalanceError(ValueError):
     """
 
 
-def _assert_margins_consistent(u, v) -> None:
+def _assert_margins_consistent(u, v, margin_floor: float | None = None) -> None:
     """Refuse margins that cannot both be met, at the precision they carry.
 
     The bound is the OQ-B-02 floor, applied to each vector separately and
@@ -329,7 +329,34 @@ def _assert_margins_consistent(u, v) -> None:
     # `(n-1)*u*sum|x|` bound comes out below the observed residual. The floor is
     # sound for published data, which is what it was derived for, and overreached
     # everywhere else.
-    if printed_decimals(u) is None and printed_decimals(v) is None:
+    # THE MARGINS' OWN DECIMALS ARE NOT THE SOURCE'S, AND THEIR LENGTH IS NOT
+    # THE NUMBER OF FIGURES BEHIND THEM.
+    #
+    # A margin handed to this solver is rarely something a publisher printed.
+    # It is a published cell multiplied by a weight, or a published total minus
+    # a sum over sixty-odd published cells. Two things follow, and the first
+    # version of this check got both wrong:
+    #
+    #   * the DECIMALS are an artefact of the arithmetic -- seven where the
+    #     publisher printed two -- so inferring `d` from the values bounds the
+    #     wrong quantity, far too tightly;
+    #   * the TERM COUNT is `u.size`, which is 2 for a two-way split, when the
+    #     rounding those two numbers carry was accumulated over the ~65 cells
+    #     each of them was formed from.
+    #
+    # Measured on 2026-08-25: splitting one sector of the Portuguese symmetric
+    # table, published to two decimals, gave margins summing to 221.53 and
+    # 221.56. The 0.03 difference is an ordinary published table's row and
+    # column disagreeing by less than its own rounding allows -- the table's
+    # own floor is 0.37. Inferring from the products refused it at 1.1e-05;
+    # counting two terms instead of two-times-sixty-five refused it at 0.02.
+    #
+    # Only the caller knows what the margins were built from, so the caller
+    # supplies the bound. `scenarios.py` does, from the source table's printed
+    # precision and the number of its cells that went into each margin.
+    if margin_floor is not None:
+        floor = float(margin_floor)
+    elif printed_decimals(u) is None and printed_decimals(v) is None:
         # PROJECT CHOICE, and labelled as one. No loaded source states a bound
         # for margins the caller computed rather than read.
         floor = PROJECT_COMPUTED_MARGIN_REL * max(abs(u.sum()), abs(v.sum()), 1.0)
@@ -574,7 +601,7 @@ def mras(T, u, v, known: dict, **kw) -> "GrasResult":
 
 
 def gras(T, u, v, *, eps: float = GRAS_EPS, max_iter: int = PROJECT_MAX_ITER,
-         ) -> GrasResult:
+         margin_floor: float | None = None) -> GrasResult:
     """Project base table `T` onto row totals `u` and column totals `v`.
 
     Parameters
@@ -606,7 +633,7 @@ def gras(T, u, v, *, eps: float = GRAS_EPS, max_iter: int = PROJECT_MAX_ITER,
         raise ValueError(f"shape mismatch: T is {T.shape}, u is {u.size}, "
                          f"v is {v.size}")
 
-    _assert_margins_consistent(u, v)
+    _assert_margins_consistent(u, v, margin_floor)
     P, N = split_pn(T)
     _assert_sign_feasible(P, N, u, v)
     # The exact version of the same question, which the per-line test above can

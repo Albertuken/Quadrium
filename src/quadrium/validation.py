@@ -31,6 +31,7 @@ from __future__ import annotations
 import numpy as np
 
 from .diagnostics import technical_coefficients
+from .precision import assertable_tolerance, printed_decimals
 from .models import (CellLabel, IOTable, Scenario, ValidationReport,
                      count_label)
 
@@ -131,12 +132,54 @@ def validate_original(table: IOTable) -> ValidationReport:
 
     row_dev = np.max(np.abs(table.Z.sum(axis=1) + table.Y.sum(axis=1) - table.X))
     col_dev = np.max(np.abs(table.Z.sum(axis=0) + table.VA.sum(axis=0) - table.X))
-    scale = max(abs(table.X).max(), 1.0)
-    tol = PROJECT_BALANCE_ABS_TOL + PROJECT_BALANCE_REL_TOL * scale
-    rep.add("check_original_balance", bool(row_dev <= tol and col_dev <= tol),
-            f"row balance max dev {row_dev:.3g}, column balance max dev "
-            f"{col_dev:.3g}, tolerance {tol:.3g} (PROJECT CHOICE)",
-            "error", "ID-11 / ID-02, A_core_accounting_spec.md §A.6")
+
+    # THE TOLERANCE IS DERIVED FROM THE TABLE, NOT CHOSEN.
+    #
+    # This check used `abs + rel * max|X|`, which is a statement about the
+    # magnitude of the biggest sector and says nothing about how precisely the
+    # publisher printed anything. `OQ-B-02` closed at v1.57 on the opposite
+    # rule: a table published to `d` decimals states each cell as a stand-in
+    # for a figure in a band of width `10^-d`, so an identity summing `n` such
+    # cells cannot be checked more tightly than `0.5*10^-d*n`, and below that
+    # line "balanced" and "not balanced" are the same observation. `precision`
+    # has computed it since v1.10 and `eurostat._rounding_tol` has used it; the
+    # gate every table must pass through never adopted it.
+    #
+    # What that cost, measured on 2026-08-25 over the four Eurostat symmetric
+    # tables the project can load:
+    #
+    #     ES 2020   max dev 0.1        old tol 1.5e-04   FAIL      floor 3.65
+    #     ES 2021   max dev 5.8e-11    old tol 1.6e-04   pass      floor 3.75
+    #     ES 2022   max dev 2.9e-11    old tol 1.8e-04   pass      floor 3.65
+    #     PT 2020   max dev 0.09       old tol 2.6e-05   FAIL      floor 0.37
+    #
+    # Two of four refused, on residues one to two orders of magnitude INSIDE
+    # what the publishers' own rounding can produce. Portugal prints two
+    # decimals and Spain one, from the same dataset under the same regulation,
+    # and 2020 differs from 2022 for the same country. The run stops at this
+    # check, so a first-time user of an ordinary published table was told their
+    # table does not balance -- and it does.
+    #
+    # The floor never goes below PROJECT_BALANCE_ABS_TOL, which is what catches
+    # a genuinely broken load: a dropped final-demand column moves a row by
+    # thousands, not by hundredths.
+    values = np.concatenate([table.Z.ravel(), table.Y.ravel(),
+                             table.VA.ravel(), table.X.ravel()])
+    n_row = table.n + table.Y.shape[1] + 1      # Z row + Y row + X
+    n_col = table.n + table.VA.shape[0] + 1     # Z column + VA column + X
+    tol_row = max(PROJECT_BALANCE_ABS_TOL, assertable_tolerance(values, n_row))
+    tol_col = max(PROJECT_BALANCE_ABS_TOL, assertable_tolerance(values, n_col))
+    d = printed_decimals(values)
+    basis = (f"derived from this source's own {d}-decimal precision over "
+             f"{n_row} terms (OQ-B-02: 0.5·10^-d·n)" if d is not None else
+             "derived from float64 accumulation over the terms summed — this "
+             "source does not round")
+    rep.add("check_original_balance",
+            bool(row_dev <= tol_row and col_dev <= tol_col),
+            f"row balance max dev {row_dev:.3g} against {tol_row:.3g}, column "
+            f"balance max dev {col_dev:.3g} against {tol_col:.3g} — {basis}",
+            "error", "ID-11 / ID-02, A_core_accounting_spec.md §A.6; "
+                     "D_open_questions.md OQ-B-02")
 
     neg = _negative_census(table)
     rep.add("check_sign_structure", True,
@@ -206,8 +249,24 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
                       Z_balanced: np.ndarray, balance_info: dict,
                       reagg: dict, provenance: np.ndarray,
                       overridden: list | None = None,
-                      keys: dict | None = None) -> ValidationReport:
-    """All post-disaggregation checks (spec §9)."""
+                      keys: dict | None = None,
+                      source_residue: float = 0.0) -> ValidationReport:
+    """All post-disaggregation checks (spec §9).
+
+    `source_residue` is how far the ORIGINAL table fails to close its own
+    accounting identities — measured, not assumed, and zero for a source that
+    closes exactly. Two checks below add it to their tolerance, because neither
+    can be met more tightly than the source itself manages:
+
+      * the expanded table cannot attain targets derived from a table whose own
+        row and column totals disagree, any more closely than they disagree;
+      * the reaggregated table cannot reproduce an original that does not
+        balance, once the margins have been squared to make it solvable at all.
+
+    On Spain 2022, the UK and the INE fixtures this is 0.0 and nothing moves.
+    On Portugal 2020 it is 0.09, which is exactly the deviation the expanded
+    table was being failed for.
+    """
     rep = ValidationReport(table_id=table.table_id,
                            scenario_id=scenario.scenario_id)
     rep.method_used = balance_info["method"]
@@ -324,6 +383,7 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
     # a `balance_info` built before v1.57 readable.
     worst = max(balance_info["max_row_dev"], balance_info["max_col_dev"])
     tol = balance_info.get("margin_tolerance", PROJECT_BALANCE_ABS_TOL)
+    tol = tol + max(0.0, float(source_residue))
     imbalance = balance_info["margin_imbalance"]
     rep.add("check_margins_attained", bool(worst <= tol),
             f"max deviation from target row/column totals {worst:.3g} against "
@@ -331,7 +391,10 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
             f"{imbalance:.3g}"
             + ("" if not imbalance else
                " — the targets are inconsistent, so no table satisfies both "
-               "and part of that deviation cannot be solved away"),
+               "and part of that deviation cannot be solved away")
+            + ("" if not source_residue else
+               f". {source_residue:.3g} of the tolerance is the source's own "
+               f"unclosed identities, which the targets inherit"),
             "error", "OQ-B-02 v1.57; quadrium.precision.infeasibility_floor")
 
     # --- reaggregation guarantee
@@ -343,11 +406,26 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
     pct = reagg["max_pct_error"]
     rep.reaggregation_error_pct = pct
     shown = "not computable" if pct is None else f"{pct:.3g} %"
-    rep.add("check_reaggregation",
-            bool(pct is not None and pct <= scenario.reaggregation_tolerance_pct),
+    # A RELATIVE CRITERION AND AN ABSOLUTE ESCAPE. The percentage is the sharp
+    # test and stays the primary one: on a source that closes, reaggregation is
+    # exact and this reads 0. But a percentage on a small cell is a brutal
+    # measure once the margins have had to be squared — a move of 0.015 on a
+    # cell of 100 is 0.015 %, ten thousand times the project tolerance, while
+    # the whole table is off by 0.035 in 350,000. So a run also passes when its
+    # WORST ABSOLUTE cell error is inside what the source's own books are out
+    # by. For a source that closes, that allowance is zero.
+    abs_err = reagg.get("max_abs_error", float("inf"))
+    allowance = max(0.0, float(source_residue)) + PROJECT_UNTOUCHED_ABS_TOL
+    by_pct = pct is not None and pct <= scenario.reaggregation_tolerance_pct
+    by_abs = abs_err <= allowance
+    rep.add("check_reaggregation", bool(by_pct or by_abs),
             f"max reaggregation error {shown} against a tolerance of "
             f"{scenario.reaggregation_tolerance_pct:g} % (PROJECT CHOICE); "
-            f"grand total off by {reagg['total_abs_error']:.3g}",
+            f"grand total off by {reagg['total_abs_error']:.3g}"
+            + ("" if by_pct or not source_residue else
+               f". Passed on the absolute test instead: worst cell off by "
+               f"{abs_err:.3g}, inside the {allowance:.3g} this source's own "
+               f"identities are out by"),
             "error")
 
     # --- sign structure preserved

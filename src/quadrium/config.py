@@ -23,6 +23,8 @@ Five sheets. Only `project` and `splits` are required.
                                product) — the Spanish counterpart
               `ine_total`      the INE workbook, total flows
               `interchange`    the project's own format
+              `eurostat`       fetched from the Eurostat API by country and
+                               year, and cached — see below
             `table_unbalanced` (`refuse` by default, or `residual_column`)
             applies to `ine_interior` alone, whose published table does not
             balance for one product — see OQ-D-04. Setting it on any other kind
@@ -59,6 +61,29 @@ Five sheets. Only `project` and `splits` are required.
             sheet simply have no profiles, which is how a "plain" and a
             "profiled" scenario are written side by side.
 
+FETCHING RATHER THAN NAMING A FILE
+-----------------------------------
+`table_kind: eurostat` replaces `table_path` with a country and a year:
+
+    eurostat_geo       ES, AT, FR … the two-letter code
+    eurostat_year      2022
+    eurostat_dataset   product_by_product (default) | industry_by_industry
+                       | a raw naio_10_* code
+    eurostat_variant   domestic (default) | total
+    table_path         optional: where to cache. Defaults to
+                       data/eurostat/<dataset>_<GEO>_<year>.json beside the
+                       configuration.
+
+**A cached file is never re-fetched.** This is the reproducibility rule, and it
+is the reason `eurostat.fetch()` and `eurostat.load_iot()` were built as
+separate functions in the first place: statistical offices revise, so a
+configuration that downloaded on every run would give one answer in January and
+another in June with nothing in the output to say why. The first run downloads
+and records the URL, the byte count and the SHA-256; every run after it reads
+those same bytes and never touches the network. `--refresh` overrides that
+deliberately and says what it is doing; `--offline` refuses to fetch at all and
+prints the URL so the file can be brought in by hand.
+
 Everything the workbook cannot express is a project default, and every default
 is documented where it lives. Nothing here invents an economic assumption.
 """
@@ -74,11 +99,199 @@ from .models import (AllocationKey, Assumption, AssumptionLedger,
 
 REQUIRED_SHEETS = ("project", "splits")
 TABLE_KINDS = ("uk_analytical", "interchange",
-               "ine_interior", "ine_total")
+               "ine_interior", "ine_total", "eurostat")
 
 
 class ConfigError(ValueError):
     """Something in the workbook is wrong, said in the analyst's terms."""
+
+
+def _eurostat_cache_path(meta: dict, base_dir: Path) -> tuple[Path, dict]:
+    """Where the download lives, and what to ask for if it is not there yet.
+
+    Returns the cache path and the request it stands for. Nothing here touches
+    the network: this only resolves what the workbook asked for into a filename
+    and a set of API parameters, so that a configuration can be READ, and its
+    mistakes reported, without a connection.
+    """
+    from .eurostat import DATASETS
+
+    geo = str(_need(meta, "eurostat_geo", "project", 0)).strip().upper()
+    if not (len(geo) == 2 and geo.isalpha()):
+        raise ConfigError(
+            f"eurostat_geo is {geo!r}. It must be a two-letter country code — "
+            f"ES, AT, FR, PT. Eurostat answers an unknown code with an empty "
+            f"result rather than an error, so this is checked here instead.")
+    try:
+        year = int(str(_need(meta, "eurostat_year", "project", 0)).strip())
+    except ValueError:
+        raise ConfigError(
+            f"eurostat_year is {meta.get('eurostat_year')!r}, which is not a "
+            f"year.") from None
+
+    name = str(meta.get("eurostat_dataset")
+               or "product_by_product").strip().lower()
+    dataset = DATASETS.get(name, name)
+    if not dataset.startswith("naio_10_"):
+        raise ConfigError(
+            f"eurostat_dataset {name!r} is neither one of "
+            f"{', '.join(sorted(DATASETS))} nor a naio_10_* code.")
+
+    variant = str(meta.get("eurostat_variant") or "domestic").strip().lower()
+    if variant not in ("domestic", "total"):
+        # `imports` is refused for a reason worth repeating here rather than
+        # letting the loader raise it after the download: Eurostat publishes no
+        # output vector for the imported block, so it is an input table and not
+        # a symmetric IOT.
+        raise ConfigError(
+            f"eurostat_variant {variant!r} must be 'domestic' (the default, "
+            f"and what Leontief analysis wants) or 'total'. 'imports' is an "
+            f"input table, not a symmetric IOT — Eurostat publishes no output "
+            f"vector for it, so the column identity has nothing to close "
+            f"against.")
+
+    raw = meta.get("table_path")
+    if raw and str(raw).strip():
+        path = Path(str(raw).strip())
+    else:
+        path = Path("data") / "eurostat" / f"{dataset}_{geo}_{year}.json"
+    if not path.is_absolute():
+        path = (Path(base_dir) / path).resolve()
+
+    return path, {"dataset": dataset, "geo": geo, "year": year,
+                  "variant": variant}
+
+
+def _load_eurostat(path: Path, req: dict, offline: bool, refresh: bool):
+    """Load the table, downloading it first if it is not already here.
+
+    THE RULE IS THAT A CACHED FILE IS NEVER RE-FETCHED. A statistical office
+    revises; a configuration that downloaded on every run would answer one way
+    in January and another in June, with nothing in the output to say why, and
+    the whole point of this engine is that a number can be traced back to
+    something someone else could repeat. So the first run downloads and records
+    the URL, the byte count and the SHA-256 in a sidecar; every run after it
+    reads exactly those bytes and never opens a socket.
+
+    `refresh` overrides that on purpose and says so. `offline` refuses to
+    download at all and prints the URL, which is what a machine behind a
+    firewall — or an air-gapped review of someone else's result — needs.
+    """
+    import json
+
+    from .eurostat import EurostatError, fetch, load_iot
+
+    # NOT `.json`. The sidecar sits beside its table, and `data/eurostat/` is
+    # globbed for `*.json` by more than one validator, each of which would then
+    # try to read a provenance record as a JSON-stat cube. `run_uk_classification`
+    # did exactly that on 2026-08-25, five minutes after the first sidecar was
+    # written, and died on `KeyError: 'id'`.
+    side = path.with_suffix(path.suffix + ".provenance")
+
+    if path.exists() and not refresh:
+        note = None
+        if side.exists():
+            try:
+                rec = json.loads(side.read_text())
+                note = (f"Eurostat {rec.get('dataset')} {req['geo']} "
+                        f"{req['year']}, {req['variant']} variant. Downloaded "
+                        f"{str(rec.get('retrieved_at', ''))[:10]}, "
+                        f"{rec.get('bytes')} bytes, SHA-256 "
+                        f"{str(rec.get('sha256', ''))[:16]}…. Read from the "
+                        f"local cache; the network was not used.")
+            except (ValueError, OSError):
+                note = None
+        if note is None:
+            # Still say it came from the cache — that is the fact the reader
+            # needs either way — and then say what is missing rather than
+            # letting the absence pass as if nothing were.
+            note = (f"Eurostat {req['dataset']} {req['geo']} {req['year']}, "
+                    f"{req['variant']} variant. Read from the local cache "
+                    f"({path.name}); the network was not used. NO PROVENANCE "
+                    f"SIDECAR was found beside it, so when it was downloaded, "
+                    f"from what URL, and with what checksum are not recorded.")
+        return _tag(load_iot(path, req["variant"]), note)
+
+    if offline:
+        raise ConfigError(
+            f"--offline was given and {path} is not cached yet.\n\n"
+            f"Either drop --offline, or fetch it once by hand:\n"
+            f"    {_eurostat_url(req)}\n"
+            f"and save the response as that file.")
+
+    # WHAT THE OLD FILE HELD, read before it is overwritten.
+    #
+    # A re-download that changes the SHA-256 has NOT necessarily changed a
+    # number. Measured on this project's own cache on 2026-08-25: the Spanish
+    # symmetric table fetched on 2026-08-10 and again fifteen days later hashed
+    # differently, and all 17,957 values were identical -- what moved was
+    # Eurostat's own `updated` stamp and an `extension` block. Hashing the raw
+    # bytes is the right integrity check because it is conservative, but it
+    # answers "are these the same bytes", not "are these the same figures", and
+    # only the second question is the analyst's. So `--refresh` compares.
+    previous = None
+    if refresh and path.exists():
+        try:
+            previous = json.loads(path.read_text()).get("value")
+        except (ValueError, OSError):
+            previous = None
+
+    try:
+        rec = fetch(req["dataset"], req["geo"], req["year"], path)
+    except EurostatError as exc:
+        raise ConfigError(
+            f"the Eurostat download failed:\n{exc}\n\n"
+            f"Nothing was written. The cache path was {path}.") from None
+    side.write_text(json.dumps(rec, indent=2))
+
+    verb = "Re-downloaded" if refresh else "Downloaded"
+    print(f"    {verb} {rec['dataset']} {req['geo']} {req['year']} — "
+          f"{rec['bytes']:,} bytes, {rec['n_values']:,} values")
+    print(f"    cached at {path}")
+    print(f"    SHA-256 {rec['sha256']}")
+    if refresh:
+        print("    --refresh replaced a file that was already here. The "
+              "figures below are the new ones.")
+        if previous is None:
+            print("    The previous file could not be read for comparison, so "
+                  "whether any figure moved is unknown.")
+        else:
+            now = json.loads(path.read_text()).get("value") or {}
+            moved = [k for k in set(previous) | set(now)
+                     if previous.get(k) != now.get(k)]
+            if not moved:
+                print(f"    {len(now):,} values, NONE of them changed. The "
+                      f"checksum moved and the data did not — Eurostat "
+                      f"restamps a release without revising it.")
+            else:
+                worst = max(moved, key=lambda k: abs((now.get(k) or 0)
+                                                     - (previous.get(k) or 0)))
+                print(f"    {len(moved):,} of {len(now):,} values CHANGED. "
+                      f"Largest move: {previous.get(worst)} -> "
+                      f"{now.get(worst)}. Any earlier result from this "
+                      f"configuration was computed on different figures.")
+    return _tag(load_iot(path, req["variant"]),
+                f"Eurostat {rec['dataset']} {req['geo']} {req['year']}, "
+                f"{req['variant']} variant. Downloaded "
+                f"{rec['retrieved_at'][:10]} from {rec['url']}, "
+                f"{rec['bytes']} bytes, SHA-256 {rec['sha256'][:16]}….")
+
+
+def _eurostat_url(req: dict) -> str:
+    from .eurostat import API
+    return (API.format(dataset=req["dataset"])
+            + f"&geo={req['geo']}&time={req['year']}&unit=MIO_EUR")
+
+
+def _tag(table, note: str):
+    """Put the download's provenance where the report will print it.
+
+    The reader of a result has to be able to see which file it came from and
+    when it arrived, and `notes` is the field the report already surfaces under
+    'What the loader decided when reading this file'.
+    """
+    table.notes = f"{table.notes} {note}".strip() if table.notes else note
+    return table
 
 
 def _rows(sheets: dict, name: str) -> list[dict]:
@@ -121,8 +334,13 @@ def _strength(v, sheet: str, n: int) -> ProxyStrength:
     return ProxyStrength(s)
 
 
-def load_config(path: Path | str) -> dict:
-    """Read a configuration WORKBOOK and return everything `IOProject` needs."""
+def load_config(path: Path | str, *, offline: bool = False,
+                refresh: bool = False) -> dict:
+    """Read a configuration WORKBOOK and return everything `IOProject` needs.
+
+    `offline` refuses any network access; `refresh` forces a re-fetch of a
+    cached download. Both are no-ops unless `table_kind` is `eurostat`.
+    """
     path = Path(path)
     sheets = _open_workbook(path)
     missing = [s for s in REQUIRED_SHEETS if s not in sheets]
@@ -140,11 +358,13 @@ def load_config(path: Path | str) -> dict:
             meta[k.lower()] = r[1] if len(r) > 1 else None
     tables = {name: _rows(sheets, name)
               for name in ("splits", "keys", "scenarios", "profiles")}
-    return build_config(meta, tables, base_dir=path.parent, label=path.name)
+    return build_config(meta, tables, base_dir=path.parent, label=path.name,
+                        offline=offline, refresh=refresh)
 
 
 def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
-                 label: str = "<configuration>") -> dict:
+                 label: str = "<configuration>", *, offline: bool = False,
+                 refresh: bool = False) -> dict:
     """Build a run from plain Python data, with no spreadsheet involved.
 
     `meta` is the `project` sheet as a dict; `tables` maps 'splits', 'keys',
@@ -167,16 +387,25 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     """
     meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
     project_id = str(_need(meta, "project_id", "project", 0)).strip()
-    table_path = Path(str(_need(meta, "table_path", "project", 0)).strip())
-    if not table_path.is_absolute():
-        table_path = (Path(base_dir) / table_path).resolve()
     kind = str(meta.get("table_kind") or "uk_analytical").strip().lower()
     if kind not in TABLE_KINDS:
         raise ConfigError(f"table_kind {kind!r} must be one of {TABLE_KINDS}")
-    if not table_path.exists():
-        raise ConfigError(f"table_path points at {table_path}, which does not "
-                          f"exist. Paths may be absolute or relative to the "
-                          f"config file.")
+
+    # `eurostat` names a country and a year instead of a file, and `table_path`
+    # becomes where the download is KEPT rather than where it already is. So
+    # the existence check below cannot apply to it: on a first run the file is
+    # supposed to be missing.
+    if kind == "eurostat":
+        table_path, fetch_note = _eurostat_cache_path(meta, base_dir)
+    else:
+        table_path = Path(str(_need(meta, "table_path", "project", 0)).strip())
+        if not table_path.is_absolute():
+            table_path = (Path(base_dir) / table_path).resolve()
+        fetch_note = None
+        if not table_path.exists():
+            raise ConfigError(f"table_path points at {table_path}, which does "
+                              f"not exist. Paths may be absolute or relative "
+                              f"to the config file.")
 
     # `table_unbalanced` means something for exactly one kind. A workbook that
     # sets it anywhere else is refused rather than quietly ignored: an analyst
@@ -198,6 +427,7 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
         "interchange": lambda p: load_io_table(p),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
+        "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
     }
     try:
         table = loaders[kind](table_path)
@@ -438,7 +668,20 @@ def write_template(path: Path | str) -> Path:
             "# table_kind: uk_analytical  the ONS workbook (industry x industry)",
             "#             ine_interior  the INE workbook, domestic output",
             "#             ine_total     the INE workbook, total flows",
-            "#             interchange   the project's own format.",
+            "#             interchange   the project's own format, and what",
+            "#                           this engine writes -- point at a",
+            "#                           result to split a second sector.",
+            "#             eurostat      downloaded by country and year.",
+            "#",
+            "# For table_kind: eurostat, delete table_path (or use it to say",
+            "# where to cache) and add instead:",
+            "#     eurostat_geo       ES        two-letter country code",
+            "#     eurostat_year      2022",
+            "#     eurostat_dataset   product_by_product | industry_by_industry",
+            "#     eurostat_variant   domestic | total",
+            "# The first run downloads and records the URL and SHA-256; every",
+            "# run after it reads those same bytes offline. --refresh forces a",
+            "# new download and warns that your results may move.",
             "# table_unbalanced: refuse (default) or residual_column.",
             "#             Only for ine_interior, which does not balance for",
             "#             one product -- see OQ-D-04. Anywhere else it is an error.",

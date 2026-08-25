@@ -16,6 +16,7 @@ import numpy as np
 from . import diagnostics
 from .balancing import balance, solver_margin_tolerance
 from .disaggregation import feasibility, split_sectors, targets
+from .precision import assertable_tolerance
 from .models import (CellLabel, DisaggregationResult, IOTable, Scenario,
                      SplitSpec)
 from .reaggregation import reaggregate, reaggregation_error
@@ -148,6 +149,17 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
     n = len(seed["codes"])
     infos = {}
 
+    # THE BOUND THE SOLVER JUDGES ITS MARGINS BY, computed here because only
+    # here is it known what they were built from.
+    #
+    # Each internal margin below is a target minus a sum across the other `n-k`
+    # sectors, so it inherits the rounding of order `n` published cells — not
+    # of the one or two numbers it ends up as. `gras` cannot see that, and
+    # inferring it from the margins themselves bounds the wrong quantity: the
+    # weights introduce decimals the publisher never printed.
+    source_values = np.concatenate(
+        [table.Z.ravel(), table.Y.ravel(), table.VA.ravel(), table.X.ravel()])
+
     for split in seed["splits"]:
         pos = split["positions"]
         off = [i for i in range(n) if i not in pos]
@@ -157,7 +169,10 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
                               method=scenario.balancing_method,
                               tol=scenario.balancing_tolerance,
                               max_iter=scenario.balancing_max_iter,
-                              locked_cells=scenario.locked_cells or None)
+                              locked_cells=scenario.locked_cells or None,
+                              margin_floor=assertable_tolerance(
+                                  source_values,
+                                  (len(itr) + len(itc)) * table.n))
         Z_bal[np.ix_(pos, pos)] = Z_int
         infos[split["sector_code"]] = info
 
@@ -223,8 +238,15 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
     split_indices = [s["original_index"] for s in seed["splits"]]
     reagg = reaggregation_error(table.Z, Z_reagg, split_indices)
 
+    # How far the SOURCE fails to close its own books, measured on the table
+    # that came in. Zero for the UK, the INE and Spain 2022; 0.09 for Portugal
+    # 2020, which prints two decimals. Nothing downstream can be held tighter.
+    source_residue = float(max(
+        np.abs(table.Z.sum(1) + table.Y.sum(1) - table.X).max(),
+        np.abs(table.Z.sum(0) + table.VA.sum(0) - table.X).max()))
     rep = validate_scenario(table, scenario, seed, Z_bal, combined, reagg,
-                            prov, overridden, keys)
+                            prov, overridden, keys,
+                            source_residue=source_residue)
 
     expanded = IOTable(
         table_id=f"{table.table_id}::{scenario.scenario_id}",

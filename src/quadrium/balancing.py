@@ -118,7 +118,8 @@ def ras(Z0, target_row_sums, target_col_sums, locked_cells=None,
 
 
 def balance(Z_seed, target_row_sums, target_col_sums, *, method: str = "GRAS",
-            tol: float = 1e-9, max_iter: int = 10_000, locked_cells=None):
+            tol: float = 1e-9, max_iter: int = 10_000, locked_cells=None,
+            margin_floor: float | None = None):
     """Balance `Z_seed` onto the given row and column totals.
 
     Returns (Z_balanced, info). `info` carries the method, the reason it was
@@ -140,6 +141,38 @@ def balance(Z_seed, target_row_sums, target_col_sums, *, method: str = "GRAS",
     chosen, reason = select_method(Z_seed, method)
     imbalance = float(tr.sum() - tc.sum())
 
+    # RECONCILING MARGINS THAT DISAGREE BY LESS THAN THE SOURCE CAN RESOLVE.
+    #
+    # GRAS projects onto both margins at once, so `Sum(u) = Sum(v)` is a
+    # precondition: when the two totals differ, NO matrix has them, and the
+    # sign-feasibility test says so in those words. That is right when the
+    # difference means something and useless when it does not.
+    #
+    # A publisher rounding to two decimals leaves its own row and column
+    # identities disagreeing by hundredths. Portugal's 2020 symmetric table
+    # (2026-08-25) gave a split whose internal margins summed to 221.53 and
+    # 221.56 -- a 0.03 gap, against the 1.3 that rounding over the ~65 cells
+    # behind each margin can produce. Refusing there tells an analyst their
+    # table is broken when it is as sound as its own precision permits, and
+    # leaves them nothing to do about it.
+    #
+    # So: inside the floor, square the margins and SAY SO. Outside it, refuse
+    # as before -- that difference is real and no scaling should hide it.
+    #
+    # Both vectors move to their mean total rather than one onto the other, so
+    # neither the row identity nor the column identity is privileged, and each
+    # is asked to give up half of a discrepancy neither of them caused. A
+    # source whose margins agree exactly is untouched: the branch needs a
+    # non-zero imbalance to fire.
+    squared = None
+    if margin_floor is not None and 0 < abs(imbalance) <= float(margin_floor):
+        mean_total = 0.5 * (tr.sum() + tc.sum())
+        tr = tr * (mean_total / tr.sum()) if tr.sum() else tr
+        tc = tc * (mean_total / tc.sum()) if tc.sum() else tc
+        squared = {"imbalance_before": imbalance,
+                   "floor": float(margin_floor),
+                   "moved_each_by": abs(imbalance) / 2.0}
+
     if locked_cells and chosen == "GRAS":
         # GRAS as UNH_18 specifies it takes row and column totals and nothing
         # else -- no predefined interior cells. That capability belongs to TRAS
@@ -159,7 +192,8 @@ def balance(Z_seed, target_row_sums, target_col_sums, *, method: str = "GRAS",
         step = float("nan")
     else:
         try:
-            res = gras(Z_seed, tr, tc, eps=tol, max_iter=max_iter)
+            res = gras(Z_seed, tr, tc, eps=tol, max_iter=max_iter,
+                       margin_floor=margin_floor)
         except (DegenerateMarginError, SignInfeasibleError) as exc:
             raise BalancingError(str(exc)) from None
         Z, converged, iters, step = res.X, res.converged, res.iterations, res.max_s_step
@@ -167,6 +201,7 @@ def balance(Z_seed, target_row_sums, target_col_sums, *, method: str = "GRAS",
     info = {
         "method": chosen,
         "reason": reason,
+        "margins_squared": squared,
         "converged": bool(converged),
         "iterations": int(iters),
         "solver_step": step,

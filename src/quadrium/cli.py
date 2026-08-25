@@ -7,6 +7,12 @@ No Python required. Fill in a spreadsheet, run one command, read the report.
     quadrium --template my_config.xlsx    # get a blank workbook
     quadrium my_config.xlsx               # run it
     quadrium my_config.xlsx --check       # validate, do not run
+    quadrium my_config.xlsx --offline     # refuse to download anything
+
+A configuration can name a file, or it can name a country and a year and let
+the engine fetch the table from Eurostat. A fetched table is cached with its
+SHA-256 and never downloaded twice, so the second run of a configuration reads
+the same bytes as the first.
 
 From a checkout, without installing: `python3 run_quadrium.py …` does the same.
 
@@ -105,6 +111,14 @@ def main(argv=None) -> int:
     ap.add_argument("--outputs", type=Path, default=Path("outputs"),
                     help="where project folders are written "
                          "(default: ./outputs)")
+    ap.add_argument("--offline", action="store_true",
+                    help="never touch the network. A table_kind that would "
+                         "need a download fails, naming the URL to fetch by "
+                         "hand")
+    ap.add_argument("--refresh", action="store_true",
+                    help="re-download a cached table even though it is "
+                         "already here. Statistical offices revise, so this "
+                         "can change your results — it says so when it does")
     args = ap.parse_args(argv)
 
     if args.template:
@@ -121,8 +135,14 @@ def main(argv=None) -> int:
         ap.print_help()
         return 2
 
+    if args.offline and args.refresh:
+        print("--offline and --refresh contradict each other: one forbids the "
+              "network, the other requires it.", file=sys.stderr)
+        return 2
+
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config, offline=args.offline,
+                          refresh=args.refresh)
     except ConfigError as exc:
         print(f"Configuration problem in {args.config}:\n\n{exc}\n",
               file=sys.stderr)

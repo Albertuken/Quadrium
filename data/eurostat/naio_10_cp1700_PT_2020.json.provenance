@@ -1,0 +1,10 @@
+{
+  "dataset": "naio_10_cp1700",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&lang=EN&geo=PT&time=2020&unit=MIO_EUR",
+  "geo": "PT",
+  "year": 2020,
+  "bytes": 248255,
+  "sha256": "6a0134601ddaa753d120e6918269cd2ac266b173efe3d93f9dbbebd1724bf926",
+  "retrieved_at": "2026-08-25T11:10:09.011579+00:00",
+  "n_values": 18098
+}

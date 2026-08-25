@@ -294,3 +294,44 @@ housing, zero labour by construction) and `U` are dropped rather than guessed.
 `naio_10_cp16` is *Closing balance sheet*; a pass that took it for employment
 flagged 48 Spanish industries at up to 284 %, plausibly and wrongly. See
 `run_labour_productivity.py`.
+
+---
+
+## `naio_10_cp1700_PT_2020.json` — the first source that rounds to two decimals
+
+**What it is.** Portugal's symmetric input-output table for 2020, product by
+product, at basic prices, in millions of euros at current prices. 18,098
+values, 65 products after aggregates are dropped.
+
+**Source.** Eurostat, `naio_10_cp1700`.
+
+```
+https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&lang=EN&geo=PT&time=2020&unit=MIO_EUR
+```
+
+**Retrieved.** 2026-08-25, 248,255 bytes.
+**SHA-256** `6a0134601ddaa753d120e6918269cd2ac266b173efe3d93f9dbbebd1724bf926`
+
+**Why it is here, and it is not for Portugal.** It was fetched as the first
+blind test of `table_kind: eurostat` — a country the project had never touched,
+chosen for no reason but that. It printed to **two decimals** where Spain prints
+to one, and that one difference broke four consecutive gates, each of which had
+passed every fixture the project held until then:
+
+| Gate | Refused Portugal at | What the source's own rounding permits |
+|---|---|---|
+| `validate_original` balance | 2.6e-05 | 0.37 |
+| GRAS margin consistency | 1.1e-05, then 0.02 | 1.3 |
+| `check_margins_attained` | 0.033 | 0.12 |
+| `check_reaggregation` | 1e-06 % | 0.035 in 350,000 |
+
+Every one of those tolerances was either a flat project constant or a figure
+inferred from numbers the engine had computed rather than read. `OQ-B-02`
+closed at v1.57 establishing that the bound must come from the publisher's own
+precision; four gates had never adopted it, and nothing showed because every
+fixture the project held either printed one decimal or closed exactly.
+
+**Spain 2020 fails the same first gate**, on a max deviation of 0.1 against a
+tolerance of 1.5e-04 — so this was never a Portuguese problem.
+
+`run_eurostat_config.py` holds the whole chain.

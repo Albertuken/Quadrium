@@ -75,7 +75,41 @@ it.
 There are two routes, and which one you take depends on where your table came
 from.
 
-### Route A — a format the loader already knows
+### Route A — let the engine fetch it
+
+If your country is in the EU, you do not need a file at all. Name the country
+and the year and the engine downloads the table from Eurostat:
+
+| Key | Value |
+|---|---|
+| `table_kind` | `eurostat` |
+| `eurostat_geo` | `ES`, `PT`, `AT` … the two-letter code |
+| `eurostat_year` | `2022` |
+| `eurostat_dataset` | `product_by_product` (default) or `industry_by_industry` |
+| `eurostat_variant` | `domestic` (default) or `total` |
+
+The first run downloads it, prints the URL, the size and the SHA-256, and saves
+it under `data/eurostat/`. **Every run after that reads those same bytes and
+never touches the network.** That is deliberate: statistical offices revise, and
+a configuration that re-downloaded on every run would give one answer in
+January and another in June with nothing in the output to say why.
+
+- `--refresh` downloads again on purpose, and then tells you **how many figures
+  actually changed**. Often none: Eurostat restamps a release without revising
+  it, so the checksum moves and the data does not.
+- `--offline` refuses to fetch anything and prints the URL, so you can bring
+  the file in by hand.
+
+One caveat worth knowing before you plan a project around it. Eurostat
+harmonises the **format**, not the method: the same dataset codes and the same
+classification for every member state, with no record of how each office got
+there. The UK uses a hybrid of two transformation models chosen per cell, Spain
+a hybrid chosen per secondary production, Austria product technology with
+manual correction above 15 million euros. Three tables that look alike were not
+made alike, and any comparison across countries that does not say so is
+comparing the format.
+
+### Route B — a format the loader already knows
 
 Set `table_kind` in the configuration workbook to one of:
 
@@ -84,7 +118,7 @@ Set `table_kind` in the configuration workbook to one of:
 | `uk_analytical` | The ONS analytical workbook, industry × industry |
 | `ine_interior` | The Spanish INE workbook, domestic output |
 | `ine_total` | The Spanish INE workbook, total flows |
-| `interchange` | This project's own format — see Route B |
+| `interchange` | This project's own format — see Route C |
 
 These loaders do more than parse. They know, for instance, that the first two
 value-added rows of the ONS table are imports and taxes on products rather than
@@ -93,7 +127,7 @@ never from the filename. What each loader decided is printed in your report
 under **What the loader decided when reading this file**, so you can check it
 made the right call.
 
-### Route B — any other table, via the interchange format
+### Route C — any other table, via the interchange format
 
 Any table can be brought in by rewriting it into one workbook with two sheets.
 This is deliberately plain: no fixed cell positions, blocks are found by their
@@ -157,7 +191,7 @@ Five key/value rows.
 |---|---|
 | `project_id` | A short name. It becomes the output folder. |
 | `table_path` | Absolute, or **relative to the configuration file itself** — not to where you run the command. |
-| `table_kind` | One of the four above. |
+| `table_kind` | One of the five above. |
 | `title` | The title at the top of the report. |
 | `notes` | Free text, printed under the title. Use it for the caveat you want a reader to see first. |
 
@@ -397,7 +431,7 @@ are written for an economist and name the subsector or the proxy at fault.
 | The table does not balance on load | Your table's row sums, column sums and output do not agree within the tolerance derived from its own printed precision. | This is usually a real defect in the file: a subtotal column counted twice, or a block pasted in at the wrong offset. |
 | One or more scenarios `REJECTED` | Those profiles imply an economy that does not exist — typically a subsector left needing to buy a negative amount from its siblings, because it was given a larger share of inputs than its share of output can absorb. | Nothing about the solver can fix this, and no tolerance will. The report names the subsector and prints the parent's own ratios. Move the keys closer together or soften the intensities. |
 | `Every scenario was rejected` | The same thing, for all of them. Nothing is written. | As above. |
-| `no sector rows found` / `appear below the sector block` | An interchange file whose row labels do not line up with its header. | See §3, Route B: same codes, same order, contiguous. |
+| `no sector rows found` / `appear below the sector block` | An interchange file whose row labels do not line up with its header. | See §3, Route C: same codes, same order, contiguous. |
 | `the Provenance sheet has N data rows for M sectors` | A re-read result whose provenance grid no longer matches its table, usually after hand-editing. | A grid that does not match is worse than none, because it mislabels rather than leaves unlabelled. Delete the sheet or correct it. |
 | A validation check `FAIL`s but the run finishes | The table was produced but something about it is implausible. | Read that check before using any number. The exit code is non-zero. |
 
@@ -408,6 +442,16 @@ prefer. Below that line "balanced" and "not balanced" are the same
 observation. The engine computes that floor from your table's own precision
 rather than applying a constant. Where a genuine project choice remains, the
 report labels it `PROJECT CHOICE`.
+
+This matters more than it sounds. Publishers differ: Portugal prints its
+symmetric table to two decimals and Spain to one, from the same Eurostat
+dataset under the same regulation, and the same country differs between years.
+A table that rounds does not close its own accounts exactly — its row and
+column totals disagree by hundredths — and that residue is inherited by
+everything computed from it. The report states, next to each check that used
+it, how much of its tolerance was the source's own unclosed books rather than
+anything this run did. Where your source closes exactly, that allowance is
+zero and nothing is relaxed.
 
 ---
 

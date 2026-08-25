@@ -289,6 +289,12 @@ class _Cube:
     """
 
     def __init__(self, doc: dict):
+        if not isinstance(doc, dict) or "id" not in doc or "size" not in doc:
+            raise EurostatError(
+                f"this is not a JSON-stat response: it has "
+                f"{', '.join(sorted(doc)[:6]) if isinstance(doc, dict) else type(doc).__name__}"
+                f" where `id` and `size` were expected. A provenance sidecar or "
+                f"a hand-edited file will look like this.")
         self.doc = doc
         self.ids = doc["id"]
         self.size = doc["size"]
