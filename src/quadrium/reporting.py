@@ -546,6 +546,57 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             "difference of a few tenths of a per cent as a direction, not a "
             "measurement.", ""]
 
+    # HOW WRONG IS THIS IF THE KEY IS WRONG -- answered exactly, because the
+    # relationship is exact and does not need simulating.
+    #
+    # The weight scales a subsector's output and everything that moves with it
+    # ONE FOR ONE, and leaves the technical coefficients untouched, because it
+    # cancels in `a_ij = Z_ij / X_j`. Measured to confirm rather than assumed:
+    # on the UK fixture, moving a key from 50/50 to 80/20 moved output from
+    # 47,405 to 75,848 and the multiplier not at all -- 1.84800 at every
+    # weight, to five decimals.
+    #
+    # So the honest error bar is arithmetic: one per cent wrong in the key is
+    # one per cent wrong in the size, and nothing at all wrong in the
+    # multiplier. Reported per subsector, in the table's own units, so it can
+    # be read rather than derived.
+    first = results[0]
+    tbl = first.table
+    rows = []
+    for split in first.splits:
+        for pos, code in zip(split["positions"], split["new_codes"]):
+            rows.append((code, float(tbl.X[pos]),
+                         float(tbl.VA[:, pos].sum()),
+                         float(tbl.Z[:, pos].sum())))
+    if rows:
+        unit = tbl.unit.split(",")[0]
+        lines += [
+            "### How wrong is this if your allocation key is wrong?", "",
+            "Exactly as wrong as the key, in the sizes — and not at all in the "
+            "multipliers. The weight scales a subsector's output, value added "
+            "and purchases together and cancels out of `a_ij = Z_ij / X_j`, so "
+            "**one per cent of error in the key is one per cent of error in "
+            "the size and zero in the multiplier**. That is arithmetic, not an "
+            "estimate, and it needs no simulation.", "",
+            f"Per 1 % your key is wrong, in {unit}:", "",
+            "| Subsector | Output | Value added | Purchases | per 1 % of key |",
+            "|---|---:|---:|---:|---:|"]
+        for code, x, va, z in rows:
+            lines.append(f"| `{code}` | {x:,.0f} | {va:,.0f} | {z:,.0f} | "
+                         f"**{x / 100:,.0f}** |")
+        lines += [
+            "",
+            "So a key you believe to within 10 % gives a subsector size you "
+            "believe to within 10 %, and a multiplier you believe exactly as "
+            "much as you believe the parent sector's — no more and no less. "
+            "**The uncertainty the key carries lands entirely on the levels.**",
+            "",
+            "What moves a multiplier is the `profiles` sheet, and it moves it "
+            "very little: on the project's own fixture, DOUBLING one "
+            "supplier's intensity moves the multiplier by 0.35 %. If you need "
+            "subsectors that differ as buyers, that is the lever — and it is a "
+            "short one.", ""]
+
     across = [row[ids[0]] for row in meta["comparison"]]
     if max(across) - min(across) < 1e-6 and not any(diff_flags.values()):
         lines += [

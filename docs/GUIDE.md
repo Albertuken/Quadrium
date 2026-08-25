@@ -452,6 +452,14 @@ scenario, and the range between them. This is the first thing to look at,
 because the range tells you how much of your result is your own assumptions.
 The report also names the single cell that drives most of the variation.
 
+**How wrong is this if your key is wrong?** Exactly as wrong as the key in the
+sizes, and not at all in the multipliers. The weight scales a subsector's
+output, value added and purchases together and cancels out of the technical
+coefficients, so a key you believe to within 10 % gives sizes you believe to
+within 10 % and a multiplier you believe exactly as much as the parent
+sector's. The report prints what 1 % of key error costs, per subsector, in your
+table's own units. It is arithmetic, not a simulation.
+
 **Cell provenance.** Every cell of the new table is counted into one of four
 statuses:
 
