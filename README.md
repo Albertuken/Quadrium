@@ -39,7 +39,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Sixty-four validators run on official data from six statistical offices, and
+Sixty-five validators run on official data from six statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -58,6 +58,7 @@ Some of what they establish:
 | The **valuation matrices** total their supply columns to 0.0000 on 65 products, three years | `validators/run_valuation_matrices.py` |
 | A result **read back and split again** keeps its provenance: withholding it would relabel 12 of 36 cells from estimate to observation, with the numbers unchanged | `validators/run_export_roundtrip.py` |
 | Every balance tolerance is **derived from the publisher's own printed precision**. Four gates used flat constants instead, and refused two of three real published tables over residues 10–100× inside what their rounding permits | `validators/run_eurostat_config.py` |
+| Availability is read from the **value map, not the `time` dimension** — which said Germany had data to 2024 and produced a configuration that fails. Germany in fact has no route to a symmetric table through Eurostat at all | `validators/run_availability.py` |
 | The **allocation key moves sizes one-for-one and multipliers not at all** — 1.84800 at every weight from 50/50 to 80/20, so the error bar is arithmetic and a perturbation study would have reported zero and been read as robustness | `validators/run_key_sensitivity.py` |
 | A pair **projected onto its own totals returns itself exactly**, in one iteration — the test that showed final-use targets belong at purchasers' prices, where the wrong basis merely fails to converge while reporting 1.00009 | `validators/run_projection.py` |
 | A **multiplier is checked against the inverse it comes from**: one negative cell in the ONS table produces 19 in the Leontief inverse, all in one column, whose multiplier of 1.0828 is 1.1705 minus 0.0877 | `validators/run_leontief_check.py` |
@@ -86,7 +87,7 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       64 runnable checks against published tables
+validators/       65 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 examples/         four worked pilots
