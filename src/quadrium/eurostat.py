@@ -668,12 +668,28 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
     # source's. The first draft of this module checked only the source's
     # identities and handed back a total-flows table whose `IOTable` row
     # balance was off by 78,638 -- the imports it had never been given.
-    d = float(np.abs(Z.sum(1) + Y.sum(1) - X).max())
+    resid = Z.sum(1) + Y.sum(1) - X
+    d = float(np.abs(resid).max())
     if d > _rounding_tol(len(codes) + len(fd), published_values):
+        # NAME THE PRODUCT AND BOTH FIGURES. "off by 390.4600" is a number;
+        # "Sweden publishes G46's output as 67,091.2 and its total use as
+        # 67,481.6" is the finding, and it is the source's, not this engine's.
+        # Measured against Spain and Portugal, where the two agree to 0.00,
+        # so the comparison is a control and not a hope.
+        i = int(np.argmax(np.abs(resid)))
+        code = _bare(codes[i])
+        tu = cube.at(stk_flow=flow, **{use_dim: "TU", ava_dim: codes[i]})
         raise EurostatError(
             f"{path.name} balances as published but the IOTable it would "
-            f"produce does not: Z.sum(1) + Y.sum(1) - X is off by {d:,.4f}. "
-            f"Every consumer of an `IOTable` is entitled to that identity.")
+            f"produce does not: Z.sum(1) + Y.sum(1) - X is off by {d:,.4f}, "
+            f"and {len(np.flatnonzero(np.abs(resid) > _rounding_tol(len(codes) + len(fd), published_values)))} "
+            f"of {len(codes)} product(s) are beyond what this source's "
+            f"precision allows.\n"
+            f"  The worst is {code}: output {X[i]:,.1f} against a total use of "
+            f"{tu:,.1f} — two figures this source publishes for the same "
+            f"product, {abs(X[i] - (tu or 0.0)):,.1f} apart.\n"
+            f"  No tolerance reconciles two published numbers, and every "
+            f"consumer of an `IOTable` is entitled to that identity.")
 
     geo = cube.fixed.get("geo", "?")
     year = int(cube.fixed.get("time", 0))

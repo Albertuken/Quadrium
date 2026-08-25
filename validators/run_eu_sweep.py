@@ -18,13 +18,29 @@ WHAT IT FOUND
 **Nineteen of twenty-seven load and are sound** — spectral radius 0.33 to 0.65,
 row residues at the rounding scale, and mostly no negative cells at all.
 
-**Eight refuse, for four distinct reasons**, and the useful part is that they
-are distinct:
+**Eight refuse, for four distinct reasons — and ALL EIGHT ARE LIMITS OF THE
+DATA, not of the engine.** That was worth establishing rather than assuming:
+three of the four looked like loader gaps until each was traced.
 
-    IE LT MT NO PL   the table is INCOMPLETE
-    LU SK            no `P1` output vector for the variant asked for
-    HR               final demand published under no combination this reads
-    SE               balances as published, not as rebuilt
+    IE LT MT NO PL   the table is INCOMPLETE: its codes do not sum to the
+                     total it prints, by 1.25 % to 50.46 %
+    HR               final demand has holes at EVERY level of the hierarchy —
+                     29 products with no capital formation, 12 with no exports
+    LU SK            no `P1` output vector is published at all
+    SE               its own output vector disagrees with its own total-use
+                     column for 61 of 65 products, worst 390.5 on `G46`
+
+SWEDEN, AND WHY A CONTROL IS THE WHOLE ARGUMENT
+------------------------------------------------
+`G46`, wholesale trade: Sweden publishes an output of 67,091.2 and a total use
+of 67,481.6 for the same product, 390.5 apart, and disagrees with itself for 61
+of its 65 products. Spain and Portugal agree to 0.00 on every one.
+
+Without that control the number is unreadable — it could as easily have been
+this engine's arithmetic. With it, no tolerance is the answer: two figures a
+source publishes for the same quantity cannot be reconciled by widening a
+bound, and the message now names the product and both figures instead of
+printing a maximum.
 
 THE INCOMPLETE FIVE, AND A MESSAGE THAT WAS WRONG
 ---------------------------------------------------
@@ -140,10 +156,19 @@ def main() -> int:
             SKIPPED.append(name[:20])
             print(f"  --   {name[:24]} — SKIPPED: not in this checkout")
             continue
-        msg = refusal(f)
+        # Pinned, for the reason `refusal` documents: the same file refuses
+        # with different numbers per variant, and quoting one while measuring
+        # the other is how the check above already went wrong once.
+        msg = refusal(f, "domestic")
         seen[name] = msg
         check(f"{name.split('_')[3]} refuses for its own reason",
               expect in msg, msg.splitlines()[0][:96])
+        if "SE_" in name:
+            check("and Sweden's message names the product and both figures",
+                  "G46" in msg and "67,091.2" in msg and "67,481.6" in msg,
+                  "output 67,091.2 against a total use of 67,481.6 — two "
+                  "numbers Sweden publishes for the same product. Spain and "
+                  "Portugal agree to 0.00, which is what makes it readable")
     check("and no two of those reasons are the same message",
           len({m.splitlines()[0][:40] for m in seen.values()}) == len(seen),
           f"{len(seen)} refusals, {len({m.splitlines()[0][:40] for m in seen.values()})} "

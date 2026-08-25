@@ -471,9 +471,18 @@ distinct reasons, and each refusal is correct.
 |---|---|
 | `naio_10_cp1700_IE_2020.json` | **50.46 % short**: 51 codes carry values and the published total counts 104 |
 | `naio_10_cp1750_NO_2023.json` | **1.25 % short**, same shape |
-| `naio_10_cp1700_LU_2022.json` | no `P1` output vector for the variant |
-| `naio_10_cp1700_HR_2021.json` | final demand published under no combination the loader reads |
-| `naio_10_cp1700_SE_2023.json` | balances as published, not as rebuilt |
+| `naio_10_cp1700_LU_2022.json` | **no `P1` output vector published at all** |
+| `naio_10_cp1700_HR_2021.json` | final demand has holes at **every** level — 29 products with no capital formation, 12 with no exports |
+| `naio_10_cp1700_SE_2023.json` | its own output vector disagrees with its own total-use column for **61 of 65 products** |
+
+**All eight refusals are limits of the data, not of the engine**, and that was
+established rather than assumed — three of the four causes looked like loader
+gaps until each was traced. Sweden is the clearest: `G46`, wholesale trade, is
+published with an output of 67,091.2 and a total use of 67,481.6, 390.5 apart.
+Spain and Portugal agree to 0.00 on every product, which is the control that
+makes the number readable: without it, 390.5 could as easily have been this
+engine's arithmetic. No tolerance reconciles two figures a source publishes for
+the same quantity.
 
 **Ireland's 2020 table accounts for barely half of the total it prints.** That
 is what a country whose sectors are dominated by a few firms looks like once
