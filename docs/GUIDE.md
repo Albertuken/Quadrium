@@ -65,9 +65,22 @@ Four answers are possible:
 
 If nothing for your country is on disk, it asks Eurostat which years that
 country actually publishes — per dataset, cached afterwards — and prints the
-configuration rows to paste. It reports what Eurostat *carries*, which is not a
-promise that it loads: the loader checks the publisher's own identities and
-refuses a pair whose books do not close within its own printed precision.
+configuration rows to paste.
+
+**And it tells you whether it loads.** Every country's newest table of each kind
+was loaded once and the result recorded, so `--find` names the verdict rather
+than warning you in general terms:
+
+```
+      symmetric table  2020   REFUSED — incomplete: the table's codes do not
+                                        sum to the total it prints
+      the pair         2020   REFUSED — incomplete
+```
+
+That is evidence about the year it names and not a prediction about the others,
+and the output says so. Carrying is not loading: the engine checks the
+publisher's own identities and refuses a table whose books do not close within
+its own printed precision.
 
 Some countries have no route at all. Germany publishes neither a symmetric table
 nor use at basic prices to Eurostat, so its pair cannot be transformed either —

@@ -139,6 +139,50 @@ def main() -> int:
               "table; a probe that returned nothing everywhere would look the "
               "same as one that worked")
 
+    # ---- and what happened when each was loaded --------------------------
+    #
+    # "Eurostat carries this, which is not a promise it loads" was a fair
+    # caveat while nothing better was known. After the sweep it was a hedge:
+    # every country's newest table had been loaded by both routes and the
+    # result thrown away. `_verdicts.json` keeps it, and `--find` names it.
+    print()
+    v = DATA / "_verdicts.json"
+    if not v.exists():
+        skip("the sweep's verdicts are recorded and readable",
+             "`_verdicts.json` is not in this checkout; "
+             "`library/tools/record_verdicts.py` writes it")
+    else:
+        d = json.loads(v.read_text())
+        rows = {k: r for k, r in d.items() if not k.startswith("_")}
+        check("every country the sweep touched has a verdict with its year",
+              len(rows) >= 25 and all(
+                  e.get("year") or e.get("verdict") == "not published"
+                  for r in rows.values() for e in r.values()),
+              f"{len(rows)} countries; each entry names the year it was "
+              f"checked, because a verdict is evidence about that year and "
+              f"not a prediction about the others")
+
+        loads = sum(1 for r in rows.values()
+                    if r.get("symmetric", {}).get("verdict") == "loads")
+        pairs = sum(1 for r in rows.values()
+                    if r.get("pair", {}).get("verdict") == "loads")
+        check("and the counts match what the sweep measured",
+              loads >= 17 and pairs >= 12,
+              f"{loads} symmetric tables and {pairs} pairs load — the same "
+              f"figures `run_eu_sweep.py` reports, from the same run")
+
+        ie = rows.get("IE", {}).get("symmetric", {})
+        se = rows.get("SE", {}).get("symmetric", {})
+        de = rows.get("DE", {}).get("pair", {})
+        check("a refusal is recorded with a cause a reader can act on",
+              ie.get("cause") == "incomplete"
+              and se.get("cause") == "files disagree"
+              and de.get("verdict") == "not published",
+              f"IE {ie.get('year')} incomplete; SE {se.get('year')} its own "
+              f"figures disagree; DE has no basic-price use table at all — "
+              f"three different answers where the adviser used to give one "
+              f"warning")
+
     print()
     print("    The `time` dimension of a response is a fact about the dataset.")
     print("    Which years a country populates is a fact about the country,")

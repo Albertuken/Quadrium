@@ -160,6 +160,13 @@ def _catalogue(args) -> int:
     if a["action"] == "none" and args.geo and not args.offline:
         _availability(args, a)
 
+    # The verdict belongs on EVERY answer that names a country, not only on
+    # the branch that found nothing on disk. A user whose table IS here is the
+    # one who most needs to know it refuses: Ireland's and Sweden's are in this
+    # checkout precisely because they do.
+    if args.geo:
+        _verdicts(args.geo.strip().upper(), args.data)
+
     if a["action"] == "choose_country":
         print(f"\n  {'country':>9}  verdict     finest table")
         for g, h in sorted(a["by_geo"].items()):
@@ -234,11 +241,6 @@ def _availability(args, a) -> None:
         print(f"  {DATASETS[name]:<22}{row}  {labels[name]}")
     print(f"\n  (years a country POPULATES, not the years the dataset spans; "
           f"asked {taken},\n  cached, and `--refresh` asks again)")
-    print(f"\n  This says what Eurostat CARRIES, which is not a promise that "
-          f"it loads. The\n  loader checks the publisher's own identities and "
-          f"refuses a pair whose books\n  do not close within its own printed "
-          f"precision — Belgium's 2022 pair is out\n  by 0.80 against the 0.46 "
-          f"its two decimals allow, and is refused, saying so.")
 
     sym_kind = ("product_by_product" if years.get("product_by_product")
                 else "industry_by_industry" if years.get("industry_by_industry")
@@ -285,6 +287,49 @@ def _availability(args, a) -> None:
                   f"  publisher, only the harmonised one.")
         else:
             print(f"  it carries no usable supply-use pair either.")
+
+
+def _verdicts(geo: str, data_root) -> None:
+    """What the newest table of each kind actually did, when it was checked.
+
+    "Eurostat carries this, which is not a promise it loads" was a fair caveat
+    while nothing better was known. The sweep of 2026-08-25 loaded every
+    country's newest table by both routes, so the verdict can be named instead
+    of hedged.
+
+    EVIDENCE, NOT PREDICTION. Each line says which year was checked. Ireland's
+    2020 symmetric table is 50 % short of its own printed total; whether 2019
+    is too was not tested and is not claimed here.
+    """
+    import json
+
+    f = Path(data_root) / "data" / "eurostat" / "_verdicts.json"
+    try:
+        rec = json.loads(f.read_text()).get(geo)
+    except (OSError, ValueError):
+        rec = None
+    if not rec:
+        print(f"\n  Whether any of this LOADS has not been checked for {geo}. "
+              f"Carrying is not\n  loading: the engine verifies the "
+              f"publisher's own identities and refuses a\n  table whose books "
+              f"do not close within its own printed precision.")
+        return
+
+    print(f"\n  And what happened when they were last loaded:\n")
+    for key, label in (("symmetric", "symmetric table"), ("pair", "the pair")):
+        e = rec.get(key)
+        if not e:
+            continue
+        year = e.get("year")
+        if e["verdict"] == "loads":
+            print(f"      {label:16s} {year}   LOADS")
+        elif e["verdict"] == "not published":
+            print(f"      {label:16s}  —     {e['cause']}, {e['detail']}")
+        else:
+            print(f"      {label:16s} {year}   REFUSED — {e['cause']}: "
+                  f"{e['detail']}")
+    print(f"\n  Checked on the year named, and on that year only — evidence, "
+          f"not a\n  prediction about the others.")
 
 
 def _wrap(text: str, width: int) -> list[str]:
