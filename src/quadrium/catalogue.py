@@ -211,12 +211,15 @@ def _eurostat_source(path: Path) -> Source | None:
     # persons employed: two different measurements of the same industries, and
     # two different keys. Keyed on the dataset alone they collapsed into one
     # entry printed twice.
-    stem = path.stem.lower()
-    extra = stem
-    for token in (dataset, geo_code.lower(), str(year), *(g.lower() for g in geo_all)):
-        if token:
-            extra = extra.replace(token, "")
-    extra = "_".join(x for x in extra.split("_") if x)
+    # TOKEN BY TOKEN, not by substring. Stripping country codes as substrings
+    # turned `sbs_i561_i562_i563_employment_2018_2020` into
+    # `..._emoyment_...` -- because Poland is in that cube and `pl` sits inside
+    # "employment". The filename's parts are separated by underscores; that is
+    # the boundary to respect.
+    drop = {dataset, geo_code.lower(), str(year)} | {g.lower() for g in geo_all}
+    drop |= set(dataset.split("_"))
+    extra = "_".join(x for x in path.stem.lower().split("_")
+                     if x and x not in drop)
     ident = f"{dataset}:{extra}" if extra else dataset
     return Source(
         source_id=f"eurostat:{ident}:{geo_code}:{year}",
@@ -475,3 +478,96 @@ def _inside(container: str, code: str) -> bool:
         return False
     division = f"{m.group(1)}{m.group(2)}"
     return division == container or _covers(container, division)
+
+
+# ---------------------------------------------------------------------------
+# What exists that is NOT on disk
+# ---------------------------------------------------------------------------
+#
+# `scan()` answers "what can I load", and for a fresh install the answer is
+# "whatever shipped". A first-time user asking about their own country gets
+# "no table for DE is on disk", which is true and useless: what they need next
+# is which years exist, and that is one small query per dataset.
+#
+# The filter differs by dataset because the product dimension does -- cp1700
+# indexes `prd_use`, cp15 `prd_amo`, the use tables `prd_ava`, and cp1750 is on
+# industries. Asking for one total keeps each response near 24 KB instead of
+# several megabytes.
+_YEAR_PROBE = {
+    "product_by_product": ("prd_use", "CPA_TOTAL"),
+    "industry_by_industry": ("ind_use", "TOTAL"),
+    "supply": ("prd_amo", "CPA_TOTAL"),
+    "use_purchasers": ("prd_ava", "CPA_TOTAL"),
+    "use_basic": ("prd_ava", "CPA_TOTAL"),
+}
+
+
+def available_years(geo: str, cache_dir: Path | str,
+                    refresh: bool = False) -> dict:
+    """Which years Eurostat carries for `geo`, per dataset.
+
+    Cached, because it changes once or twice a year and a catalogue that costs
+    five network round trips is a catalogue nobody runs twice. The cache
+    records when it was taken so a reader can judge it; nothing here decides
+    that a stale answer is fresh.
+
+    Returns `{}` on any network failure rather than raising: this is an
+    enrichment of an answer that already exists, and losing it should degrade
+    the answer, not the command.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    from .eurostat import API, DATASETS
+
+    geo = str(geo).strip().upper()
+    cache = Path(cache_dir) / f"_availability_{geo}.json"
+    if cache.exists() and not refresh:
+        try:
+            return _json.loads(cache.read_text())
+        except (ValueError, OSError):
+            pass
+
+    out: dict = {}
+    for name, (dim, value) in _YEAR_PROBE.items():
+        url = (API.format(dataset=DATASETS[name])
+               + f"&geo={geo}&unit=MIO_EUR&{dim}={value}")
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                doc = _json.loads(r.read())
+            # LISTED IS NOT AVAILABLE, for the third time in this module.
+            #
+            # The `time` dimension lists every year the DATASET spans, not the
+            # years this country populates. Reading it directly said Germany
+            # had 35 years of supply-use to 2024, so `--find` printed a
+            # configuration naming 2024 — and that configuration fails, because
+            # Eurostat answers 200 with an empty `value` for a year a country
+            # does not publish. Advice you have not run is not advice.
+            #
+            # So the years are read off the VALUE map, exactly as the product
+            # codes are: a year is available when some cell carries a figure.
+            idx = doc["dimension"]["time"]["category"]["index"]
+            ids, size = doc["id"], doc["size"]
+            pos = ids.index("time")
+            stride = 1
+            for s in size[pos + 1:]:
+                stride *= s
+            live = {(int(k) // stride) % size[pos] for k in doc.get("value", {})}
+            inverse = {v: k for k, v in idx.items()}
+            years = sorted(int(inverse[i]) for i in live if i in inverse)
+            if years:
+                out[name] = years
+        except (urllib.error.URLError, OSError, ValueError, KeyError):
+            continue
+    if not out:
+        return {}
+
+    from datetime import datetime, timezone
+    out["_taken"] = datetime.now(timezone.utc).isoformat()
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(_json.dumps(out, indent=2))
+    except OSError:
+        pass
+    return out

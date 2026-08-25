@@ -373,3 +373,39 @@ Both identities were verified on load, and they close:
 Austria's residues sit against a rounding floor of 0.34 for a 68-term sum.
 
 `run_sut_to_iot.py` holds the whole path.
+
+---
+
+## What `--find` reports, and one country that does not load
+
+`catalogue.available_years()` asks Eurostat which years a country populates,
+per dataset, and caches the answer beside the data as
+`_availability_<GEO>.json`.
+
+**The years come from the VALUE map, not from the `time` dimension.** That
+dimension lists the years a *dataset* spans, and reading it directly reported 35
+years to 2024 for Germany — so `--find` printed a configuration naming 2024,
+which fails, because Eurostat answers 200 with an empty result for a year a
+country does not publish. It is the same "listed is not available" trap as
+`CPA_I55` in the Spanish symmetric table, in a third place.
+
+Measured 2026-08-25, with a control:
+
+| | `cp1700` | `cp1750` | `cp15` | `cp16` | `cp1610` |
+|---|---|---|---|---|---|
+| **DE** | none | none | 2010–2022 | 2010–2022 | **none** |
+| **BE** | none | 2010–2022 | 2010–2022 | 2010–2022 | 2010–2022 |
+| **ES** (control) | 1990–2023 | — | 1990–2024 | 1990–2024 | populated |
+
+**Germany has no route to a symmetric table through Eurostat at all.** No
+symmetric table, and no use at basic prices, so the pair it does publish cannot
+be transformed either — the domestic/imported split would have to be assumed,
+and this engine will not assume it.
+
+**Belgium's 2022 pair loads for four other countries' worth of checks and then
+is refused**, on the industry column identity: intermediate consumption plus
+value added misses output by **0.80** against the **0.46** its two-decimal
+precision allows, a factor of 1.74. Austria, Spain, France and the Netherlands
+all pass the same check. The refusal is correct and the message says by how
+much; it is recorded here because "the adviser named a config and the config did
+not load" is worth knowing about before it surprises someone.

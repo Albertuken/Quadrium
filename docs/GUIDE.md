@@ -63,6 +63,17 @@ Four answers are possible:
 | **publisher has it** | Your office publishes the code, but only as part of a set whose pieces do not add up to their parent — so taking them would lose whatever was not published. It exists; it is not loadable. Do not estimate it with a proxy without looking at the file first. |
 | **none** | No table on disk covers the code. Check it against the classification, or fetch a table that might carry it. |
 
+If nothing for your country is on disk, it asks Eurostat which years that
+country actually publishes — per dataset, cached afterwards — and prints the
+configuration rows to paste. It reports what Eurostat *carries*, which is not a
+promise that it loads: the loader checks the publisher's own identities and
+refuses a pair whose books do not close within its own printed precision.
+
+Some countries have no route at all. Germany publishes neither a symmetric table
+nor use at basic prices to Eurostat, so its pair cannot be transformed either —
+the domestic/imported split would have to be assumed. The adviser says so rather
+than offering a configuration that would fail.
+
 `--geo` is not optional in spirit. Without it nothing is recommended, only
 listed by country — because a finer table for another economy is not a better
 source for your question, it is an answer to a different one.

@@ -210,6 +210,16 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
         root = (Path(base_dir) / root).resolve()
     if root.suffix:                       # a file was named; use its folder
         root = root.parent
+    # A supply-use system caches THREE files, so `table_path` names a folder.
+    # If something is already there and is not one, say so: the alternative is
+    # a FileExistsError from `mkdir` several frames down, which is what a
+    # `table_path` shared with a single-file `eurostat` run produced.
+    if root.exists() and not root.is_dir():
+        raise ConfigError(
+            f"table_path is {root}, which exists and is a file. A supply-use "
+            f"system caches three downloads, so this names the FOLDER they go "
+            f"in — not one of them. Leave it blank for data/eurostat, or point "
+            f"it at a directory.")
 
     files = {name: root / f"{DATASETS[name]}_{geo}_{year}.json"
              for name in ("supply", "use_purchasers", "use_basic")}

@@ -152,6 +152,14 @@ def _catalogue(args) -> int:
     for line in _wrap(a["why"], 74):
         print(f"  {line}")
 
+    # NOTHING ON DISK FOR THAT COUNTRY IS A TRUE ANSWER AND A USELESS ONE.
+    # On a fresh install the catalogue holds whatever shipped, so the first
+    # question a new user asks -- about their own country -- lands here. What
+    # they need next is which years exist, which is one small query per
+    # dataset and is cached afterwards.
+    if a["action"] == "none" and args.geo and not args.offline:
+        _availability(args, a)
+
     if a["action"] == "choose_country":
         print(f"\n  {'country':>9}  verdict     finest table")
         for g, h in sorted(a["by_geo"].items()):
@@ -189,6 +197,94 @@ def _catalogue(args) -> int:
               "sectors — two subsectors share a\n  headcount far more evenly "
               "than they share an output.")
     return 0
+
+
+def _availability(args, a) -> None:
+    """What Eurostat actually carries for a country whose tables are not here.
+
+    Every count comes from the VALUE map and not from the `time` dimension,
+    which lists the years a dataset spans rather than the years a country
+    populates. Read the wrong one and this printed a configuration naming 2024
+    for Germany, which fails: Eurostat answers 200 with an empty result for a
+    year a country does not publish. Advice you have not run is not advice.
+    """
+    from quadrium.catalogue import available_years
+    from quadrium.eurostat import DATASETS
+
+    geo = args.geo.strip().upper()
+    print(f"\n  Asking Eurostat what it carries for {geo}…")
+    years = available_years(geo, Path(args.data) / "data" / "eurostat",
+                            refresh=args.refresh)
+    if not years:
+        print(f"  Nothing came back for {geo}. Either it is not a code "
+              f"Eurostat knows,\n  or the network is not there. `--offline` "
+              f"skips this question entirely.")
+        return
+
+    taken = str(years.pop("_taken", ""))[:10]
+    labels = {"product_by_product": "symmetric, product x product",
+              "industry_by_industry": "symmetric, industry x industry",
+              "supply": "supply", "use_purchasers": "use, purchasers' prices",
+              "use_basic": "use, basic prices, split DOM / IMP"}
+    print(f"\n  {'dataset':<22}{'years':>7}  range")
+    for name in ("product_by_product", "industry_by_industry", "supply",
+                 "use_purchasers", "use_basic"):
+        ys = years.get(name)
+        row = f"{len(ys):>7}  {ys[0]}–{ys[-1]}" if ys else f"{'—':>7}  none  "
+        print(f"  {DATASETS[name]:<22}{row}  {labels[name]}")
+    print(f"\n  (years a country POPULATES, not the years the dataset spans; "
+          f"asked {taken},\n  cached, and `--refresh` asks again)")
+    print(f"\n  This says what Eurostat CARRIES, which is not a promise that "
+          f"it loads. The\n  loader checks the publisher's own identities and "
+          f"refuses a pair whose books\n  do not close within its own printed "
+          f"precision — Belgium's 2022 pair is out\n  by 0.80 against the 0.46 "
+          f"its two decimals allow, and is refused, saying so.")
+
+    sym_kind = ("product_by_product" if years.get("product_by_product")
+                else "industry_by_industry" if years.get("industry_by_industry")
+                else None)
+    pair = years.get("supply") and years.get("use_purchasers")
+    transformable = pair and years.get("use_basic")
+
+    if sym_kind:
+        ys = years[sym_kind]
+        print(f"\n  A symmetric table, most recent {ys[-1]}:\n")
+        for line in ("table_kind       eurostat",
+                     f"eurostat_geo     {geo}",
+                     f"eurostat_year    {ys[-1]}",
+                     f"eurostat_dataset {sym_kind}"):
+            print(f"      {line}")
+
+    if transformable:
+        newest = min(years["supply"][-1], years["use_purchasers"][-1],
+                     years["use_basic"][-1])
+        extra = ("" if sym_kind and years[sym_kind][-1] >= newest
+                 else f"  — and {newest} exists ONLY as a pair")
+        print(f"\n  Or the supply-use pair, most recent {newest}{extra}:\n")
+        for line in ("table_kind       eurostat_sut",
+                     f"eurostat_geo     {geo}",
+                     f"eurostat_year    {newest}",
+                     "eurostat_model   D"):
+            print(f"      {line}")
+
+    if not sym_kind and not transformable:
+        print(f"\n  {geo} HAS NO ROUTE TO A SYMMETRIC TABLE HERE, and that is "
+              f"the answer,\n  not a failure to look. Eurostat carries no "
+              f"symmetric table for it, and")
+        if pair:
+            print(f"  the supply-use pair it does carry has no "
+                  f"`{DATASETS['use_basic']}` —\n  use at basic prices split "
+                  f"into domestic and imported. Without that\n  split a "
+                  f"transformation would have to assume every user of a "
+                  f"product\n  imports the same share of it, which is an "
+                  f"economic hypothesis this\n  engine will not make for you.")
+            print(f"\n  The pair still loads, and every supply-use identity "
+                  f"still holds on it.\n  What it cannot do is become a "
+                  f"symmetric table. For that, {geo}'s own\n  statistical "
+                  f"office is the place to look — Eurostat is not the only\n"
+                  f"  publisher, only the harmonised one.")
+        else:
+            print(f"  it carries no usable supply-use pair either.")
 
 
 def _wrap(text: str, width: int) -> list[str]:
