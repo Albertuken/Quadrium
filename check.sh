@@ -31,7 +31,31 @@ else
     WHICH="public tree"
 fi
 
-PY=${PYTHON:-python3}
+# ---- which interpreter ---------------------------------------------------
+# In order: whatever `PYTHON` names, a virtualenv beside the checkout, the
+# project's own environment, then `python3`.
+#
+# The last two matter because `python3` on the author's machine is Anaconda's
+# base, which is BELOW the floor `pyproject.toml` declares -- so the default
+# had to stop being "whatever python3 means here". Choosing an interpreter on
+# the user's behalf is the kind of magic that causes exactly the problem this
+# script exists to catch, so the choice is PRINTED, every run, with the reason.
+if [ -n "${PYTHON:-}" ]; then
+    PY=$PYTHON
+    PY_WHY="PYTHON is set"
+elif [ -x .venv/bin/python ]; then
+    PY=.venv/bin/python
+    PY_WHY="a virtualenv beside the checkout"
+elif [ -x "$HOME/.venvs/quadrium/bin/python" ]; then
+    PY="$HOME/.venvs/quadrium/bin/python"
+    PY_WHY="the project environment"
+elif [ -n "${CI:-}" ]; then
+    PY=python3
+    PY_WHY="CI runner; the environment is the workflow's"
+else
+    PY=python3
+    PY_WHY="no project environment found; falling back"
+fi
 
 # numpy deprecated converting an array with ndim > 0 to a scalar in 1.25 and
 # made it an ERROR in 2.3. Between those two releases it is a warning nobody
@@ -80,8 +104,12 @@ if bad:
         print(f"    {line}")
     print()
     print("Anything that passes here says nothing about what a user gets.")
-    print("Use an environment that meets the declared minimum, e.g.")
-    print("    PYTHON=~/.venvs/quadrium/bin/python ./check.sh")
+    print("This script prefers ~/.venvs/quadrium or a .venv beside the")
+    print("checkout, and fell back to this interpreter because neither is")
+    print("there. Create one:")
+    print("    python3 -m venv ~/.venvs/quadrium")
+    print("    ~/.venvs/quadrium/bin/pip install 'numpy>=1.26,<2' "
+          "'openpyxl>=3.1' 'pytest>=7' 'scipy>=1.10'")
     sys.exit(1)
 PYEOF
 then
@@ -89,6 +117,7 @@ then
 fi
 
 echo "== $WHICH, $($PY -V 2>&1)"
+echo "   $PY  ($PY_WHY)"
 echo
 
 # ---- unit tests ----------------------------------------------------------
