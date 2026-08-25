@@ -330,6 +330,12 @@ class SupplyUseTables:
     # industry's intermediate consumption from basic to purchasers' prices. Not
     # value added, and labelled as not, wherever it surfaces.
     taxes_by_activity: Optional[np.ndarray] = None
+    # And by FINAL-USE column. The projection methods of UNH_18 ch. 18 take
+    # taxes as one vector across industries AND final use -- `tls0` of length
+    # n + k -- because that is the row of the use table they are. Measured on
+    # Spain 2022: 18,993.1 across industries plus 102,154.9 across final use
+    # is 121,148.0, the published total exactly.
+    taxes_by_final_demand: Optional[np.ndarray] = None
 
     retrieved_at: datetime = field(default_factory=_utcnow)
     notes: Optional[str] = None
@@ -340,6 +346,172 @@ class SupplyUseTables:
         return all(x is not None for x in
                    (self.U_domestic, self.U_imported, self.Y_domestic,
                     self.Y_imported, self.taxes_by_activity))
+
+    def _live(self):
+        """Products and industries that produce anything, and what was dropped.
+
+        Every method here divides by output: a transformation to form
+        coefficients, a projection to form market shares. A sector producing
+        nothing has neither, and Eurostat publishes one in every country --
+        `U`, extraterritorial organisations, with zero output.
+
+        The two axes are masked by their OWN output, because a supply-use pair
+        is rectangular in general and masking both by one vector is what the
+        model validators had to stop doing when France arrived at 89 x 88.
+        """
+        import numpy as _np
+        keep_p, keep_a = self.q > 0, self.g > 0
+        dropped = sorted(
+            {c for c, k in zip(self.product_codes, keep_p) if not k}
+            | {c for c, k in zip(self.activity_codes, keep_a) if not k})
+        return _np.flatnonzero(keep_p), _np.flatnonzero(keep_a), dropped
+
+    @property
+    def projectable(self) -> bool:
+        """Whether this pair carries what UNH_18 ch. 18's methods need."""
+        return self.transformable and self.taxes_by_final_demand is not None
+
+    def project(self, *, gva, final_use, taxes, imports,
+                method: str = "sut_euro", year: int | None = None
+                ) -> "SupplyUseTables":
+        """Project this pair onto a later year's totals. UNH_18 ch. 18.
+
+        WHAT THIS IS FOR, AND WHY IT IS A SECOND VERB
+        -----------------------------------------------
+        Everything else this engine does takes a table and makes it finer. This
+        takes a table and moves it in TIME: a detailed pair for a base year,
+        plus whatever is known about a later one -- value added by industry,
+        final use by category, and two totals -- and it produces a full pair
+        consistent with them.
+
+        That is what a statistical office does between benchmark years, and
+        what an analyst does to ask "if output looks like this in 2026, what
+        does the table look like?". The three methods UNH_18 ch. 18 specifies
+        have been implemented and verified against the chapter's own printed
+        iterations since v1.5 and v1.66, and until 2026-08-25 there was no
+        operation in this engine that projected anything at all.
+
+        THE RESULT IS AN ESTIMATE AND SAYS SO
+        ---------------------------------------
+        Every cell is BALANCED in the sense of §A.1: the base year's structure
+        carried onto the target year's totals. Nothing in it was observed for
+        the target year except the totals you supplied.
+
+        Parameters
+        ----------
+        gva : (n,)         value added by industry, at BASIC prices
+        final_use : (k,)   totals by final-use category, at PURCHASERS' prices
+        taxes : float      total taxes less subsidies on products
+        imports : float    total imports
+        method : str       `sut_euro` (default) or `sut_ras`
+
+        THE PRICE BASIS OF `final_use` IS NOT A DETAIL. The method carries
+        taxes as a row of the use table, so a final-use target must include
+        them — purchasers' prices, which is how national accounts publish
+        household consumption and exports anyway.
+
+        This is checkable and was checked: projecting a pair onto its OWN
+        totals must return that pair. With the target at purchasers' prices it
+        does, in ONE iteration, with every deviation exactly 1.0 and
+        `max|Ud − Ud₀| = 0.0000`. With it at basic prices the same call runs to
+        the 200-iteration ceiling, never converges, and parks 380 away — and
+        every value-added deviation reads 1.00003, which looks like success.
+        The identity test is what tells the two apart.
+        """
+        import numpy as _np
+
+        if not self.projectable:
+            raise ValueError(
+                "this pair carries no domestic/imported split at basic prices "
+                "with taxes by column, so it cannot be projected. For Eurostat "
+                "that means `naio_10_cp1610` was not loaded alongside.")
+
+        method = str(method).strip().lower()
+        n, k = len(self.activity_codes), len(self.Y_labels)
+        gva = _np.asarray(gva, float).ravel()
+        final_use = _np.asarray(final_use, float).ravel()
+        if gva.size != n or final_use.size != k:
+            raise ValueError(
+                f"this pair has {n} industries and {k} final-use categories, "
+                f"and {gva.size} value-added and {final_use.size} final-use "
+                f"targets were given. A projection onto totals that do not "
+                f"match the table is not a projection.")
+
+        pi, ai, dropped = self._live()
+        Ud0 = _np.hstack([self.U_domestic[_np.ix_(pi, ai)],
+                          self.Y_domestic[pi]])
+        Um0 = _np.hstack([self.U_imported[_np.ix_(pi, ai)],
+                          self.Y_imported[pi]])
+        tls0 = _np.concatenate([self.taxes_by_activity[ai],
+                                self.taxes_by_final_demand])
+        gva, n = gva[ai], len(ai)
+
+        if method == "sut_euro":
+            from .sut_euro import sut_euro
+            r = sut_euro(Ud0, Um0, tls0, self.V[_np.ix_(pi, ai)].T,
+                         va_target=gva, final_use_target=final_use,
+                         tls_target=float(taxes),
+                         imports_target=float(imports))
+            # `r.V` is industries x products and `r.x` is industry output --
+            # taken from the result rather than rebuilt, because rebuilding is
+            # how a rounding residue becomes a second opinion.
+            Ud, Um, V_ip, g_new = r.Ud, r.Um, r.V, r.x
+            # `r.tls` is the PROJECTED taxes by column, and `r.gva` the
+            # projected value added. Carrying the base year's forward instead
+            # left the transformed table's column identity 576 out on a
+            # +2 % tax target -- rows exact, columns not, which is the
+            # signature of a value-added block that did not move with the
+            # rest of the table.
+            tls_new, gva_new = r.tls.ravel(), r.gva.ravel()
+            note = (f"SUT-EURO, UNH_18 ¶18.89–18.102, pp. 575–577. Converged "
+                    f"in {r.iterations} iteration(s) on the chapter's own "
+                    f"1 per cent rule.")
+        elif method == "sut_ras":
+            raise ValueError(
+                "SUT-RAS is implemented and verified in `sut_ras.py` against "
+                "the chapter's printed iterations, and is not wired here. It "
+                "takes a DIFFERENT set of targets -- industry outputs, use "
+                "column totals and total imports-plus-taxes (¶18.86, "
+                "pp. 571–573) -- not value added and final use, so exposing it "
+                "means a second target vocabulary rather than a second name "
+                "for this one. Recorded rather than half-done.")
+        else:
+            raise ValueError(
+                f"method {method!r} is not one of: sut_euro, sut_ras")
+
+        # `Ud` and `Um` already carry the final-use columns, so a row sum of
+        # each IS product output and imports respectively -- the same two
+        # identities `load_sut` checks on the way in.
+        q_new = Ud.sum(axis=1)
+        imports_new = Um.sum(axis=1)
+        label = year if year is not None else self.year
+
+        return SupplyUseTables(
+            table_id=f"{self.table_id}::projected-{label}",
+            country=self.country, year=int(label), unit=self.unit,
+            classification=self.classification,
+            product_codes=[self.product_codes[i] for i in pi],
+            product_labels=[self.product_labels[i] for i in pi],
+            activity_codes=[self.activity_codes[i] for i in ai],
+            activity_labels=[self.activity_labels[i] for i in ai],
+            V=V_ip.T,
+            U=Ud[:, :n] + Um[:, :n],
+            Y=Ud[:, n:] + Um[:, n:], Y_labels=list(self.Y_labels),
+            W=gva_new.reshape(1, n), W_labels=["Value added"],
+            imports=imports_new, total_margins=self.total_margins[pi],
+            taxes_on_products=self.taxes_on_products[pi],
+            q=q_new, g=g_new,
+            U_domestic=Ud[:, :n], U_imported=Um[:, :n],
+            Y_domestic=Ud[:, n:], Y_imported=Um[:, n:],
+            taxes_by_activity=tls_new[:n], taxes_by_final_demand=tls_new[n:],
+            source=f"{self.source}, projected to {label}",
+            notes=(f"PROJECTED, NOT OBSERVED. The {self.year} pair's structure "
+                   f"carried onto {label} totals by {note} Nothing here was "
+                   f"measured for {label} except the value added, final use, "
+                   f"taxes and imports totals that were supplied."
+                   + (f" Dropped for having no base-year output, which leaves "
+                      f"a market share undefined: {', '.join(dropped)}."
+                      if dropped else "")))
 
     def to_iot(self, model: str = "D") -> "IOTable":
         """Transform this pair into a symmetric table, by one named model.

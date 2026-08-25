@@ -826,7 +826,7 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     #
     # Without this file the pair still loads and still satisfies every identity
     # a supply-use pair has. It just cannot be transformed, and says so.
-    Ud = Um = Yd = Ym = tax_by_act = None
+    Ud = Um = Yd = Ym = tax_by_act = tax_by_fd = None
     if use_basic_path is not None:
         ub = _Cube(json.loads(Path(use_basic_path).read_text()))
         for dim in ("stk_flow", "ind_use", "prd_ava"):
@@ -855,6 +855,9 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
         tax_by_act = np.array(
             [ub.at(stk_flow="TOTAL", ind_use=j, prd_ava="D21X31") or 0.0
              for j in industries], float)
+        tax_by_fd = np.array(
+            [ub.at(stk_flow="TOTAL", ind_use=c, prd_ava="D21X31") or 0.0
+             for c in fd], float)
 
         # The split must reconstitute what the pair already knows, or it is not
         # the same table. Both are checked against the rounding the source's own
@@ -896,7 +899,7 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
         imports=imports, total_margins=margins, taxes_on_products=taxes,
         q=q, g=g,
         U_domestic=Ud, U_imported=Um, Y_domestic=Yd, Y_imported=Ym,
-        taxes_by_activity=tax_by_act,
+        taxes_by_activity=tax_by_act, taxes_by_final_demand=tax_by_fd,
         source=(f"Eurostat naio_10_cp15 + naio_10_cp16"
                 + (" + naio_10_cp1610" if Ud is not None else "")
                 + f", {geo} {year}"),

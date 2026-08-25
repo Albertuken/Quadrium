@@ -185,6 +185,29 @@ secondary production turns it into. On Spain 2022, models A and D differ by
 the model that produced your table, and if you leave the key blank it tells you
 a default was taken.
 
+**And you can move the pair to a later year before splitting it.** If you have
+a detailed pair for one year and only aggregates for a later one — which is the
+normal situation between benchmark years — add `project_to_year` and a
+`targets` sheet:
+
+| kind | code | value |
+|---|---|---|
+| `gva` | one row per industry | value added, at **basic** prices |
+| `final_use` | one row per category | totals, at **purchasers'** prices |
+| `taxes` | — | total taxes less subsidies on products |
+| `imports` | — | total imports |
+
+The price bases are not decoration. The method carries taxes as a row of the
+use table, so a final-use target must include them. Get it wrong and it does
+not fail loudly: it runs to its iteration ceiling and reports every value-added
+deviation as 1.00009, which reads like success. Get it right and projecting a
+pair onto its own totals returns that pair exactly, in one iteration — which is
+the test to run if you ever doubt your targets.
+
+The method stops when every aggregate is within one per cent of its target,
+which is the Handbook's own rule. Your totals are approached, not attained, and
+the report says how closely.
+
 The engine downloads three files for this — supply, use at purchasers' prices,
 and use at basic prices split into domestic and imported. That third one is why
 the split is read rather than assumed: deriving it would mean supposing every

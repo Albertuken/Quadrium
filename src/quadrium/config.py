@@ -213,12 +213,107 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
 
     files = {name: root / f"{DATASETS[name]}_{geo}_{year}.json"
              for name in ("supply", "use_purchasers", "use_basic")}
+    to_year = meta.get("project_to_year")
+    pmethod = str(meta.get("project_method") or "sut_euro").strip().lower()
+    if to_year not in (None, ""):
+        try:
+            to_year = int(str(to_year).strip())
+        except ValueError:
+            raise ConfigError(
+                f"project_to_year is {meta.get('project_to_year')!r}, not a "
+                f"year.") from None
+    else:
+        to_year = None
+
     return root, {"geo": geo, "year": year, "model": model, "files": files,
-                  "took_default_model": not meta.get("eurostat_model")}
+                  "took_default_model": not meta.get("eurostat_model"),
+                  "project_to_year": to_year, "project_method": pmethod}
+
+
+def _project(sut, req: dict, targets: list, defaults: list):
+    """Move a supply-use pair to a later year, onto totals from the `targets`
+    sheet.
+
+    THE SHEET IS FOUR KINDS OF ROW, and each is a different shape of fact:
+
+        gva         one row per industry, its code, value added at BASIC prices
+        final_use   one row per final-use category, at PURCHASERS' prices
+        taxes       one row, the total
+        imports     one row, the total
+
+    The price bases are not decoration. The method carries taxes as a row of
+    the use table, so a final-use target has to include them; getting that
+    wrong does not fail loudly, it runs to the iteration ceiling with every
+    value-added deviation reading 1.00003, which looks like success. What tells
+    the two apart is projecting a pair onto its OWN totals and requiring the
+    pair back -- exactly, in one iteration, which is what happens when the
+    bases are right.
+    """
+    import numpy as np
+
+    by_kind: dict = {}
+    for n, r in enumerate(targets, start=2):
+        kind = str(_need(r, "kind", "targets", n)).strip().lower()
+        if kind not in ("gva", "final_use", "taxes", "imports"):
+            raise ConfigError(
+                f"targets row {n}: kind {kind!r} must be gva, final_use, "
+                f"taxes or imports.")
+        try:
+            value = float(r.get("value"))
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"targets row {n}: value {r.get('value')!r} is not a number."
+            ) from None
+        by_kind.setdefault(kind, []).append(
+            (str(r.get("code") or "").strip(), value))
+
+    for kind in ("gva", "final_use", "taxes", "imports"):
+        if kind not in by_kind:
+            raise ConfigError(
+                f"the `targets` sheet has no {kind!r} row(s). A projection "
+                f"needs all four: value added by industry, final use by "
+                f"category, and the two totals.")
+
+    def vector(kind, codes, what):
+        given = dict(by_kind[kind])
+        missing = [c for c in codes if c not in given]
+        extra = [c for c in given if c not in codes]
+        if missing or extra:
+            raise ConfigError(
+                f"the {kind!r} targets do not match this pair's {what}.\n"
+                + (f"  missing: {', '.join(missing[:8])}"
+                   + ("…" if len(missing) > 8 else "") + "\n" if missing else "")
+                + (f"  not in the table: {', '.join(extra[:8])}"
+                   + ("…" if len(extra) > 8 else "") if extra else ""))
+        return np.array([given[c] for c in codes], float)
+
+    live_a = [c for c, g in zip(sut.activity_codes, sut.g) if g > 0]
+    gva = vector("gva", sut.activity_codes, "industries") \
+        if len(by_kind["gva"]) == len(sut.activity_codes) \
+        else vector("gva", live_a, "industries with output")
+    if len(gva) == len(live_a) and len(live_a) != len(sut.activity_codes):
+        full = np.zeros(len(sut.activity_codes))
+        full[[i for i, g in enumerate(sut.g) if g > 0]] = gva
+        gva = full
+        defaults.append(
+            f"the gva targets cover the {len(live_a)} industries with output "
+            f"and not the {len(sut.activity_codes)} in the table; the rest "
+            f"were taken as zero, which is what they already are")
+
+    projected = sut.project(
+        gva=gva, final_use=vector("final_use", list(sut.Y_labels),
+                                  "final-use categories"),
+        taxes=by_kind["taxes"][0][1], imports=by_kind["imports"][0][1],
+        method=req["project_method"], year=req["project_to_year"])
+    print(f"    Projected {sut.year} -> {req['project_to_year']} by "
+          f"{req['project_method']}: output "
+          f"{sut.q.sum():,.0f} -> {projected.q.sum():,.0f} "
+          f"({100 * (projected.q.sum() / sut.q.sum() - 1):+.2f} %)")
+    return projected
 
 
 def _load_eurostat_sut(req: dict, offline: bool, refresh: bool,
-                       defaults: list):
+                       defaults: list, targets: list):
     """Fetch or read the three files, then transform by the named model."""
     import json
 
@@ -261,6 +356,9 @@ def _load_eurostat_sut(req: dict, offline: bool, refresh: bool,
 
     print(f"    Supply-use: {sut.V.shape[0]} products x {sut.V.shape[1]} "
           f"activities, {sut.q.sum():,.0f} {sut.unit}")
+
+    if req.get("project_to_year"):
+        sut = _project(sut, req, targets, defaults)
     try:
         table = sut.to_iot(req["model"])
     except (ValueError, ArithmeticError) as exc:
@@ -483,7 +581,8 @@ def load_config(path: Path | str, *, offline: bool = False,
                 continue
             meta[k.lower()] = r[1] if len(r) > 1 else None
     tables = {name: _rows(sheets, name)
-              for name in ("splits", "keys", "scenarios", "profiles")}
+              for name in ("splits", "keys", "scenarios", "profiles",
+                           "targets")}
     return build_config(meta, tables, base_dir=path.parent, label=path.name,
                         offline=offline, refresh=refresh)
 
@@ -559,8 +658,9 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
         "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
-        "eurostat_sut": lambda p: _load_eurostat_sut(fetch_note, offline,
-                                                     refresh, defaults_taken),
+        "eurostat_sut": lambda p: _load_eurostat_sut(
+            fetch_note, offline, refresh, defaults_taken,
+            tables.get("targets", [])),
     }
     try:
         table = loaders[kind](table_path)
