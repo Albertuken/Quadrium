@@ -262,12 +262,24 @@ and the `targets` sheet must match them:
 | `sut_ras` | `industry_output` per industry, `use_column_totals` per industry then per final-use category (each industry's output **less** its value added), `taxes`, `imports` |
 
 A sheet written for one will not drive the other, and the engine says so rather
-than reading the wrong column. On the same 61 back-tests `sut_ras` beats
-`sut_euro` in every one and beats the base year left alone in 60 of 61 — France
-2021 → 2022, 5.5 % against 51.6 %. It also hits your industry-output targets
+than reading the wrong column.
+
+`sut_ras` is the better of the two on every test that has been run: it beats
+`sut_euro` in all 61 back-tests, and in **54 of 54** when both are handed
+exactly the same information (`sut_ras` asks for 64 more numbers than
+`sut_euro`, so the comparison was rerun with its industry outputs estimated
+from `sut_euro`'s own targets). It also hits your industry-output targets
 exactly, because it is given them; `sut_euro` approaches value added
-iteratively, and on Spain 2021 → 2022 it overshoots the total the office later
+iteratively and on Spain 2021 → 2022 overshoots the total the office later
 published by 3.6 %.
+
+**What that is worth depends on what you actually know.** With a real
+measurement of the later year's industry output, `sut_ras` beats leaving the
+base year alone in 60 of 61 tests. With only value added and final use it wins
+18 of 54, and `sut_euro` wins none — so on that information a projection buys
+consistency with your targets rather than a better picture of the structure.
+The gap between the two, 6.6 points on average, is what knowing next year's
+industry output is worth.
 
 The default is still `sut_euro`, because changing a default is the project
 owner's call and not a measurement's. If you are projecting, run both.

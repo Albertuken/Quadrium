@@ -157,13 +157,57 @@ With that one distinction, on the same 61 tests:
     AT 2021 -> 2022     RAS 11.1 %   EURO 24.1 %   base 22.0 %
     ES 2021 -> 2022     RAS 27.7 %   EURO 34.0 %   base 29.4 %
 
-So the finding is not "projection does not help". It is **"SUT-EURO does not
-help, SUT-RAS does, and SUT-RAS was the one behind the raise"** — the "built,
-verified and unreachable" pattern for the fifth time, and this time the
-unreachable thing was the better method. It is wired now, with its own target
-vocabulary and its own refusal for anyone who hands it SUT-EURO's; `sut_euro`
-stays the default, because changing that is the owner's decision and `OQ-B-16`
-puts this in front of it.
+THE TWO ARE NOT GIVEN THE SAME INFORMATION, AND IT HAD TO BE CHECKED
+---------------------------------------------------------------------
+Counted on Spain 2022:
+
+    SUT-EURO receives   64 + 7 + 2   =  73 numbers
+    SUT-RAS  receives   64 + 71 + 1  = 136 numbers      (+64)
+
+And SUT-RAS's target set CONTAINS SUT-EURO's. From what SUT-RAS is given,
+value added by industry comes back as `x - u[industries]` and final use by
+category as `u[categories]`, both to **0.000000**. The reverse does not hold:
+value added and final use do not determine industry output industry by
+industry.
+
+So "61 of 61" on its own does not say SUT-RAS is the better METHOD. It says
+industry output is worth a great deal and SUT-RAS is what consumes it.
+
+THE SAME COMPARISON ON EQUAL INFORMATION
+------------------------------------------
+Give SUT-RAS an industry output ESTIMATED from the only thing SUT-EURO has —
+base-year output scaled by each industry's value-added growth,
+`x_est = x_base * (gva_target / gva_base)` — and nothing else changes. Both
+methods then hold the same 73 numbers.
+
+    SUT-RAS beats SUT-EURO                             54 / 54
+    SUT-RAS beats the base year left alone             38 / 54
+    SUT-RAS beats the base year x GVA growth           18 / 54
+    cost of not seeing the true output           +6.6 points, mean
+
+Seven of the 61 drop out with `SignInfeasibleError`: the ESTIMATE is sometimes
+a target no table can reach. That is a cost of the derivation, not of the
+method, and it is why the estimate is not made on a user's behalf anywhere in
+this engine.
+
+Two things follow, and they point different ways.
+
+**The ranking is the method, not the information.** SUT-RAS beats SUT-EURO on
+identical inputs, 54 of 54, and by 61 of 61 when it is given the output it asks
+for. Whatever you hold, it is the better of the two.
+
+**Neither reliably beats a one-number rescale on SUT-EURO's information.**
+SUT-RAS wins 18 of 54 there and SUT-EURO wins 0 of 61. The 6.6 points that
+separate the two SUT-RAS columns are what a real measurement of next year's
+industry output buys. Without one, projecting buys consistency with your
+targets and not a better picture of the structure.
+
+So the finding is that **SUT-RAS is the better method and SUT-RAS was the one
+behind the raise** — the "built, verified and unreachable" pattern for the
+fifth time, and this time the unreachable thing was the better method. It is
+wired now, with its own target vocabulary and its own refusal for anyone who
+hands it SUT-EURO's; which of the two is the DEFAULT is the owner's decision
+and `OQ-B-16` puts this in front of it.
 
 One honest caveat: SUT-RAS's stopping rule is a STEP-SIZE threshold this project
 chose (the chapter states none — `OQ-B-02`), not a deviation from target, so
