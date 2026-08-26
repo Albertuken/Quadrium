@@ -170,6 +170,45 @@ def scenario_section(res: DisaggregationResult) -> str:
                       "with extra steps. One country and three years, one of "
                       "them pandemic-affected. See "
                       "`validators/run_key_carryover.py`."]
+
+        # How wrong each subsector's SIZE will be, from the key's own weights.
+        # Not a fitted screen: a proportional split gives part i an output of
+        # `share_i * X_parent`, so an error of e POINTS in that share is an
+        # error of `e / share_i` in the part itself. `run_size_screen.py`
+        # calibrates the constant and holds out one country at a time.
+        out_w = sp.get("weights", {}).get("output")
+        if out_w is not None and len(out_w) == len(sp.get("new_codes", [])):
+            band = [(c, float(w)) for c, w in zip(sp["new_codes"], out_w)
+                    if float(w) > 0]
+            if band:
+                lines += [
+                    "",
+                    "**How wrong will each subsector's SIZE be?**", "",
+                    "| Subsector | share of the parent | typical | p90 |",
+                    "|---|---:|---:|---:|"]
+                for code, w in band:
+                    lines.append(f"| `{code}` | {w:.1%} | "
+                                 f"{7.3 / (w * 100) * 100:.0f} % | "
+                                 f"{27.4 / (w * 100) * 100:.0f} % |")
+                lines += [
+                    "",
+                    "> A proportional split gives each part `share x parent "
+                    "output`, so an error of *e* **points** in a share is an "
+                    "error of `e / share` in that part's own size. The two "
+                    "columns put the median and p90 error of a real "
+                    "downloadable key — 7.3 and 27.4 points "
+                    "(`run_real_key.py`) — through that division. Measured on "
+                    "1,583 subsector-and-proxy pairs, the typical column runs "
+                    "about 0.65 of the truth and the p90 column contains it "
+                    "**92 %** of the time, holding at 88.7 to 92.9 % with each "
+                    "country held out.",
+                    ">",
+                    "> **A small part is where this bites.** A few points of "
+                    "key error is the whole of a 5 % subsector. If your key "
+                    "came from the office's own published split for another "
+                    "year rather than from a proxy, use 1.2 points instead of "
+                    "7.3 (`run_key_carryover.py`) and these numbers fall by "
+                    "six. See `validators/run_size_screen.py`.", ""]
         va = sp.get("va_rows") or {}
         if va.get("pinned"):
             lines += ["",

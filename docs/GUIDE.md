@@ -662,6 +662,27 @@ one of them pandemic-affected; the cost doubles from a one-year to a two-year
 gap, which is the shape to expect rather than a law. See
 `validators/run_key_carryover.py`.
 
+**How wrong will each subsector's size be?** The report now prints this per
+subsector, and it is arithmetic rather than a fitted screen. A proportional
+split gives each part `share x parent output`, so an error of *e* **points** in
+a share is an error of `e / share` in that part's own size. At a real key's
+median error of 7.3 points:
+
+| the part holds | its output is out by |
+|---:|---:|
+| 50 % of the parent | 15 % |
+| 25 % | 29 % |
+| 10 % | 73 % |
+| 5 % | 146 % |
+
+Measured on 1,583 subsector-and-proxy pairs, that column runs about 0.65 of the
+truth, and the same division with the p90 key error (27.4 points) contains the
+truth **92 %** of the time. **A small part is where this bites**: a few points
+of key error is the whole of a 5 % subsector, and the multiplier bands above say
+nothing about it, because the key cannot reach a multiplier. If your key is a
+published split from a nearby year rather than a proxy, use 1.2 points instead
+of 7.3 and these numbers fall by six. See `validators/run_size_screen.py`.
+
 Two practical notes. National-accounts employment (`nama_10_a64_e`) is the first
 thing most people reach for and it **cannot be used**: it is published at exactly
 the aggregation of the table you are splitting. The detail only exists in
