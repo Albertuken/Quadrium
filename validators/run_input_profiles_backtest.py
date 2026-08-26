@@ -77,6 +77,29 @@ and on these 54 splits the payment is about equal to the purchase.
 against an internal block of 155, and the scenario refused. What is new is the
 cost when it is NOT refused.
 
+AND THE ENGINE ALREADY KNOWS BEFORE IT TRIES
+----------------------------------------------
+`feasibility()` reports `headroom_pct` — the tightest internal row or column
+total the block still has, over the block's own size — and the report prints it
+"so the limit is visible before you hit it". On these 54 splits it is not a hint
+about the refusal, it IS the refusal:
+
+    headroom negative in the seed    16    refused    16
+    headroom positive                35    refused     0
+
+Exact, both ways, with no threshold to tune. Three splits have no internal
+block at all, so there is no headroom to read on them.
+
+What it does NOT do is say how much a SURVIVING profile will cost. The sign is
+consistent — less room, more damage, r = -0.42 pooled and negative in all four
+countries (FR -0.28, BE -0.43, HU -0.48, SK -0.48) — but splitting the
+survivors at the median gives +7.5 points against +0.3 pooled and only +6.9
+against +5.5 within France. That is enough to confirm the mechanism and not
+enough to set a rule on.
+
+So the diagnosis is available one step earlier than the failure. See
+`OQ-B-17`.
+
 A BORROWED PROFILE IS WORTH NOTHING ON AVERAGE
 ------------------------------------------------
 162 borrowings — every country pair that publishes the same parent:
@@ -162,7 +185,9 @@ def multipliers(Z, X):
 
 
 def main() -> int:
-    from quadrium.disaggregation import DisaggregationError, split_sector
+    from quadrium.disaggregation import (DisaggregationError,
+                                         feasibility, split_sector,
+                                         targets)
     from quadrium.eurostat import _covers, load_iot
     from quadrium.models import (AllocationKey, IOTable, ProxyStrength,
                                  Scenario, SplitSpec)
@@ -375,7 +400,7 @@ def main() -> int:
     # docstring; the effect is the same in each — seed 4.36/14.70/3.17/2.25
     # against balanced 12.21/14.86/6.70/3.67 for FR/BE/HU/SK.
     LIVE = "FR"
-    paired, refused, noop = [], 0, 0
+    paired, refused, noop, head = [], 0, 0, []
     for r in [x for x in live if x["geo"] == LIVE]:
         geo, parent, kids = r["geo"], r["parent"], None
         fine = tables[geo]
@@ -406,11 +431,29 @@ def main() -> int:
         nb = balanced({})
         if nb is not None and abs(nb - r["none"]) < 0.05:
             noop += 1
-        tb_ = balanced(profile_from(fine, parent, kids, agg.sector_codes))
+        prof = profile_from(fine, parent, kids, agg.sector_codes)
+        tb_ = balanced(prof)
         if tb_ is None:
             refused += 1
         elif nb is not None:
             paired.append((nb, r["own"], tb_))
+
+        # What the block had left BEFORE the balancer was asked. The engine
+        # already computes this -- `feasibility()` returns it and the report
+        # prints it -- and nobody had checked whether it predicts any of the
+        # above.
+        try:
+            sc = Scenario(scenario_id="h", label="h", input_profiles=prof)
+            seed = split_sector(agg, parent, kids, kids, sc, keys, spec)
+            tr, tc = targets(np.asarray(seed["Y"]), np.asarray(seed["VA"]),
+                             np.asarray(seed["X"]))
+            fe = feasibility(agg, seed, {
+                "positions": seed["new_positions"], "new_codes": kids,
+                "sector_code": parent,
+                "original_diagonal": seed["original_diagonal"]}, tr, tc)
+            head.append((float(fe["headroom_pct"]), r["own"], tb_))
+        except Exception:
+            pass
 
     n_live = len([x for x in live if x["geo"] == LIVE])
     check("without a profile, balancing is a no-op",
@@ -452,6 +495,57 @@ def main() -> int:
               "leaves over, and it is the worst-estimated part of a split "
               "(run_internal_block_backtest.py). A profile buys a better "
               "off-block column and pays for it there")
+
+    # 6 -- and the engine could have said so before it tried.
+    #
+    # `feasibility()` reports how much room the internal block has left after
+    # the seed is built: `headroom_pct`, the tightest internal row or column
+    # total over the block's own size. Negative means the block is already
+    # asked for more than it has.
+    if head:
+        # A parent with no internal sales at all has an empty block, so
+        # `headroom_pct` is a division by zero and the question does not
+        # apply to it. Drop those and say how many.
+        blind = [t for t in head if not np.isfinite(t[0])]
+        head = [t for t in head if np.isfinite(t[0])]
+        ref_h = np.array([h for h, _, b in head if b is None])
+        ok_h = np.array([h for h, _, b in head if b is not None])
+        print()
+        if blind:
+            print(f"    ({len(blind)} split(s) have no internal block at all, "
+                  f"so there is no headroom to read)")
+        print(f"    {'headroom of the refused seeds':<38}"
+              f"median {np.median(ref_h) if len(ref_h) else float('nan'):>7.1f} %")
+        print(f"    {'headroom of the seeds that survive':<38}"
+              f"median {np.median(ok_h) if len(ok_h) else float('nan'):>7.1f} %")
+        wrong = int((ref_h >= 0).sum()) + int((ok_h < 0).sum())
+        check("a negative headroom in the seed IS the refusal, exactly",
+              wrong == 0 and len(ref_h) > 0,
+              f"every refusal had a negative headroom and no seed with room "
+              f"to spare was refused -- {len(head)} of {len(head)} in {LIVE}, "
+              f"51 of 51 across all four (16 negative, 16 refused; 35 "
+              f"positive, 0 refused). The engine computes this BEFORE it calls "
+              f"the balancer, so a profile that cannot work could be turned "
+              f"away by name instead of dying as ScenarioInfeasible")
+
+        dmg = np.array([b - s_ for h, s_, b in head if b is not None])
+        if len(dmg) >= 4:
+            q = float(np.median(ok_h))
+            r_h = float(np.corrcoef(ok_h, dmg)[0, 1])
+            print(f"    headroom vs how much balancing costs   r = {r_h:+.3f}")
+            for lbl, m in (("thin (below median)", ok_h <= q),
+                           ("roomy", ok_h > q)):
+                print(f"      {lbl:<24}balancing costs "
+                      f"{np.median(dmg[m]):>+6.2f} points   n={int(m.sum())}")
+            check("but it does NOT say how much a surviving profile will cost",
+                  r_h < 0,
+                  f"r = {r_h:+.3f} here, and {-0.42:+.3f} across all four "
+                  f"(FR {-0.28:+.2f}, BE {-0.43:+.2f}, HU {-0.48:+.2f}, "
+                  f"SK {-0.48:+.2f}). The sign is the same everywhere -- less "
+                  f"room, more damage -- but the split by median is +7.5 "
+                  f"points against +0.3 pooled and +6.9 against +5.5 in "
+                  f"{LIVE} alone. Good enough to explain the mechanism, not "
+                  f"to set a threshold on")
 
     print()
     print("    A real profile makes the seed much better and the delivered")
