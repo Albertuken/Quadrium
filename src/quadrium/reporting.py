@@ -343,6 +343,13 @@ def scenario_section(res: DisaggregationResult) -> str:
                           f"is an artefact of the internal block, not a "
                           f"finding. Supply `input_profiles` to give them "
                           f"genuinely different purchasing patterns."]
+        # "THE WEAKEST ASSUMPTION IN THE RESULT" WAS HALF RIGHT AND SAID
+        # WRONG. Measured on 68 real splits where the office publishes both
+        # the parent and its parts: the estimated block misses the published
+        # one by a median of 60.6 %, comfortably the worst-estimated part of a
+        # split — and how wrong it is does not predict how wrong the
+        # multipliers are, r = +0.03. It is the weakest ASSUMPTION; the result
+        # does not rest on it. See `validators/run_internal_block_backtest.py`.
         lines += ["",
                   f"The estimated **internal block** for this sector is "
                   f"{sp['internal_block_share_pct']:.2f} % of the absolute "
@@ -350,8 +357,25 @@ def scenario_section(res: DisaggregationResult) -> str:
                   f"observation behind it: the original table held a single "
                   f"diagonal cell of {_fmt(sp['original_diagonal'])}, and the "
                   f"split assumes the propensity to trade internally is "
-                  f"proportional to each subsector's weight (MVP_0.1 §6.3). "
-                  f"**This is the weakest assumption in the result.**", ""]
+                  f"proportional to each subsector's weight (MVP_0.1 §6.3).",
+                  "",
+                  "> **It is the weakest assumption here, and the result does "
+                  "not rest on it.** Measured on 68 splits where the office "
+                  "publishes both the parent and its parts, this block misses "
+                  "the published one by a median of **60 %** — the "
+                  "worst-estimated part of a split, against 42 % for the "
+                  "touched block as a whole. But how wrong it is does not "
+                  "predict how wrong the subsectors' multipliers are: "
+                  "correlation **+0.03**. Raising `internal_block_alpha` to "
+                  "the 1.5 that real blocks show makes the multipliers worse, "
+                  "not better, on 37 of those 68. "
+                  "See `validators/run_internal_block_backtest.py`.",
+                  "",
+                  "> One caution about the percentage above: it is the block "
+                  "over the **whole** intermediate matrix, which is why it "
+                  "reads small. Over this subsector's own input column the "
+                  "same block runs from nothing to 56 %, and that is the share "
+                  "with anything to do with its multiplier.", ""]
 
     lines += ["### Cell provenance", "", provenance_summary(res.provenance), "",
               "> **This is a map of what was estimated, not a warning about "

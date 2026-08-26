@@ -1533,6 +1533,50 @@ def test_a_number_too_small_to_show_is_not_shown_as_zero():
     check("a real gap is unchanged", _pct(-0.153) == "-15.3%", _pct(-0.153))
 
 
+def test_the_internal_block_conserves_the_parent_cell_at_every_alpha():
+    """`alpha` reparameterises the block; it must not leak the parent cell.
+
+    The old form scaled the diagonal and left the off-diagonal at 1.0, so every
+    alpha != 1 broke CORE_031 eq. (15): at alpha = 0.5 the block summed to
+    -22.6 % of the parent cell and a balancing step that knows nothing about
+    the block was left to repair it (`OQ-S-04`). The off-diagonal now takes
+    `beta = (1 - alpha*d)/(1 - d)`, so the sum holds for any alpha and reduces
+    exactly to eq. (14) at alpha = 1.
+
+    There was no test of `alpha` at all until 2026-08-26, on a parameter this
+    project had already had wrong once.
+    """
+    from quadrium.disaggregation import split_sector
+
+    table = build_table()
+    keys = build_keys()
+    spec = SplitSpec("ACC", NEW, LBL,
+                 keys_by_block={"output": "key_turnover"})
+    p_idx = table.index_of("ACC")
+    z_pp = float(table.Z[p_idx, p_idx])
+
+    sums, diagonals = [], []
+    for alpha in (0.5, 1.0, 1.5, 2.0):
+        sc = Scenario(scenario_id=f"a{alpha}", label=str(alpha),
+                      keys_by_block={"output": "key_turnover"},
+                      internal_block_alpha=alpha)
+        seed = split_sector(table, "ACC", NEW, LBL, sc, keys, spec)
+        pos = seed["new_positions"]
+        block = np.asarray(seed["Z"])[np.ix_(pos, pos)]
+        sums.append(float(block.sum()))
+        diagonals.append(float(np.trace(block)))
+
+    worst = max(abs(s - z_pp) for s in sums)
+    check("the internal block sums to the parent cell at every alpha",
+          worst / max(abs(z_pp), 1e-12) < 1e-12,
+          f"parent cell {z_pp:,.4f}, block sums "
+          f"{', '.join(f'{s:,.4f}' for s in sums)} — worst gap {worst:.3g}")
+    check("and alpha still does what it is for: concentrate the diagonal",
+          diagonals == sorted(diagonals) and diagonals[-1] > diagonals[0],
+          f"diagonal {' -> '.join(f'{d:,.1f}' for d in diagonals)} across "
+          f"alpha 0.5, 1.0, 1.5, 2.0")
+
+
 def main() -> int:
     print("quadrium engine checks")
     print("=" * 60)
@@ -1543,6 +1587,7 @@ def main() -> int:
                test_real_uk_table_loads_and_balances,
                test_loader_refuses_an_unbalanced_table,
                test_real_ine_table_loads_and_balances,
+               test_the_internal_block_conserves_the_parent_cell_at_every_alpha,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
                test_the_eurostat_supply_use_loader,

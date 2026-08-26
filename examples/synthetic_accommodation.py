@@ -127,8 +127,9 @@ def main() -> int:
     ledger.add(Assumption(
         assumption_id="A-01",
         description="The internal block among the four new subsectors is "
-                    "estimated by double proportionality, with a 0.5 damping "
-                    "factor on self-consumption.",
+                    "estimated by double proportionality (CORE_031 eq. 14), "
+                    "with no damping on self-consumption: alpha = 1.0, the "
+                    "default since v1.12.",
         applies_to="Z internal block",
         source="MVP_0.1 §6.3 — project convention, no methodological source",
         validated_by="pending analyst review",

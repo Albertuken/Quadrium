@@ -498,10 +498,18 @@ tool will tell you nothing can corroborate the result.
 | S1_plain | Size only | Every subsector inherits its parent's purchasing pattern. | |
 | S2_profiled | Differentiated inputs | Subsectors buy different mixes. | |
 
-Leave `internal_block_alpha` blank for the default of 0.5. It governs how much
-of the parent sector's trade with itself stays inside each subsector versus
-crossing between them, and it is a project convention, not something any
-manual states.
+Leave `internal_block_alpha` blank for the default of **1.0**, which is the
+sourced rule (CORE_031 eq. 14: the block is the outer product of the weights).
+It governs how much of the parent sector's trade with itself stays inside each
+subsector rather than crossing between them.
+
+The default was 0.5 until v1.12, on the intuition that a subsector buys from
+itself *less* than proportionality implies. Measured on 1,403 sibling pairs in
+three published tables, the diagonal of a real two-sector block is about **1.5×**
+the outer product and the off-diagonal about 0.1× — the intuition had the sign
+backwards. It is not set to 1.5 either: that is this project's measurement, not
+a source, and substituting it would be the same mistake in the other direction.
+Raise it if you have reason to, and the report will say what you raised it to.
 
 Run at least two scenarios. The spread between them is the honest measure of
 how much your answer depends on your own choices, and the report computes it
