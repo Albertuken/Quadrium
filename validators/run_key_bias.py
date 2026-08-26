@@ -75,6 +75,23 @@ drifts by up to 9.9. Two observations are not a calibration and none is
 proposed here. But a bias that repeats is a different object from noise, and it
 is the first evidence the project has about which of the two this is.
 
+WHAT 38 SPLITS LATER SAID ABOUT ALL OF THIS
+---------------------------------------------
+`run_key_spread.py` ran the same question over 38 splits in three countries
+with the ten proxies Eurostat's business statistics publish, and the case above
+does not generalise:
+
+    every available proxy on the same side of the answer    19.4 % of subsectors
+
+**Leaning together is the exception.** This sector is unusual for that, exactly
+as `run_real_key.py` found it unusual for the SIZE of its error. The
+enterprise-versus-product mechanism described here is real for hospitality and
+is not a general property of a survey-based key.
+
+The conclusion drawn from it survives on other grounds: the range misses one
+split in four, and where it lands it spans a median 28 points of share. What
+changed is the reason the report gives, not the warning.
+
 Run:
     python3 validators/run_key_bias.py
 """

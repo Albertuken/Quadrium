@@ -581,16 +581,34 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "and was one download away. See `D_open_questions.md` "
                   "OQ-S-05 and OQ-S-06.",
                   ">",
-                  "> **And this spread is a floor on your uncertainty, not a "
-                  "confidence interval.** Keys drawn from one survey tend to "
-                  "err the same way, so the whole spread can sit on one side "
-                  "of the answer. Measured on the two Spanish years where the "
-                  "office publishes the true split: in 2021 all seven keys "
-                  "overstate accommodation and the range **misses** the truth "
-                  "by 0.6 points; in 2022 it contains it, but only because "
-                  "the one least-biased key has crossed over — which is not "
-                  "something anyone can check without already knowing the "
-                  "answer. See `run_key_bias.py`.", ""]
+                  "> **This spread is not a confidence interval, and it is "
+                  "not much of a floor either.** Measured on 38 splits across "
+                  "three countries where the office publishes both the parent "
+                  "and its parts: the range contains the true share for "
+                  "80.6 % of subsectors and for every subsector at once in "
+                  "**27 of 38 splits** — it misses one split in four. And "
+                  "where it does contain the answer it does so across a "
+                  "median **28 points of share**, which excludes almost "
+                  "nothing. Honest about being uncertain; nearly silent about "
+                  "where the answer is.",
+                  ">",
+                  "> **A narrow range is not a safer one.** The splits where "
+                  "the range misses are the WIDER ones (median 37.1 points "
+                  "against 27.8), so there is no flag here to act on. Nor is "
+                  "the verdict a property of the sector: of the 13 parents "
+                  "that appear in more than one country, the range agrees "
+                  "with itself in 7. Dropping the highest and lowest proxy "
+                  "does not rescue it — coverage falls to 58.9 % while the "
+                  "range is still 13 points wide. See `run_key_spread.py`.",
+                  ">",
+                  "> One thing the spread does NOT do is lean reliably one "
+                  "way. Every available proxy sits on the same side of the "
+                  "answer for only **19.4 %** of subsectors. Spanish "
+                  "hospitality, where all seven of the pilot\'s keys "
+                  "overstate accommodation and the range misses by 0.6 "
+                  "points, is the unusual case and not the pattern — as it "
+                  "also was for the size of the error. See "
+                  "`run_key_bias.py` and `run_real_key.py`.", ""]
 
     # If the multipliers do not differ across subsectors, say why, loudly. An
     # economist reading "range 0.0 %" could otherwise take the result as robust,

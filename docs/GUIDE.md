@@ -635,6 +635,14 @@ points and the worst case here was 70. Pick for the conceptual match, register
 the others, and read the spread: since no proxy is reliably best, that spread is
 the honest thing to look at.
 
+Read it knowing what it is. Over 38 splits with the answer published beside
+them, the range across the proxies contains the true share for every subsector
+at once in **27 of 38 splits** — it misses one in four — and where it does
+contain the answer it spans a median **28 points of share**. It is honest about
+being uncertain and says almost nothing about where the answer is. A narrow
+range is not a safer one: the splits where it misses are the wider ones. Treat
+it as evidence that you do not know, not as an interval you can quote.
+
 Two practical notes. National-accounts employment (`nama_10_a64_e`) is the first
 thing most people reach for and it **cannot be used**: it is published at exactly
 the aggregation of the table you are splitting. The detail only exists in
