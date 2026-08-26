@@ -243,6 +243,20 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
 
     to_year = meta.get("project_to_year")
     pmethod = str(meta.get("project_method") or "sut_euro").strip().lower()
+    if pmethod not in ("sut_euro", "sut_ras"):
+        raise ConfigError(
+            f"project_method {pmethod!r} must be 'sut_euro' (the default) or "
+            f"'sut_ras'.\n\n"
+            f"They take DIFFERENT targets and the `targets` sheet must match:\n"
+            f"  sut_euro   gva (one per industry, BASIC prices)\n"
+            f"             final_use (one per category, PURCHASERS' prices)\n"
+            f"             taxes, imports (one row each, totals)\n"
+            f"  sut_ras    industry_output (one per industry)\n"
+            f"             use_column_totals (one per industry, then one per\n"
+            f"                 final-use category — each industry's output\n"
+            f"                 LESS its value added)\n"
+            f"             taxes, imports (one row each; their sum is the "
+            f"total this method balances against)")
     if to_year not in (None, ""):
         try:
             to_year = int(str(to_year).strip())
@@ -280,13 +294,20 @@ def _project(sut, req: dict, targets: list, defaults: list):
     """
     import numpy as np
 
+    method = req["project_method"]
+    wanted = (("gva", "final_use", "taxes", "imports") if method == "sut_euro"
+              else ("industry_output", "use_column_totals", "taxes", "imports"))
+
     by_kind: dict = {}
     for n, r in enumerate(targets, start=2):
         kind = str(_need(r, "kind", "targets", n)).strip().lower()
-        if kind not in ("gva", "final_use", "taxes", "imports"):
+        if kind not in wanted:
             raise ConfigError(
-                f"targets row {n}: kind {kind!r} must be gva, final_use, "
-                f"taxes or imports.")
+                f"targets row {n}: kind {kind!r} is not one of "
+                f"{', '.join(wanted)}, which is what "
+                f"`project_method: {method}` takes. The two methods project "
+                f"onto different quantities and a sheet written for one will "
+                f"not drive the other.")
         try:
             value = float(r.get("value"))
         except (TypeError, ValueError):
@@ -296,12 +317,12 @@ def _project(sut, req: dict, targets: list, defaults: list):
         by_kind.setdefault(kind, []).append(
             (str(r.get("code") or "").strip(), value))
 
-    for kind in ("gva", "final_use", "taxes", "imports"):
+    for kind in wanted:
         if kind not in by_kind:
             raise ConfigError(
-                f"the `targets` sheet has no {kind!r} row(s). A projection "
-                f"needs all four: value added by industry, final use by "
-                f"category, and the two totals.")
+                f"the `targets` sheet has no {kind!r} row(s). A "
+                f"`{method}` projection needs all four: "
+                f"{', '.join(wanted)}.")
 
     def vector(kind, codes, what):
         given = dict(by_kind[kind])
@@ -317,6 +338,28 @@ def _project(sut, req: dict, targets: list, defaults: list):
         return np.array([given[c] for c in codes], float)
 
     live_a = [c for c, g in zip(sut.activity_codes, sut.g) if g > 0]
+
+    if method == "sut_ras":
+        # SUT-RAS is given industry output and use column totals and imposes
+        # them, rather than approaching value added iteratively. Wired here
+        # because leaving the better method reachable only from Python is the
+        # same "built, verified and unreachable" fault the engine keeps finding
+        # in itself. See OQ-B-16 and `run_projection_backtest.py`.
+        cols = list(live_a) + list(sut.Y_labels)
+        projected = sut.project(
+            method="sut_ras", year=req["project_to_year"],
+            taxes=by_kind["taxes"][0][1], imports=by_kind["imports"][0][1],
+            industry_output=vector("industry_output", live_a,
+                                   "industries with output"),
+            use_column_totals=vector("use_column_totals", cols,
+                                     "use columns (industries then "
+                                     "final-use categories)"))
+        print(f"    Projected {sut.year} -> {req['project_to_year']} by "
+              f"sut_ras: output {sut.q.sum():,.0f} -> "
+              f"{projected.q.sum():,.0f} "
+              f"({100 * (projected.q.sum() / sut.q.sum() - 1):+.2f} %)")
+        return projected
+
     gva = vector("gva", sut.activity_codes, "industries") \
         if len(by_kind["gva"]) == len(sut.activity_codes) \
         else vector("gva", live_a, "industries with output")
@@ -333,7 +376,7 @@ def _project(sut, req: dict, targets: list, defaults: list):
         gva=gva, final_use=vector("final_use", list(sut.Y_labels),
                                   "final-use categories"),
         taxes=by_kind["taxes"][0][1], imports=by_kind["imports"][0][1],
-        method=req["project_method"], year=req["project_to_year"])
+        method="sut_euro", year=req["project_to_year"])
     print(f"    Projected {sut.year} -> {req['project_to_year']} by "
           f"{req['project_method']}: output "
           f"{sut.q.sum():,.0f} -> {projected.q.sum():,.0f} "
@@ -420,8 +463,16 @@ def _load_eurostat_sut(req: dict, offline: bool, refresh: bool,
         side = path.with_suffix(path.suffix + ".provenance")
         try:
             rec = json.loads(side.read_text())
-            stamps.append(f"{rec['dataset']} {str(rec['retrieved_at'])[:10]} "
-                          f"{rec['sha256'][:16]}…")
+            # `.get`, not `[...]`, and for a reason found on 2026-08-26: a
+            # sidecar written by hand rather than by `fetch()` used the key
+            # `retrieved` where this reads `retrieved_at`, and the whole run
+            # died with `KeyError: 'retrieved_at'` after the table had loaded,
+            # transformed and projected. A provenance stamp is a note about
+            # the data; a missing field in it must degrade the note, not kill
+            # the run. `run_provenance_sidecars.py` now checks the fields too.
+            stamps.append(f"{rec.get('dataset', path.name)} "
+                          f"{str(rec.get('retrieved_at', 'date unrecorded'))[:10]} "
+                          f"{str(rec.get('sha256', ''))[:16]}…")
         except (ValueError, OSError):
             stamps.append(f"{path.name} (no provenance sidecar)")
     table.notes = ((table.notes or "") + " Built from " + "; ".join(stamps)
@@ -540,8 +591,10 @@ def _load_eurostat(path: Path, req: dict, offline: bool, refresh: bool):
     return _tag(load_iot(path, req["variant"]),
                 f"Eurostat {rec['dataset']} {req['geo']} {req['year']}, "
                 f"{req['variant']} variant. Downloaded "
-                f"{rec['retrieved_at'][:10]} from {rec['url']}, "
-                f"{rec['bytes']} bytes, SHA-256 {rec['sha256'][:16]}….")
+                f"{str(rec.get('retrieved_at', 'date unrecorded'))[:10]} from "
+                f"{rec.get('url', 'url unrecorded')}, "
+                f"{rec.get('bytes', '?')} bytes, SHA-256 "
+                f"{str(rec.get('sha256', ''))[:16]}….")
 
 
 def _eurostat_url(req: dict) -> str:

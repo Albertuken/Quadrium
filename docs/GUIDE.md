@@ -252,13 +252,25 @@ method and one publisher, and no manual claims otherwise, but do not read
 "projected to 2026" as "a better picture of 2026 than the latest published
 table".
 
-**There is a second method, and on the evidence it is the better one.**
-`project(method="sut_ras")` takes different targets — industry outputs and use
-column totals rather than value added and final use — and on the same 61
-back-tests it beats the default in every one, and beats the base year left alone
-in 60. France 2021 → 2022: 5.5 % against 51.6 %. The default is still
-`sut_euro`, because changing a default is the project owner's call and not a
-measurement's; if you are projecting, it is worth running both.
+**There is a second method, and on the evidence it is the better one.** Set
+`project_method` to `sut_ras` in the `project` sheet. It takes different targets
+and the `targets` sheet must match them:
+
+| `project_method` | `kind` rows the `targets` sheet needs |
+|---|---|
+| `sut_euro` (default) | `gva` per industry (basic prices), `final_use` per category (purchasers' prices), `taxes`, `imports` |
+| `sut_ras` | `industry_output` per industry, `use_column_totals` per industry then per final-use category (each industry's output **less** its value added), `taxes`, `imports` |
+
+A sheet written for one will not drive the other, and the engine says so rather
+than reading the wrong column. On the same 61 back-tests `sut_ras` beats
+`sut_euro` in every one and beats the base year left alone in 60 of 61 — France
+2021 → 2022, 5.5 % against 51.6 %. It also hits your industry-output targets
+exactly, because it is given them; `sut_euro` approaches value added
+iteratively, and on Spain 2021 → 2022 it overshoots the total the office later
+published by 3.6 %.
+
+The default is still `sut_euro`, because changing a default is the project
+owner's call and not a measurement's. If you are projecting, run both.
 
 **And SUT-EURO may simply refuse.** 29 of those 61 runs did not reach the Handbook's
 1 % rule in 5,000 iterations — some are only slow (Czechia converges at 18,423)

@@ -5,6 +5,7 @@
   "year": 2021,
   "bytes": 73273,
   "sha256": "8a72ed5ae470d02d387f956d34461114162e8a030d7561f189b61e1fc2883434",
-  "retrieved": "2026-08-26",
+  "n_values": 5099,
+  "retrieved_at": "2026-08-26T00:00:00+00:00",
   "why": "the year before ES 2022, so a projection can be tested OUT OF SAMPLE against a table the office later published"
 }
