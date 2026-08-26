@@ -618,6 +618,75 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             rows.append((code, float(tbl.X[pos]),
                          float(tbl.VA[:, pos].sum()),
                          float(tbl.Z[:, pos].sum())))
+    # HOW RISKY WAS THIS SPLIT, FROM TWO NUMBERS AVAILABLE BEFORE MAKING IT.
+    #
+    # `run_split_backtest.py` scores 68 real splits against tables where the
+    # office publishes both the parent and its parts. `run_split_screen.py`
+    # then asks what in the COARSE table predicts the result, since the thing
+    # that actually drives it — how unlike the parts are — cannot be known
+    # without the answer. Seven candidates; two independent signals survive:
+    # the parent's own output multiplier (equivalently, one minus its value
+    # added share, r = -0.98 between them) and the number of parts.
+    #
+    # It ranks, it does not predict a number, and it holds on countries it was
+    # not fitted on: leave-one-country-out Spearman +0.52 to +0.76, positive in
+    # every fold. The cut points below are the medians of those 68 splits.
+    orig = meta.get("original_table")
+    if orig is not None and first.splits:
+        import numpy as _np
+        _A = orig.Z / _np.where(orig.X == 0, 1.0, orig.X)
+        _m = _np.linalg.inv(_np.eye(orig.n) - _A).sum(0)
+        band = []
+        for split in first.splits:
+            code = split["sector_code"]
+            try:
+                pm = float(_m[orig.index_of(code)])
+            except Exception:
+                continue
+            k = len(split["new_codes"])
+            hi_m, hi_k = pm > 1.5525, k > 2
+            med, worst = {(False, False): ("4.8 %", "14.9 %"),
+                          (False, True): ("7.0 %", "23.4 %"),
+                          (True, False): ("7.9 %", "41.6 %"),
+                          (True, True): ("18.6 %", "48.1 %")}[(hi_m, hi_k)]
+            band.append((code, pm, k, med, worst))
+        if band:
+            lines += [
+                "### How risky was this split, before you made it?", "",
+                "Two numbers from the table you started with rank a split's "
+                "difficulty, measured on 68 real splits where the office "
+                "publishes both the parent and its parts: **the parent's own "
+                "output multiplier** and **how many parts you asked for**. "
+                "They are independent of each other, and together they rank "
+                "difficulty on countries they were not fitted on.", "",
+                "| Split | parent multiplier | parts | comparable splits: median error | worst |",
+                "|---|---:|---:|---:|---:|"]
+            for code, pm, k, med, worst in band:
+                lines.append(f"| `{code}` | {pm:.3f} | {k} | {med} | {worst} |")
+            lines += [
+                "",
+                "> The error columns are what the subsectors' **multipliers** "
+                "did in comparable splits, with the size key exactly right. "
+                "They are a band, not a prediction for your table: the screen "
+                "ranks, and the spread inside each band is wide. The cut "
+                "points are the medians of the 68 (multiplier 1.553, two "
+                "parts).",
+                ">",
+                "> If another country publishes your split, you may be "
+                "tempted to read its error instead. Measured, that is worse: "
+                "the band above misses a held-out case by 3.7 points and the "
+                "same parent's error borrowed from other countries by 4.9, "
+                "because the spread for one parent varies by a median factor "
+                "of 4.6 between countries.",
+                ">",
+                "> **Asking for more parts does not make each part worse.** "
+                "A single subsector's error barely moves with the number of "
+                "parts (r = +0.17); the worst of them does (r = +0.36), "
+                "because more parts is more draws. If you need one particular "
+                "subsector, that costs you little. If you need all of them to "
+                "hold, it costs you the maximum. See "
+                "`validators/run_split_screen.py`.", ""]
+
     if rows:
         unit = tbl.unit.split(",")[0]
         lines += [

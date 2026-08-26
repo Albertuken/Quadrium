@@ -7,3 +7,7 @@ dist/
 *.egg-info/
 .venv/
 venv/
+
+# Scratch fixtures the validators write and delete. Tracked by accident until
+# 2026-08-26, so every run of check.sh left six binary diffs in the tree.
+outputs/_scratch/

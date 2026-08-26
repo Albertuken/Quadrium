@@ -595,6 +595,26 @@ within 10 % and a multiplier you believe exactly as much as the parent
 sector's. The report prints what 1 % of key error costs, per subsector, in your
 table's own units. It is arithmetic, not a simulation.
 
+**How risky is this split, before you make it?** Two numbers from the table you
+already have rank the difficulty: **the parent's own output multiplier** and
+**how many parts you are asking for**. They are independent of each other, and
+fitted on three countries they rank a fourth they were never fitted on
+(Spearman +0.52 to +0.76, positive in every fold). Cut both at the median of the
+68 measured splits:
+
+| parent multiplier | parts | median error | worst |
+|---|---|---:|---:|
+| low | few | 4.8 % | 14.9 % |
+| low | many | 7.0 % | 23.4 % |
+| high | few | 7.9 % | 41.6 % |
+| high | many | **18.6 %** | 48.1 % |
+
+The report prints which band your split falls in. **It ranks; it does not
+predict your number** — the spread inside each band is wide. And if another
+country publishes your split, reading its error instead is worse, not better:
+the band misses a held-out case by 3.7 points and the borrowed number by 4.9,
+because one parent's spread varies by a median factor of 4.6 between countries.
+
 **And how wrong is it if your key is RIGHT?** That is a different question and
 it has been measured. Several countries publish a table where the office gives
 both a parent and its parts, so a split can be scored against the real answer.

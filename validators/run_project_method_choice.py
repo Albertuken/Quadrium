@@ -196,6 +196,13 @@ def main() -> int:
           "`project_method` has no fallback value: it is None when unset and "
           "the sheet is read instead")
 
+    # Clean up. These workbooks used to be left behind in a TRACKED directory,
+    # so every run of check.sh dirtied the tree with six binary diffs and they
+    # got committed by accident. `run_sut_closure.py` already unlinks its own
+    # forged fixture; this one now does the same.
+    for f in OUT.glob("method_*.xlsx"):
+        f.unlink(missing_ok=True)
+
     print()
     print("    A default is a choice made for someone who did not make one.")
     print("    Here there was nothing to choose from: the sheet already says")
