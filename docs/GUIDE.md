@@ -595,6 +595,25 @@ within 10 % and a multiplier you believe exactly as much as the parent
 sector's. The report prints what 1 % of key error costs, per subsector, in your
 table's own units. It is arithmetic, not a simulation.
 
+**Which proxy should the key come from?** Measured on 39 splits in three
+countries against the office's own answer, using the ten variables Eurostat's
+structural business statistics publish: **no proxy is reliably best.** Turnover
+and value of output have the best medians (5.1 and 5.2 points of error in a
+subsector's share) but win a split outright 3 and 1 times out of 39; the winner
+is scattered across all ten. Output value beats employment head to head in 20 of
+37, a coin flip.
+
+Expect **5 to 8 points** of error from a real key, with a long tail — p90 is 29
+points and the worst case here was 70. Pick for the conceptual match, register
+the others, and read the spread: since no proxy is reliably best, that spread is
+the honest thing to look at.
+
+Two practical notes. National-accounts employment (`nama_10_a64_e`) is the first
+thing most people reach for and it **cannot be used**: it is published at exactly
+the aggregation of the table you are splitting. The detail only exists in
+business statistics, which count enterprises where the table counts products —
+that mismatch is not a shortcut, it is the only road there is.
+
 **How risky is this split, before you make it?** Two numbers from the table you
 already have rank the difficulty: **the parent's own output multiplier** and
 **how many parts you are asking for**. They are independent of each other, and

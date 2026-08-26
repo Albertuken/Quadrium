@@ -763,3 +763,49 @@ sector is a safe one:
 the sector the Spanish pilot divides.
 
 `library/validators/run_split_backtest.py`.
+
+---
+
+## `sbs_ovw_act_*.json` and `nama_10_a64_e_FR_2021.json` — the keys a user would actually have
+
+Retrieved 2026-08-26; URL, bytes and SHA-256 in the `.provenance` sidecars.
+
+`run_split_backtest.py` measures what a split costs with the allocation key
+**exactly right**. Nobody had measured what a REAL key costs. Eurostat's
+structural business statistics publish ten variables at full NACE detail —
+output value, turnover, value added, persons employed, employees, FTE, wages,
+purchases, gross operating surplus, enterprises, the same set the Spanish pilot
+registered — and the 89-product symmetric tables publish both the parent and its
+parts. That gives **39 splits × up to 10 proxies in 3 countries**, each scored
+against the office's own answer.
+
+| proxy | n | median error | worst | within 5 pp |
+|---|---:|---:|---:|---:|
+| net turnover | 37 | **5.1 pp** | 54.6 | 16 |
+| value of output | 37 | 5.2 pp | 58.1 | 16 |
+| wages / purchases / value added | 37 | 7.1–7.2 pp | 32.8–66.8 | 11–16 |
+| persons employed | 38 | 8.4 pp | 42.1 | 12 |
+| number of enterprises | 39 | 11.7 pp | 50.2 | 10 |
+
+Over every proxy and split: **median 7.9 points, p90 28.8, worst 70.2.**
+
+**No proxy is reliably best.** Turnover has the best median and wins a split
+outright 3 times of 39; output value once. The per-split winner is scattered
+across all ten — purchases 10, gross operating surplus 7, wages 5. Output value
+beats employment head to head in 20 of 37. A proxy earns a good median by rarely
+being terrible, not by usually being right.
+
+**Spanish hospitality is an outlier for its own key.** `OQ-S-05` recorded the
+production key as 9.8 points out. The same key on the same sector is +3.9 in
+France, +2.3 in Hungary, +3.2 in Belgium. And the sign does not generalise
+either: across 39 splits the output-value key is a median +0.6 pp with 22 of 37
+positive.
+
+**`nama_10_a64_e` is here as the negative result.** National-accounts employment
+is the first proxy anyone reaches for, and it is published at exactly the
+aggregation of the table being split — `I`, not `I55` and `I56`. Zero of 15
+parents have their children covered. The detail only exists in business
+statistics, which count enterprises where the table counts products; that
+mismatch is not a shortcut, it is the only road there is.
+
+`library/validators/run_real_key.py`.

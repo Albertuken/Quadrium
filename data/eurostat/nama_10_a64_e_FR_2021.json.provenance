@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10_a64_e?format=JSON&geo=FR&time=2021&unit=THS_PER",
+  "dataset": "nama_10_a64_e",
+  "geo": "FR",
+  "year": 2021,
+  "bytes": 13483,
+  "sha256": "8970495f6dbe9021c854ebfbf7eb1b13de92faf4a9133506bc0c0727d24731f1",
+  "n_values": 285,
+  "retrieved_at": "2026-08-26T00:00:00+00:00",
+  "why": "the proxy an analyst reaches for first \u2014 and the evidence that it cannot serve as an allocation key: A*64 employment is published at exactly the aggregation of the table being split, carrying `I` but not `I55` and `I56`"
+}

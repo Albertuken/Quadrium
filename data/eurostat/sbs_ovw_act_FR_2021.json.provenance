@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/sbs_ovw_act?format=JSON&geo=FR&time=2021",
+  "dataset": "sbs_ovw_act",
+  "geo": "FR",
+  "year": 2021,
+  "bytes": 1010282,
+  "sha256": "edbe9f415a46015cebf8a3b3da749e6b345f97d468002d074ec68a996806eda8",
+  "n_values": 34457,
+  "retrieved_at": "2026-08-26T00:00:00+00:00",
+  "why": "structural business statistics at full NACE detail \u2014 the published proxies an analyst would actually use as an allocation key, scored against the symmetric table's own answer for the same year and country"
+}
