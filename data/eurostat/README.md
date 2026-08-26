@@ -708,3 +708,58 @@ totals cannot use the base year at all. The consistency is the product; this is
 its price, and now it is a number.
 
 `library/validators/run_projection_backtest.py`.
+
+---
+
+## `naio_10_cp1700_{BE_2022,HU_2022,HU_2020}.json` — tables that publish a parent AND its parts
+
+Retrieved 2026-08-26; URL, bytes and SHA-256 in the `.provenance` sidecars.
+`naio_10_cp1700_FR_2021.json` and `naio_10_cp1700_SK_2015.json`, already here,
+do the same.
+
+These five tables are served at **89 products**, and the classification nests:
+the office publishes `I` beside `I55` and `I56`, `C10-12` beside `C10`, `C11`
+and `C12`, and twelve more parents. That makes them the ground truth for the
+operation this engine exists for.
+
+**The experiment.** Sum a parent's children back into the parent, hand the
+result to `split_sector` with the **true output shares as the key**, and
+compare what comes back with the table it came from. A perfect key isolates the
+method's error from the key's. 68 splits, 14 parents, 4 countries.
+
+| with the size key exactly right | median | max |
+|---|---:|---:|
+| cell error in the touched rows and columns | 41.6 % | 112.2 % |
+| output multiplier error of the subsectors | **7.8 %** | 48.1 % |
+
+21 of 68 land their multipliers within 5 %; 15 are out by more than 15 %. A
+perfect key does not buy a right answer: the parts inherit the parent's average
+input structure and they do not have it.
+
+**What the error tracks:**
+
+| against | r |
+|---|---:|
+| spread of the parts' true multipliers | **+0.920** |
+| how much of the table was ESTIMATED | **−0.014** |
+| number of parts | +0.364 |
+
+The first is mechanical — proportional splitting hands every part the parent's
+average, so the worst error is about two thirds of the spread. The second is the
+one to act on: cell provenance says nothing about multiplier accuracy, and the
+report now says so where it prints it. The third confirms `OQ-S-02` on published
+data, where the synthetic study said its levels would not transfer.
+
+**Can you tell beforehand?** Not as a number — for the same parent the largest
+country spread is a median 4.6× the smallest, up to 10.3×. But the ordering
+partly survives (Spearman +0.52 between countries, +0.80 between two years of
+one country), so a country that publishes your split tells you whether the
+sector is a safe one:
+
+    safe        J59_60 2.4 %, Q87_88 5.9 %, I 6.2 %, J62_63 6.2 %
+    expensive   F 20.5 %, N80-82 23.7 %, C10-12 26.5 %, B 35.0 %
+
+`I`, accommodation and food service, is in the safe third in all five tables —
+the sector the Spanish pilot divides.
+
+`library/validators/run_split_backtest.py`.

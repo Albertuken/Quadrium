@@ -354,6 +354,19 @@ def scenario_section(res: DisaggregationResult) -> str:
                   f"**This is the weakest assumption in the result.**", ""]
 
     lines += ["### Cell provenance", "", provenance_summary(res.provenance), "",
+              "> **This is a map of what was estimated, not a warning about "
+              "your multipliers.** Measured on 68 real splits where the office "
+              "publishes both the parent and its parts, the share of the table "
+              "a split had to estimate has **no relationship** to how far the "
+              "subsectors' multipliers land from the published truth — "
+              "correlation −0.01. A split can be 112 % out cell by cell and "
+              "still put its multipliers inside 4 %, or be tidy in the cells "
+              "and 40 % out in the multipliers. What the multiplier error does "
+              "track, at +0.92, is how UNLIKE the parts are: the worst error "
+              "is about two thirds of the spread between their true "
+              "multipliers, because proportional splitting hands every part "
+              "the parent's average structure. See "
+              "`validators/run_split_backtest.py`.", "",
               "### Validation", "", res.report.to_markdown(), ""]
     return "\n".join(lines)
 

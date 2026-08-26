@@ -587,6 +587,23 @@ within 10 % and a multiplier you believe exactly as much as the parent
 sector's. The report prints what 1 % of key error costs, per subsector, in your
 table's own units. It is arithmetic, not a simulation.
 
+**And how wrong is it if your key is RIGHT?** That is a different question and
+it has been measured. Several countries publish a table where the office gives
+both a parent and its parts, so a split can be scored against the real answer.
+Across 68 such splits in 4 countries, **with the size key exactly right**, the
+subsectors' multipliers land a median of 7.8 % from the published truth, and 15
+of the 68 are out by more than 15 %. A perfect key does not buy a right answer:
+the parts inherit the parent's average input structure and they do not have it.
+
+What that error tracks is how **unlike** the parts are — the worst error is
+about two thirds of the spread between their true multipliers, correlation
++0.92. Some sectors divide cleanly wherever you look (`J59_60`, `Q87_88`, `I`,
+`J62_63`, all under 7 % median spread) and some do not (`C10-12`, `B`,
+`N80-82`, `F`, 20 % to 35 %). You cannot read your own number off another
+country — for the same parent the biggest country spread is typically 4.6 times
+the smallest — but the ordering mostly holds, so a country that publishes your
+split will tell you whether the sector is a safe one.
+
 **Cell provenance.** Every cell of the new table is counted into one of four
 statuses:
 
@@ -596,6 +613,12 @@ statuses:
 | `ESTIMATED` | Produced by your proxy |
 | `BALANCED` | Produced by the solver to make the table add up |
 | `user_constraint` | A value you pinned by hand |
+
+**Read this as a map of what was estimated, not as a warning about your
+multipliers.** On those same 68 splits, how much of the table a split had to
+estimate has *no* relationship to how far the multipliers land from the truth —
+correlation −0.01. A split can be badly wrong cell by cell and put its
+multipliers inside 4 %, or be tidy in the cells and 40 % out.
 
 A `BALANCED` figure is not an observation and must never be relabelled as one.
 In a typical split, around 90 % of cells are untouched and 10 % come from your

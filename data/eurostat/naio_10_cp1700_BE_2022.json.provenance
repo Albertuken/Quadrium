@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&geo=BE&time=2022&unit=MIO_EUR",
+  "dataset": "naio_10_cp1700",
+  "geo": "BE",
+  "year": 2022,
+  "bytes": 512597,
+  "sha256": "9ac916b84f3ed7a052209ad8f04632a2c494d288e14c0017218da678fba73280",
+  "n_values": 40390,
+  "retrieved_at": "2026-08-26T00:00:00+00:00",
+  "why": "a symmetric table at 89 products, where the office publishes both an aggregate and its components \u2014 the ground truth for splitting a sector and scoring the result against it"
+}

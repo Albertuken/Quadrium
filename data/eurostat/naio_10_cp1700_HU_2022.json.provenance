@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&geo=HU&time=2022&unit=MIO_EUR",
+  "dataset": "naio_10_cp1700",
+  "geo": "HU",
+  "year": 2022,
+  "bytes": 516157,
+  "sha256": "966475a17ab8bb0328930565c2405c40ca65518cc07bc4cbe618ef46c88ebce8",
+  "n_values": 40390,
+  "retrieved_at": "2026-08-26T00:00:00+00:00",
+  "why": "a symmetric table at 89 products, where the office publishes both an aggregate and its components \u2014 the ground truth for splitting a sector and scoring the result against it"
+}
