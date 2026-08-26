@@ -252,7 +252,15 @@ method and one publisher, and no manual claims otherwise, but do not read
 "projected to 2026" as "a better picture of 2026 than the latest published
 table".
 
-**And it may simply refuse.** 29 of those 61 runs did not reach the Handbook's
+**There is a second method, and on the evidence it is the better one.**
+`project(method="sut_ras")` takes different targets — industry outputs and use
+column totals rather than value added and final use — and on the same 61
+back-tests it beats the default in every one, and beats the base year left alone
+in 60. France 2021 → 2022: 5.5 % against 51.6 %. The default is still
+`sut_euro`, because changing a default is the project owner's call and not a
+measurement's; if you are projecting, it is worth running both.
+
+**And SUT-EURO may simply refuse.** 29 of those 61 runs did not reach the Handbook's
 1 % rule in 5,000 iterations — some are only slow (Czechia converges at 18,423)
 and some cannot get there at all: if an industry's value added changes sign
 between your base year and your target, the method scales by ratios and cannot

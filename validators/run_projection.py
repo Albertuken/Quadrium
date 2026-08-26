@@ -167,17 +167,41 @@ def main() -> int:
           "projected" in iot.table_id and "PROJECTED" in (grown.notes or ""),
           iot.table_id)
 
-    # 5 -- SUT-RAS is refused, and the refusal says why rather than pretending.
+    # 5 -- SUT-RAS is wired, and it keeps its own target vocabulary.
+    #
+    # It was refused here until 2026-08-26 with a reasoned message about a
+    # second target vocabulary being a real cost. The cost is real and the
+    # method is wired anyway, because the back-test settled it: SUT-RAS beats
+    # SUT-EURO on 61 of 61 Eurostat pairs. `run_projection_backtest.py`.
     print()
     try:
         s.project(**t, method="sut_ras")
         msg = ""
     except ValueError as exc:
         msg = str(exc)
-    check("SUT-RAS is refused with its reason, not silently aliased",
-          "different set of targets" in msg.lower() and "18.86" in msg,
-          "it takes industry outputs and use column totals, not value added "
-          "and final use, so wiring it means a second target vocabulary")
+    check("SUT-RAS will not take SUT-EURO's targets by mistake",
+          "INDUSTRY OUTPUTS" in msg and "18.84" in msg,
+          "value added and final use are not industry outputs and use column "
+          "totals; a second method with the same argument names would be a "
+          "silent alias")
+
+    ras_u = (np.hstack([s.U_domestic[np.ix_(pi, ai)], s.Y_domestic[pi]]).sum(0)
+             + np.hstack([s.U_imported[np.ix_(pi, ai)], s.Y_imported[pi]]).sum(0)
+             + np.concatenate([s.taxes_by_activity[ai],
+                               s.taxes_by_final_demand]))
+    same_ras = s.project(taxes=t["taxes"], imports=t["imports"],
+                         method="sut_ras", industry_output=s.g[ai],
+                         use_column_totals=ras_u, year=s.year)
+    dev_ras = float(np.abs(same_ras.U_domestic
+                           - s.U_domestic[np.ix_(pi, ai)]).max())
+    check("and projecting a pair onto its own totals returns that pair",
+          dev_ras / abs(s.q[pi].sum()) < 1e-12,
+          f"{dev_ras:.3g} on an output of {s.q[pi].sum():,.0f} — the same "
+          f"cheapest-check-there-is that found SUT-EURO's price basis")
+    check("its industry output hits the target exactly, which is its target",
+          float(np.abs(same_ras.g - s.g[ai]).max()) < 1e-9,
+          "SUT-EURO approaches value added iteratively; SUT-RAS is given "
+          "industry output and imposes it")
 
     # 6 -- targets that do not match the table are refused.
     for bad, why in (({"gva": t["gva"][:-1]}, "value-added"),

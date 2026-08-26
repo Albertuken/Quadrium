@@ -129,6 +129,47 @@ moves the iteration count from 491 to 907 on Austria and the coefficient error
 from 1.120 to 1.125 per thousand. **`ε` is a convergence-speed knob, not an
 accuracy knob.**
 
+AND THEN THE OTHER METHOD WAS TRIED, AND IT WINS
+--------------------------------------------------
+UNH_18 specifies SUT-RAS as well, and this project implemented it, verified it
+against the chapter's printed iterations (`run_sut_ras_austria.py`) and left it
+unreachable — `project` raised a reasoned message about a second target
+vocabulary being a real cost.
+
+It could not have been run on a published table anyway. Its import step refused
+any row whose non-negative part summed to zero, and **every** Eurostat pair has
+four to twenty products a country simply does not import — Spain's `G47` retail
+trade, `L68A` imputed rents, `S95`, `T`. Those rows are entirely zero and their
+projected import total is zero too: there is nothing for a factor to reach, the
+row stays zero whatever factor is chosen, and refusing is refusing arithmetic
+that already holds. The guard now separates an EMPTY row from a degenerate one,
+and the genuine case — a row with no non-negative part that still has something
+to reach — stays refused.
+
+With that one distinction, on the same 61 tests:
+
+    SUT-RAS beats SUT-EURO                          61 / 61
+    SUT-RAS beats the base year left alone          60 / 61
+    SUT-RAS beats the base year x GVA growth        61 / 61
+
+    FR 2021 -> 2022     RAS  5.5 %   EURO 51.6 %   base 15.4 %
+    CZ 2021 -> 2022     RAS 10.5 %   EURO 68.1 %   base 21.4 %
+    AT 2021 -> 2022     RAS 11.1 %   EURO 24.1 %   base 22.0 %
+    ES 2021 -> 2022     RAS 27.7 %   EURO 34.0 %   base 29.4 %
+
+So the finding is not "projection does not help". It is **"SUT-EURO does not
+help, SUT-RAS does, and SUT-RAS was the one behind the raise"** — the "built,
+verified and unreachable" pattern for the fifth time, and this time the
+unreachable thing was the better method. It is wired now, with its own target
+vocabulary and its own refusal for anyone who hands it SUT-EURO's; `sut_euro`
+stays the default, because changing that is the owner's decision and `OQ-B-16`
+puts this in front of it.
+
+One honest caveat: SUT-RAS's stopping rule is a STEP-SIZE threshold this project
+chose (the chapter states none — `OQ-B-02`), not a deviation from target, so
+"did not converge" means something different for it. Austria runs to 5,000
+without meeting it and produces the best results in the table.
+
 WHAT THIS DOES AND DOES NOT SAY
 ---------------------------------
 It does NOT say the method is wrong, and the comparison is not symmetric: the

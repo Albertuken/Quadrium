@@ -55,7 +55,11 @@ WHAT IS NOT SPECIFIED
   labelled as one. See D_open_questions.md OQ-B-02.
 * No iteration limit.
 * Degenerate rows/columns whose non-negative part sums to zero — the same gap as
-  GRAS, OQ-B-07. Raises rather than guessing.
+  GRAS, OQ-B-07. Raises rather than guessing. An entirely EMPTY import row whose
+  projected import total is also zero is not that case and is left alone: a
+  product a country does not import has nothing for a factor to reach. That
+  distinction is what made this method runnable on published data at all — with
+  the guard as first written it refused all 61 Eurostat back-test pairs.
 * The purchasers'-price and external-information capabilities the chapter claims
   (¶18.38, p. 559; ¶18.51, p. 562) are asserted and never shown. Not implemented.
 
@@ -140,14 +144,41 @@ def _import_factors(Pm, Nm, m, s, r):
     the zero-target root: imports supplied must equal imports used.
     """
     denom = Pm @ s
-    if (denom <= 0.0).any():
+    numer = (Nm / s).sum(axis=1) + r * m
+
+    # AN EMPTY ROW WITH AN EMPTY TARGET IS NOT DEGENERATE, IT IS DONE.
+    #
+    # The guard refused every row whose non-negative part summed to zero. Most
+    # of those are products a country simply does not import: Spain's `G47`
+    # retail trade services, `L68A` imputed rents, `S95`, `T` — the whole row is
+    # zero and the projected import total for it is zero too. There is nothing
+    # for a factor to reach, the row stays zero whatever factor is chosen, and
+    # refusing is refusing arithmetic that already holds.
+    #
+    # It is not a rare corner. **SUT-RAS could not be run on ONE of the 61
+    # Eurostat back-test pairs** — every country has four to twenty such rows —
+    # so a method verified against the chapter's printed iterations had never
+    # touched a published table.
+    #
+    # The genuine case stays refused: a row whose non-negative part is zero and
+    # which still has something to reach, because it carries negatives or a
+    # non-zero import total. No positive factor gets there.
+    scale = float(np.abs(Pm).sum() + np.abs(Nm).sum() + np.abs(m).sum())
+    tiny = max(scale, 1.0) * 1e-12
+    empty = (np.abs(Pm).sum(axis=1) <= tiny) & (np.abs(Nm).sum(axis=1) <= tiny)
+    inert = empty & (np.abs(numer) <= tiny)
+    bad = (denom <= 0.0) & ~inert
+    if bad.any():
         raise DegenerateMarginError(
-            f"import rows {np.flatnonzero(denom <= 0.0).tolist()}: the "
+            f"import rows {np.flatnonzero(bad).tolist()}: the "
             f"non-negative part sums to zero (UNH_18 par. 18.86, p. 572), and "
             f"no positive factor can make an all-non-positive import row meet a "
             f"non-negative import total. Not the OQ-B-07 case, which is solved."
         )
-    return np.sqrt(((Nm / s).sum(axis=1) + r * m) / denom)
+    out = np.ones_like(denom, dtype=float)
+    live = ~inert
+    out[live] = np.sqrt(numer[live] / denom[live])
+    return out
 
 
 def sut_ras(Pd, Nd, Pm, Nm, Pv, Nv, m, x, u, MT, *,

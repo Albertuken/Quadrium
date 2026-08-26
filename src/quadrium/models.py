@@ -384,9 +384,11 @@ class SupplyUseTables:
         """Whether this pair carries what UNH_18 ch. 18's methods need."""
         return self.transformable and self.taxes_by_final_demand is not None
 
-    def project(self, *, gva, final_use, taxes, imports,
+    def project(self, *, taxes, imports, gva=None, final_use=None,
                 method: str = "sut_euro", year: int | None = None,
-                max_iter: int | None = None) -> "SupplyUseTables":
+                max_iter: int | None = None,
+                industry_output=None, use_column_totals=None
+                ) -> "SupplyUseTables":
         """Project this pair onto a later year's totals. UNH_18 ch. 18.
 
         WHAT THIS IS FOR, AND WHY IT IS A SECOND VERB
@@ -469,14 +471,22 @@ class SupplyUseTables:
 
         method = str(method).strip().lower()
         n, k = len(self.activity_codes), len(self.Y_labels)
-        gva = _np.asarray(gva, float).ravel()
-        final_use = _np.asarray(final_use, float).ravel()
-        if gva.size != n or final_use.size != k:
-            raise ValueError(
-                f"this pair has {n} industries and {k} final-use categories, "
-                f"and {gva.size} value-added and {final_use.size} final-use "
-                f"targets were given. A projection onto totals that do not "
-                f"match the table is not a projection.")
+        if method == "sut_euro":
+            if gva is None or final_use is None:
+                raise ValueError(
+                    "SUT-EURO projects onto value added by industry and final "
+                    "use by category, so `gva` and `final_use` are required.")
+            gva = _np.asarray(gva, float).ravel()
+            final_use = _np.asarray(final_use, float).ravel()
+            if gva.size != n or final_use.size != k:
+                raise ValueError(
+                    f"this pair has {n} industries and {k} final-use "
+                    f"categories, and {gva.size} value-added and "
+                    f"{final_use.size} final-use targets were given. A "
+                    f"projection onto totals that do not match the table is "
+                    f"not a projection.")
+        else:
+            gva = _np.zeros(n) if gva is None else _np.asarray(gva, float).ravel()
 
         pi, ai, dropped = self._live()
         Ud0 = _np.hstack([self.U_domestic[_np.ix_(pi, ai)],
@@ -485,7 +495,7 @@ class SupplyUseTables:
                           self.Y_imported[pi]])
         tls0 = _np.concatenate([self.taxes_by_activity[ai],
                                 self.taxes_by_final_demand])
-        gva, n = gva[ai], len(ai)
+        gva, n = (gva[ai] if gva.size == len(self.activity_codes) else gva), len(ai)
 
         if method == "sut_euro":
             from .sut_euro import sut_euro
@@ -545,14 +555,63 @@ class SupplyUseTables:
                     f"in {r.iterations} iteration(s) on the chapter's own "
                     f"1 per cent rule.")
         elif method == "sut_ras":
-            raise ValueError(
-                "SUT-RAS is implemented and verified in `sut_ras.py` against "
-                "the chapter's printed iterations, and is not wired here. It "
-                "takes a DIFFERENT set of targets -- industry outputs, use "
-                "column totals and total imports-plus-taxes (¶18.86, "
-                "pp. 571–573) -- not value added and final use, so exposing it "
-                "means a second target vocabulary rather than a second name "
-                "for this one. Recorded rather than half-done.")
+            # WIRED 2026-08-26, on evidence rather than on tidiness.
+            #
+            # It stayed unreachable because it takes a different set of targets
+            # — industry outputs and use column totals, not value added and
+            # final use (¶18.86, pp. 571–573) — and a second vocabulary is a
+            # real cost. What settled it is the back-test: across the same 61
+            # Eurostat pairs, **SUT-RAS beats SUT-EURO in 61 of 61**, beats the
+            # base year left alone in 60 of 61, and beats the one-number
+            # rescale in 61 of 61. France 2021→2022: 5.5 % against SUT-EURO's
+            # 51.6 % and the base year's 15.4 %.
+            #
+            # Leaving the better method behind a raise is the "built, verified
+            # and unreachable" pattern this project has recorded four times.
+            # `sut_euro` stays the default; changing that is the owner's call
+            # and `OQ-B-16` puts the evidence in front of it.
+            from .sut_ras import blocks_from_signed, sut_ras
+            if industry_output is None or use_column_totals is None:
+                raise ValueError(
+                    "SUT-RAS projects onto INDUSTRY OUTPUTS and USE COLUMN "
+                    "TOTALS, not value added and final use, so it needs "
+                    "`industry_output` (one per industry) and "
+                    "`use_column_totals` (one per industry column and then one "
+                    "per final-use category, EXCLUDING value added — that is, "
+                    "each industry's output less its value added).\n\n"
+                    "`taxes` and `imports` are still used: their sum is the "
+                    "`MT` total the method balances imports and taxes against. "
+                    "`gva` and `final_use` are NOT used by this method and may "
+                    "be omitted.\n\n"
+                    "UNH_18 ¶18.84, p. 571 lists the inputs and leaves the "
+                    "subtraction implicit; see `sut_ras.py`.")
+            x_t = _np.asarray(industry_output, float).ravel()
+            u_t = _np.asarray(use_column_totals, float).ravel()
+            if x_t.size == len(self.activity_codes):
+                x_t = x_t[ai]
+            n_col = len(ai) + k
+            if x_t.size != len(ai) or u_t.size != n_col:
+                raise ValueError(
+                    f"this pair has {len(ai)} live industries and {n_col} use "
+                    f"columns, and {x_t.size} industry-output and {u_t.size} "
+                    f"use-column targets were given.")
+            Fm_base = _np.vstack([Um0, tls0])
+            m_base = _np.concatenate([self.imports[pi],
+                                      [float(tls0.sum())]])
+            rr = sut_ras(*blocks_from_signed(Ud0, Fm_base,
+                                             self.V[_np.ix_(pi, ai)].T),
+                         m_base, x_t, u_t, float(taxes) + float(imports),
+                         **({} if max_iter is None
+                            else {"max_iter": int(max_iter)}))
+            Ud, Um = rr.Fd, rr.Fm[:-1]
+            tls_new = rr.Fm[-1]
+            V_ip, g_new = rr.Fv, x_t
+            gva_new = g_new - (Ud[:, :len(ai)].sum(0) + Um[:, :len(ai)].sum(0)
+                               + tls_new[:len(ai)])
+            note = (f"SUT-RAS, UNH_18 ¶18.86, pp. 571–573. "
+                    f"{'Converged' if rr.converged else 'Stopped'} at "
+                    f"{rr.iterations} iteration(s) on this project's own step "
+                    f"threshold — the chapter states none (OQ-B-02).")
         else:
             raise ValueError(
                 f"method {method!r} is not one of: sut_euro, sut_ras")
