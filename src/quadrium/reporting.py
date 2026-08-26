@@ -582,28 +582,29 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "OQ-S-05 and OQ-S-06.",
                   ">",
                   "> **This spread is not a confidence interval, and it is "
-                  "not much of a floor either.** Measured on 38 splits across "
-                  "three countries where the office publishes both the parent "
-                  "and its parts: the range contains the true share for "
-                  "80.6 % of subsectors and for every subsector at once in "
-                  "**27 of 38 splits** — it misses one split in four. And "
+                  "not much of a floor either.** Measured on 65 splits across "
+                  "five country-years where the office publishes both the "
+                  "parent and its parts: the range contains the true share "
+                  "for 84.0 % of subsectors and for every subsector at once "
+                  "in **49 of 65 splits** — it misses one split in four. And "
                   "where it does contain the answer it does so across a "
                   "median **28 points of share**, which excludes almost "
                   "nothing. Honest about being uncertain; nearly silent about "
                   "where the answer is.",
                   ">",
                   "> **A narrow range is not a safer one.** The splits where "
-                  "the range misses are the WIDER ones (median 37.1 points "
+                  "the range misses are the WIDER ones (median 38.6 points "
                   "against 27.8), so there is no flag here to act on. Nor is "
                   "the verdict a property of the sector: of the 13 parents "
-                  "that appear in more than one country, the range agrees "
-                  "with itself in 7. Dropping the highest and lowest proxy "
-                  "does not rescue it — coverage falls to 58.9 % while the "
-                  "range is still 13 points wide. See `run_key_spread.py`.",
+                  "that appear in more than one country-year, the range "
+                  "agrees with itself in 7. Dropping the highest and lowest "
+                  "proxy does not rescue it — coverage falls to 59.7 % while "
+                  "the range is still 12 points wide. See "
+                  "`run_key_spread.py`.",
                   ">",
                   "> One thing the spread does NOT do is lean reliably one "
                   "way. Every available proxy sits on the same side of the "
-                  "answer for only **19.4 %** of subsectors. Spanish "
+                  "answer for only **16.0 %** of subsectors. Spanish "
                   "hospitality, where all seven of the pilot\'s keys "
                   "overstate accommodation and the range misses by 0.6 "
                   "points, is the unusual case and not the pattern — as it "
@@ -717,8 +718,10 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "Without an input profile, no allocation key can move a "
                 "subsector's multiplier — the share cancels out of the "
                 "coefficients, so every key gives the same one. Measured on "
-                "372 real published proxies, identical to the answer's own "
-                "multipliers in 372 of 372. What the band measures is "
+                "638 real published proxies, identical to the answer's own "
+                "multipliers in 636 of 638 — the two exceptions give a real "
+                "subsector a share of exactly zero, and the engine refuses "
+                "those. What the band measures is "
                 "structure, and your key cannot add to it or subtract from "
                 "it. See `validators/run_key_invariance.py`.",
                 ">",
@@ -726,9 +729,9 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "you.** A share error of a few points is not a subsector a "
                 "few percent out: the error is relative to a part that may be "
                 "small, so it is amplified by a median factor of 3.8. Real "
-                "downloadable proxies are out by a median 7.9 points of "
+                "downloadable proxies are out by a median 7.3 points of "
                 "share, which leaves the worst subsector's output out by a "
-                "median **31 %**, and only 45 of 372 put every subsector "
+                "median **32 %**, and only 77 of 638 put every subsector "
                 "within 10 % of its true size. See "
                 "`validators/run_real_key.py`.",
                 ">",

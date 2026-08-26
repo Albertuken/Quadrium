@@ -17,34 +17,36 @@ Eurostat's structural business statistics (`sbs_ovw_act`) publish ten variables
 at full NACE detail — output value, turnover, value added, persons employed,
 employees, FTE, wages, purchases, gross operating surplus, enterprises — the
 same set the Spanish pilot registered. Against the symmetric tables that publish
-both the parent and its parts, that gives **39 splits x up to 10 published
-proxies in 3 countries**, each scored against the office's own answer.
+both the parent and its parts, that gives **66 splits x up to 10 published
+proxies over five country-years**, each scored against the office's own answer.
+The five are FR 2021, BE 2022 and HU 2021, 2022 and 2023: three countries, and
+Hungary three years running, so the year axis is what widened most.
 
 HOW WRONG IS A REAL KEY
 -------------------------
 Largest error in a subsector's share, in percentage points:
 
     proxy                    n    median    worst    within 5 pp
-    value of output         37     5.2       58.1      16 of 37
-    net turnover            37     5.1       54.6      16 of 37
-    wages and salaries      37     7.1       32.8      11 of 37
-    purchases               37     7.1       43.4      16 of 37
-    value added             37     7.2       66.8      13 of 37
-    gross operating surplus 34     8.0       70.2       9 of 34
-    persons employed        38     8.4       42.1      12 of 38
-    FTE employees           38     8.6       40.3      13 of 38
-    employees               38     9.1       43.3      12 of 38
-    number of enterprises   39    11.7       50.2      10 of 39
+    value of output         64     4.8       59.8      32 of 64
+    net turnover            64     5.1       57.5      32 of 64
+    value added             63     6.5       67.5      26 of 63
+    purchases               64     6.8       43.4      26 of 64
+    wages and salaries      64     7.1       38.6      23 of 64
+    gross operating surplus 58     7.3       70.7      16 of 58
+    persons employed        65     8.0       42.1      20 of 65
+    employees               65     9.7       43.3      20 of 65
+    number of enterprises   66    15.3       50.2      13 of 66
 
-Over every proxy and split: **median 7.9 points, p90 28.8, worst 70.2.**
+Over every proxy and split: **median 7.3 points, p90 27.4, worst 70.7.**
 
 NO PROXY IS RELIABLY BEST, AND THE PILOT'S LESSON DOES NOT GENERALISE
 -----------------------------------------------------------------------
-Output value has the best median — and wins outright in **1 split of 39**. The
-per-split winner is scattered across every proxy on the list: purchases 10, GOS
-7, wages 5, enterprises 3, FTE 3, value added 3, turnover 3, employed 2,
-employees 2, output 1. Head to head, output value beats employment in **20 of
-37** — a coin flip.
+Output value has the best median — and wins outright in **7 splits of 66**,
+while the most frequent winner is purchases at 12, which is still under a third.
+The per-split winner is scattered across every proxy on the list: purchases 12,
+GOS 9, turnover 8, output 7, employees 7, wages 6, value added 6, enterprises 4,
+FTE 4, employed 3. Head to head, output value beats employment in **37 of 64** —
+a coin flip.
 
 So output has the best median because it is rarely terrible, not because it is
 usually right. Neither "use the closest conceptual match" nor `OQ-S-05`'s
@@ -53,9 +55,8 @@ inversion of it survives contact with 39 splits.
 **And Spain's hospitality is an outlier.** Its production key is 9.8 points out.
 The same key on the same sector elsewhere:
 
-                        ES     FR     BE     HU
-    production        +9.8   +3.9   +3.2   +2.3
-    employment        -2.7   -4.1   +0.6   -6.7
+                  ES 22  FR 21  BE 22  HU 21  HU 22  HU 23
+    production       +9.8   +3.9   +3.2   +0.4   +2.3   +1.6
 
 The pilot picked an unusually bad case for its chosen key, which is why the
 lesson looked so sharp.
@@ -83,9 +84,10 @@ WHAT THIS MEANS FOR A RESULT
 Roughly 5 to 8 points of key error is the realistic case, with a long tail.
 
 The multiplier is **not moved by it at all** — not approximately: running these
-same 372 keys through the engine gives multipliers identical to the ones the
-published answer gives, in 372 of 372, because the key cancels out of the
-multiplier recursion. That is an identity, and `run_key_invariance.py` proves
+same 638 keys through the engine gives multipliers identical to the ones the
+published answer gives, in 636 of 638 — and the two that differ are keys the
+engine refuses, because they give a real subsector a share of exactly zero. The
+key cancels out of the multiplier recursion wherever it is positive. That is an identity, and `run_key_invariance.py` proves
 it and checks it; this file used to assert it in prose with nothing behind it.
 The multiplier's own error, a median 7.8 %, is structural and is measured
 separately (`run_split_backtest.py`).
@@ -93,7 +95,7 @@ separately (`run_split_backtest.py`).
 What the key does move is **size**, and a point of share error costs more than
 a point of subsector. The error is relative to a part that may be small, so it
 is amplified by a median factor of 3.8: at these key errors the worst part's
-output is out by a median **31 %**, and only 45 of the 372 keys put every
+output is out by a median **32 %**, and only 77 of the 638 keys put every
 subsector within 10 % of its true size.
 
 It also supports what the report already does. Since no proxy is reliably best,
@@ -120,9 +122,18 @@ sys.path.insert(0, str(ROOT / "src"))
 
 DATA = ROOT / "data" / "eurostat"
 COARSE = "naio_10_cp1700_ES_2022.json"
+# Every country-year Eurostat publishes BOTH an 89-product symmetric table and
+# structural business statistics for. Found by sweeping all 28 countries rather
+# than by taking what happened to be on disk: `run_source_pairs.py` records the
+# sweep, the calibration that identifies a fine table from a small probe, and
+# the three country-years that pass the probe and are still refused by the
+# loader on their own data. Hungary appears three times, so this is five
+# country-years across THREE countries -- the year axis is what widened most.
 CASES = (("FR", 2021, "naio_10_cp1700_FR_2021.json"),
          ("BE", 2022, "naio_10_cp1700_BE_2022.json"),
-         ("HU", 2022, "naio_10_cp1700_HU_2022.json"))
+         ("HU", 2021, "naio_10_cp1700_HU_2021.json"),
+         ("HU", 2022, "naio_10_cp1700_HU_2022.json"),
+         ("HU", 2023, "naio_10_cp1700_HU_2023.json"))
 PROXIES = (("VAL_OUT_MEUR", "value of output"), ("NETTUR_MEUR", "net turnover"),
            ("WAGE_MEUR", "wages and salaries"), ("PUR_MEUR", "purchases"),
            ("AV_MEUR", "value added"), ("GOS_MEUR", "gross operating surplus"),
@@ -196,12 +207,17 @@ def main() -> int:
                 if v.sum() <= 0 or (v < 0).any():
                     continue
                 share = v / v.sum()
-                rows.append(dict(geo=geo, parent=parent, proxy=code,
+                rows.append(dict(geo=geo, year=year,
+                                 parent=parent, proxy=code,
                                  label=label,
                                  err=float(np.abs(share - truth).max() * 100),
                                  signed=float((share - truth)[0] * 100)))
 
-    splits = {(r["geo"], r["parent"]) for r in rows}
+    # (geo, year, parent), NOT (geo, parent): Hungary publishes 2021, 2022
+    # and 2023, and keying on the country alone folded three separate
+    # splits into one -- undercounting them and, worse, merging three
+    # independent winners into a single group in the tally below.
+    splits = {(r["geo"], r["year"], r["parent"]) for r in rows}
     check("and enough of them to say anything",
           len(splits) >= 25 and len(rows) >= 200,
           f"{len(splits)} splits x up to {len(PROXIES)} published proxies = "
@@ -229,25 +245,31 @@ def main() -> int:
     print()
     wins = collections.Counter()
     for _, grp in itertools.groupby(
-            sorted(rows, key=lambda r: (r["geo"], r["parent"])),
-            key=lambda r: (r["geo"], r["parent"])):
+            sorted(rows, key=lambda r: (r["geo"], r["year"], r["parent"])),
+            key=lambda r: (r["geo"], r["year"], r["parent"])):
         g = list(grp)
         wins[min(g, key=lambda r: r["err"])["label"]] += 1
     print("    proxy that wins each split:")
     for lbl, c in wins.most_common():
         print(f"      {lbl:<28}{c:>3}")
 
+    # Stated as the claim, not as the count it happened to have at 39 splits:
+    # the proxy with the best median is NOT the one that wins most often, and
+    # no proxy wins often enough to be picked in advance.
     best_med = min(med, key=med.get)
-    check("the best median proxy almost never wins a split outright",
-          wins[best_med] <= 3 and len(wins) >= 6,
+    top = wins.most_common(1)[0]
+    check("the best median proxy is not the one that wins most often",
+          wins[best_med] < top[1] and top[1] < sum(wins.values()) * 0.3
+          and len(wins) >= 6,
           f"'{best_med}' has the best median at {med[best_med]:.1f} pp and wins "
-          f"{wins[best_med]} of {sum(wins.values())} splits outright — best on "
-          f"median because it is rarely terrible, not because it is usually "
-          f"right. The winner is scattered over {len(wins)} different proxies")
+          f"{wins[best_med]} of {sum(wins.values())} splits outright, while "
+          f"'{top[0]}' wins most at {top[1]} — and even that is under a third. "
+          f"Best on median means rarely terrible, not usually right. The "
+          f"winner is scattered over {len(wins)} different proxies")
 
-    out = {(r["geo"], r["parent"]): r["err"]
+    out = {(r["geo"], r["year"], r["parent"]): r["err"]
            for r in rows if r["proxy"] == "VAL_OUT_MEUR"}
-    emp = {(r["geo"], r["parent"]): r["err"]
+    emp = {(r["geo"], r["year"], r["parent"]): r["err"]
            for r in rows if r["proxy"] == "EMP_NR"}
     both = [(out[k], emp[k]) for k in out if k in emp]
     w = sum(1 for a, b in both if a < b)
@@ -255,11 +277,11 @@ def main() -> int:
           0.4 < w / len(both) < 0.7,
           f"output value beats employment in {w} of {len(both)}. Neither 'use "
           f"the closest conceptual match' nor OQ-S-05's inversion of it "
-          f"survives 39 splits")
+          f"survives {len(splits)} splits")
 
     # the Spanish case, and whether its sign generalises
     print()
-    ho = {r["geo"]: r["signed"] for r in rows
+    ho = {f'{r["geo"]} {r["year"]}': r["signed"] for r in rows
           if r["parent"] == "I" and r["proxy"] == "VAL_OUT_MEUR"}
     if ho:
         print("    hospitality, production key, signed error on accommodation:")

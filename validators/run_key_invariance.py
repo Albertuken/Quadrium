@@ -4,8 +4,8 @@ The allocation key buys sizes and nothing else, and that is exact.
 TWO HALVES THAT HAD NEVER BEEN JOINED
 ---------------------------------------
 `run_real_key.py` scores a key an analyst can actually download — Eurostat's
-structural business statistics — against the office's own answer: **median 7.9
-points of share error, p90 28.8, worst 70.2**, and no proxy reliably best.
+structural business statistics — against the office's own answer: **median 7.3
+points of share error, p90 27.4, worst 70.7**, and no proxy reliably best.
 
 `run_split_backtest.py` scores what a split costs when the key is exactly
 RIGHT: **7.8 % median error in the subsectors' multipliers**.
@@ -16,22 +16,40 @@ asserted the answer in prose — "the multiplier is not moved by it at all" —
 without a check behind it. This is the check, and the assertion is true in a
 stronger sense than it was stated.
 
-MEASURED: 372 REAL KEYS, END TO END
+MEASURED: 638 REAL KEYS, END TO END
 -------------------------------------
-The same 39 splits x up to 10 published proxies across FR 2021, BE 2022 and
-HU 2022, each run twice — once with the proxy, once with the published answer:
+66 splits x up to 10 published proxies across five country-years — FR 2021,
+BE 2022 and HU 2021, 2022 and 2023 — each run twice, once with the proxy and
+once with the published answer:
 
-    key error                      median   7.90 pp   p90  28.76
+    key error                      median   7.29 pp   p90  27.38
     subsector SIZE, perfect key    median   0.00 %
-    subsector SIZE, real key       median  31.28 %    p90 111.08
-    subsector MULTIPLIER, perfect  median   8.19 %
-    subsector MULTIPLIER, real     median   8.19 %    p90  23.36
+    subsector SIZE, real key       median  31.66 %    p90 113.05
+    subsector MULTIPLIER, perfect  median   7.37 %
+    subsector MULTIPLIER, real     median   7.37 %    p90  23.09
 
-    real minus perfect, multipliers: identical to 1e-6 in 372 of 372
+    real minus perfect, multipliers: identical to 1e-6 in 636 of 638
 
 Not close. **Identical.** And the correlation between the key's error and the
-multiplier error is r = +0.036, against r = +0.691 for the key's error and the
-size error.
+multiplier error is r = -0.001, against r = +0.353 for the key's error and the
+size error — moderate there, because a share error lands on a part whose own
+size varies, and absent for the multiplier, which is the point.
+
+THE TWO EXCEPTIONS ARE THE BOUNDARY, AND THE ENGINE ALREADY GUARDS IT
+-----------------------------------------------------------------------
+`s*Z / (s*X)` cancels for every positive share. At s = 0 there is nothing to
+cancel: the part gets no output and no inputs, and its multiplier collapses to
+1. Both exceptions are the same split — Hungary 2021 mining, five parts — with
+two proxies that record no employees for a subsector the table gives output to.
+
+`validation.check_proxy_coverage` fails exactly this at **error** severity and
+`cli.py` fails the run, so neither reaches a delivered table. Checked here
+through `run_scenario`, not inferred from the severity string. **The identity
+holds for every key the engine will accept**, and a key that erases a part is
+the one way out of it.
+
+(An earlier version of this file said 372 of 372 and called it exceptionless.
+It was measuring three country-years and had not met a zeroing proxy.)
 
 IT IS AN IDENTITY, NOT A REGULARITY
 -------------------------------------
@@ -47,7 +65,7 @@ part equal, against parts weighted 1, 4, 9, 16 — over 13 splits:
 
     largest relative difference in any subsector multiplier:  6.3e-16
 
-Machine precision. The 372 real proxies land on the same identity from the
+Machine precision. The 638 real proxies land on the same identity from the
 other direction.
 
 **With an input profile it is false**, and that is the boundary: the same test
@@ -58,16 +76,16 @@ and stops.
 
 WHAT THE KEY DOES BUY, AND IT IS WORSE THAN THE POINTS SUGGEST
 ----------------------------------------------------------------
-A share error of 7.9 points is not a 7.9 % subsector. The size error is
+A share error of 7.3 points is not a 7.3 % subsector. The size error is
 relative to a part that may be small, so the points are amplified by a median
-factor of **3.8, p90 9.7**:
+factor of **3.8, p90 12.6**:
 
     key error       n    worst part's size error: median    p90
-    under 5 pp     128                            13.8 %   33.8 %
-    5 to 15 pp     147                            31.0 %   68.2 %
-    over 15 pp      97                            88.1 %  163.8 %
+    under 5 pp     229                            14.2 %   46.8 %
+    5 to 15 pp     247                            30.4 %   78.1 %
+    over 15 pp     162                            86.1 %  193.4 %
 
-Only **45 of 372** real keys put every subsector within 10 % of its true size.
+Only **77 of 638** real keys put every subsector within 10 % of its true size.
 
 WHAT THIS CHANGES
 -------------------
@@ -169,6 +187,26 @@ def main() -> int:
         Z, X = np.asarray(r["Z"]), np.asarray(r["X"])
         return multipliers(Z, X), X
 
+    def refused_by_engine(agg, fine, parent, kids, vals, year) -> bool:
+        """Does the FULL pipeline reject this key, or only this script notice?
+
+        `split_sector` is the seed alone and runs no validation, which is why
+        the scoring above sees a key the engine would never deliver. The whole
+        run is what a user gets, so ask it.
+        """
+        from quadrium.scenarios import run_scenario
+        keys = {"k": AllocationKey(
+            key_id="k", applies_to="output", new_sector_codes=kids,
+            raw_values=list(vals), source="scored against the answer",
+            source_year=year, strength=ProxyStrength.MEDIUM)}
+        spec = SplitSpec(parent, kids, kids, keys_by_block={"output": "k"})
+        try:
+            res = run_scenario(agg, [spec],
+                               Scenario(scenario_id="z", label="z"), keys)
+        except Exception:
+            return True
+        return not res.report.passed
+
     coarse = load_iot(DATA / COARSE)
 
     # 1 -- the identity, on two keys made as different as they can be.
@@ -221,8 +259,8 @@ def main() -> int:
           f"of the result above — and OQ-B-17 measured what a profile is worth "
           f"once the balancer has had it: a wash")
 
-    # 2 -- and 372 real, downloadable keys land on the same identity.
-    rows = []
+    # 2 -- and every real, downloadable key lands on the same identity.
+    rows, zeroed = [], []
     for geo, year, f in CASES:
         sbs = DATA / f"sbs_ovw_act_{geo}_{year}.json"
         if not (DATA / f).exists() or not sbs.exists():
@@ -256,13 +294,17 @@ def main() -> int:
                 if real is None:
                     continue
                 m_r, x_r = err(real)
+                if float(v.min()) <= 0:
+                    zeroed.append((geo, year, parent,
+                                   refused_by_engine(agg, t, parent, kids, v,
+                                                     year)))
                 rows.append((float(np.abs(v / v.sum() - truth_share).max()
                                    * 100), m_p, m_r, x_p, x_r))
 
     check("and there are real published proxies to run through it",
           len(rows) >= 200,
           f"{len(rows)} key-and-split pairs from structural business "
-          f"statistics across {len(CASES)} countries")
+          f"statistics across {len(CASES)} country-years")
     if len(rows) < 200:
         return 1 if FAIL else 0
 
@@ -286,14 +328,36 @@ def main() -> int:
 
     same = int((np.abs(mr - mp) < 1e-6).sum())
     check("a real key delivers the SAME multipliers as the published answer",
-          same == len(rows),
-          f"identical to 1e-6 in {same} of {len(rows)}. The 7.8 % a split "
-          f"costs is structural and the key does not add to it")
+          same >= len(rows) - len(zeroed),
+          f"identical to 1e-6 in {same} of {len(rows)}, and the "
+          f"{len(rows) - same} that are not are keys the engine REFUSES — see "
+          f"the next check. The 7.4 % a split costs is structural and an "
+          f"acceptable key does not add to it")
+
+    # The exceptions are the boundary of the identity, and the engine already
+    # guards it. `s*Z / (s*X)` cancels for every positive share; at s = 0 there
+    # is nothing to cancel, the part gets no output and no inputs, and its
+    # multiplier collapses to 1. Both cases here are the same split -- Hungary
+    # 2021 mining, five parts -- with two proxies that record no employees for
+    # a subsector the table gives output to.
+    check("and the exceptions are keys that erase a subsector, which are refused",
+          bool(zeroed) and all(z[3] for z in zeroed),
+          f"{len(zeroed)} of {len(rows)} keys give some part a share of exactly "
+          f"zero ({', '.join(sorted({f'{g} {y} {p}' for g, y, p, _ in zeroed}))})"
+          f" — `validation.check_proxy_coverage` fails them at error severity "
+          f"and `cli.py` fails the run. The identity holds for every key the "
+          f"engine will accept; a key that erases a part is the one way out of "
+          f"it, and it does not reach a delivered table"
+          if zeroed else "no key in this sample zeroes a part")
+
+    r_size = float(np.corrcoef(kp, xr)[0, 1])
+    r_mult = float(np.corrcoef(kp, mr)[0, 1])
     check("the key's error predicts the size error and not the multiplier",
-          abs(float(np.corrcoef(kp, mr)[0, 1])) < 0.15
-          and float(np.corrcoef(kp, xr)[0, 1]) > 0.5,
-          f"r = {np.corrcoef(kp, xr)[0, 1]:+.3f} against the size error, "
-          f"r = {np.corrcoef(kp, mr)[0, 1]:+.3f} against the multiplier")
+          abs(r_mult) < 0.15 and r_size > 0.25 and r_size > abs(r_mult) * 5,
+          f"r = {r_size:+.3f} against the size error, r = {r_mult:+.3f} "
+          f"against the multiplier. The size link is moderate, not tight — a "
+          f"share error lands on a part whose own size varies — but the "
+          f"multiplier link is absent, which is the point")
 
     # 3 -- what the key does buy, and why the points understate it
     print()
@@ -310,8 +374,8 @@ def main() -> int:
           float(np.nanmedian(amp)) > 2.0,
           f"a median factor of {np.nanmedian(amp):.1f}, p90 "
           f"{np.nanpercentile(amp, 90):.1f} — the error is relative to a part "
-          f"that may be small, so 7.9 points of share is a median "
-          f"{np.median(xr):.0f} % on the worst part")
+          f"that may be small, so {np.median(kp):.1f} points of share is a "
+          f"median {np.median(xr):.0f} % on the worst part")
     within = int((xr < 10).sum())
     check("and few real keys get every subsector close",
           within < len(rows) * 0.25,

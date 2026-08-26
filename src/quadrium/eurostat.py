@@ -137,8 +137,16 @@ def fetch(dataset: str, geo: str, year: int, dest: Path | str,
     in 2018 or 2019.
     """
     code = DATASETS.get(dataset, dataset)
-    url = (API.format(dataset=code)
-           + f"&geo={geo}&time={int(year)}&unit={unit}")
+    # NOT EVERY DATASET HAS A `unit` DIMENSION, and naming one that does not
+    # exist is an HTTP 400. `sbs_ovw_act` carries its units inside `indic_sbs`
+    # -- MEUR and NR in the same cube -- so it has no `unit` axis at all, and
+    # this function could not fetch it. The three files already in
+    # `data/eurostat/` were downloaded outside this module, which is how the
+    # gap went unnoticed: the provenance sidecars record a URL this code
+    # cannot produce. Pass `unit=None` for such a dataset.
+    url = API.format(dataset=code) + f"&geo={geo}&time={int(year)}"
+    if unit:
+        url += f"&unit={unit}"
     if stk_flow:
         url += f"&stk_flow={stk_flow}"
     # Any other dimension the dataset happens to have. The SUT tables need

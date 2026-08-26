@@ -622,22 +622,23 @@ level of error, not whether borrowing will reduce it. So source a real profile i
 you can, and treat a borrowed one as a scenario to compare rather than an
 improvement.
 
-**Which proxy should the key come from?** Measured on 39 splits in three
-countries against the office's own answer, using the ten variables Eurostat's
-structural business statistics publish: **no proxy is reliably best.** Turnover
-and value of output have the best medians (5.1 and 5.2 points of error in a
-subsector's share) but win a split outright 3 and 1 times out of 39; the winner
-is scattered across all ten. Output value beats employment head to head in 20 of
-37, a coin flip.
+**Which proxy should the key come from?** Measured on 66 splits over five
+country-years against the office's own answer, using the ten variables
+Eurostat's structural business statistics publish: **no proxy is reliably
+best.** Value of output and turnover have the best medians (4.8 and 5.1 points
+of error in a subsector's share) but win a split outright 7 and 8 times out of
+66, and the most frequent winner — purchases, at 12 — is still under a third.
+The winner is scattered across all ten. Output value beats employment head to
+head in 37 of 64, a coin flip.
 
-Expect **5 to 8 points** of error from a real key, with a long tail — p90 is 29
-points and the worst case here was 70. Pick for the conceptual match, register
+Expect **5 to 8 points** of error from a real key, with a long tail — p90 is 27
+points and the worst case here was 71. Pick for the conceptual match, register
 the others, and read the spread: since no proxy is reliably best, that spread is
 the honest thing to look at.
 
-Read it knowing what it is. Over 38 splits with the answer published beside
+Read it knowing what it is. Over 65 splits with the answer published beside
 them, the range across the proxies contains the true share for every subsector
-at once in **27 of 38 splits** — it misses one in four — and where it does
+at once in **49 of 65 splits** — it misses one in four — and where it does
 contain the answer it spans a median **28 points of share**. It is honest about
 being uncertain and says almost nothing about where the answer is. A narrow
 range is not a safer one: the splits where it misses are the wider ones. Treat

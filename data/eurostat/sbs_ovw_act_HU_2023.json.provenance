@@ -1,0 +1,11 @@
+{
+  "dataset": "sbs_ovw_act",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/sbs_ovw_act?format=JSON&lang=EN&geo=HU&time=2023",
+  "geo": "HU",
+  "year": 2023,
+  "bytes": 589241,
+  "sha256": "98e66d0ab2c251f6b9d835588592feecd39a117e6c2de6186462161d96b60e9a",
+  "retrieved_at": "2026-08-26T20:29:21.848982+00:00",
+  "n_values": 36899,
+  "why": "structural business statistics at full NACE detail \u2014 the published proxies an analyst would actually use as an allocation key, for a year and country whose 89-product symmetric table publishes the answer"
+}

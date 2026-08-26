@@ -1,0 +1,11 @@
+{
+  "dataset": "naio_10_cp1700",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/naio_10_cp1700?format=JSON&lang=EN&geo=HU&time=2023&unit=MIO_EUR",
+  "geo": "HU",
+  "year": 2023,
+  "bytes": 516378,
+  "sha256": "dfc962b0eb81a1f4c25163297fd205a0bcdd8abee4de754af2078a00051ab107",
+  "retrieved_at": "2026-08-26T20:29:21.375602+00:00",
+  "n_values": 40390,
+  "why": "a symmetric product-by-product table at 89 products for a year the same country publishes structural business statistics for \u2014 the pairing that lets a real allocation key be scored against the office's own answer (run_real_key.py, run_key_spread.py)"
+}

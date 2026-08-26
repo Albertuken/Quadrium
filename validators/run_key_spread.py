@@ -15,13 +15,14 @@ keys overstate accommodation in the first year and the range misses the truth
 by 0.6 points. That file says so itself: "Two observations are not a
 calibration and none is proposed here."
 
-There are now 38 splits across three countries where the office publishes both
-the parent and its parts AND structural business statistics publish up to ten
-proxies for the same year. That is 93 subsectors with an answer next to them.
+There are now 65 splits across five country-years where the office publishes
+both the parent and its parts AND structural business statistics publish up to
+ten proxies for the same year — FR 2021, BE 2022 and HU 2021, 2022 and 2023.
+That is 162 subsectors with an answer next to them.
 
 THE COMMON LEAN IS THE EXCEPTION, NOT THE RULE
 ------------------------------------------------
-    every available proxy on the same side of the answer   19.4 % of subsectors
+    every available proxy on the same side of the answer   16.0 % of subsectors
 
 So "keys drawn from one survey tend to err the same way" is false as a general
 statement. Spanish hospitality is again the unusual case — as `run_real_key.py`
@@ -30,8 +31,8 @@ already found for the SIZE of its error, where 9.8 points sat against 2.3 to
 
 THE CONCLUSION SURVIVES ANYWAY, FOR A DIFFERENT REASON
 --------------------------------------------------------
-    the range contains the truth        80.6 % of subsectors
-    it contains every subsector at once 71.1 % of splits  (27 of 38)
+    the range contains the truth        84.0 % of subsectors
+    it contains every subsector at once 75.4 % of splits  (49 of 65)
     width of the range                  median 28.1 points
 
 It misses one split in four. And when it does contain the answer, it does so
@@ -44,23 +45,24 @@ AND THE WIDTH DOES NOT WARN YOU
 The obvious rescue — trust a narrow range, distrust a wide one — is backwards:
 
     splits where the range CONTAINS the truth   median width 27.8 points
-    splits where it MISSES                                   37.1
+    splits where it MISSES                                   38.6
 
 The misses are the WIDER ones, so a wide range is not a flag you can act on;
 it is simply a worse range. Nor is the verdict a property of the sector: of the
-13 parents that appear in more than one country, the range agrees with itself
-in only 7.
+13 parents that appear in more than one country-year, the range agrees with
+itself in only 7 — and three of the five country-years are Hungary in
+consecutive years, so that is as much about years as about countries.
 
 TRIMMING THE EXTREMES DOES NOT RESCUE IT EITHER
 -------------------------------------------------
 If width is the problem, drop the highest and lowest proxy and re-measure. On
-the 90 subsectors with at least five proxies:
+the 159 subsectors with at least five proxies:
 
-    full range           coverage 82.2 %   median width 19.8 points
-    extremes dropped              58.9 %                13.1
+    full range           coverage 84.9 %   median width 20.5 points
+    extremes dropped              59.7 %                12.2
 
-It ends up missing 41 % of subsectors and is still 13 points wide — short of
-being narrow and short of being right. Trading 23 points of coverage for 6.7
+It ends up missing 40 % of subsectors and is still 12 points wide — short of
+being narrow and short of being right. Trading 25 points of coverage for 8.3
 points of width does not cross the line between "wide and honest" and "narrow
 and correct"; it lands outside both. No trimmed interval is proposed, and the
 negative result is recorded here rather than left as an untried idea.
@@ -207,9 +209,12 @@ def main() -> int:
     agree = sum(1 for p in multi if len(by[p]) == 1)
     check("nor is the verdict a property of the sector",
           len(multi) >= 5 and agree < len(multi),
-          f"of the {len(multi)} parents that appear in more than one country, "
-          f"the range agrees with itself in {agree}. Whether it covers the "
-          f"answer is not something the sector tells you")
+          f"of the {len(multi)} parents that appear in more than one "
+          f"country-year, the range agrees with itself in {agree}. Whether it "
+          f"covers the answer is not something the sector tells you — and "
+          f"three of the five country-years are the same country in "
+          f"consecutive years, so this is a statement about years as much as "
+          f"about countries")
     _ = repeated
 
     # 4 -- trimming the extremes: the obvious rescue, measured and refused.

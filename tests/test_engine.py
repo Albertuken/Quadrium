@@ -1588,10 +1588,13 @@ def test_the_allocation_key_cannot_move_a_multiplier():
     and cancel again. So no key can reach a multiplier.
 
     This is an identity and the project had been relying on it in prose since
-    `run_real_key.py` was written, with nothing checking it. Measured on 372
-    real proxies it holds in 372 of 372 (`run_key_invariance.py`); here it is
-    checked against two keys chosen to be as far apart as they can be, so a
-    dependence would have nowhere to hide.
+    `run_real_key.py` was written, with nothing checking it. Measured on 638
+    real proxies it holds in 636 of 638 (`run_key_invariance.py`), and the two
+    exceptions are keys that give a real subsector a share of exactly ZERO —
+    where there is no share to cancel — which `check_proxy_coverage` fails at
+    error severity so they never reach a delivered table. Here it is checked
+    against two keys chosen to be as far apart as they can be while both stay
+    positive, so a dependence would have nowhere to hide.
 
     The second half is the boundary: an input profile IS able to move them,
     which is what makes `OQ-B-17` a question about profiles and not about keys.

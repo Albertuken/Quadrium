@@ -1,0 +1,11 @@
+{
+  "dataset": "sbs_ovw_act",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/sbs_ovw_act?format=JSON&lang=EN&geo=FR&time=2022",
+  "geo": "FR",
+  "year": 2022,
+  "bytes": 655689,
+  "sha256": "8c92be04cc31acfd838a3dda8dab75c994e66965307cf02cfe3b1e540ef68ee4",
+  "retrieved_at": "2026-08-26T20:29:16.800142+00:00",
+  "n_values": 35264,
+  "why": "downloaded as one half of a pair whose other half the loader refuses: naio_10_cp1700_FR_2022 passes the 89-product probe and then fails on its own data (no exports block). Kept as the record of what was tried, not because anything reads it \u2014 run_source_pairs.py cites the refusal."
+}
