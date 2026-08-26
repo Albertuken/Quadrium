@@ -342,7 +342,27 @@ def scenario_section(res: DisaggregationResult) -> str:
                           f"structure, so any difference in their multipliers "
                           f"is an artefact of the internal block, not a "
                           f"finding. Supply `input_profiles` to give them "
-                          f"genuinely different purchasing patterns."]
+                          f"genuinely different purchasing patterns.",
+                      "",
+                      "> **What a profile is worth, measured.** On 54 splits "
+                      "where the office publishes both the parent and its "
+                      "parts, giving the engine the parts' TRUE input profile "
+                      "moves the subsectors' multiplier error from a median "
+                      "**9.0 % to 3.4 %**, and it helps in 44 of the 54. Not "
+                      "to zero: a profile shapes the off-block column only, so "
+                      "final demand, value added and the internal block keep "
+                      "the flat key and about a third of the error is out of "
+                      "its reach.",
+                      ">",
+                      "> **Borrowing one from a country that publishes your "
+                      "split is a coin flip** — 162 borrowings, better in 78 "
+                      "and worse in 84, helping by a median 4.2 points and "
+                      "hurting by 3.1. It helps where the split was going "
+                      "badly anyway and hurts where it was fine (r = +0.42 "
+                      "against the baseline error), which is only knowable "
+                      "afterwards; the ex-ante screen does not predict it "
+                      "(r = +0.12). See "
+                      "`validators/run_input_profiles_backtest.py`."]
         # "THE WEAKEST ASSUMPTION IN THE RESULT" WAS HALF RIGHT AND SAID
         # WRONG. Measured on 68 real splits where the office publishes both
         # the parent and its parts: the estimated block misses the published

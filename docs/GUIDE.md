@@ -595,6 +595,22 @@ within 10 % and a multiplier you believe exactly as much as the parent
 sector's. The report prints what 1 % of key error costs, per subsector, in your
 table's own units. It is arithmetic, not a simulation.
 
+**Are input profiles worth the trouble?** A profile is how you tell the engine
+that your subsectors buy different things; without one they inherit the parent's
+purchasing pattern. Measured on 54 splits against the office's own answer:
+supplying the parts' **true** profile moves the multiplier error from a median
+9.0 % to **3.4 %**, and helps in 44 of the 54. It does not reach zero because a
+profile shapes the off-block column only — final demand, value added and the
+internal block keep the flat key, so about a third of the error is beyond it.
+
+**Borrowing a profile from a country that publishes your split is a coin flip**:
+better in 78 of 162 borrowings and worse in 84. It helps where the split was
+going badly anyway and hurts where it was already fine, and there is no test you
+can run beforehand to know which you are in — the risk screen above predicts the
+level of error, not whether borrowing will reduce it. So source a real profile if
+you can, and treat a borrowed one as a scenario to compare rather than an
+improvement.
+
 **Which proxy should the key come from?** Measured on 39 splits in three
 countries against the office's own answer, using the ten variables Eurostat's
 structural business statistics publish: **no proxy is reliably best.** Turnover
