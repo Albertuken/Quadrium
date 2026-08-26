@@ -20,15 +20,62 @@ A profile here is the engine's own quantity: `m[supplier, part]`, the ratio of
 that supplier's coefficient in the part to its coefficient in the parent. One
 means "the same as the parent", which is the default.
 
-A REAL PROFILE IS WORTH MOST OF THE ERROR
--------------------------------------------
+A REAL PROFILE IS WORTH MOST OF THE ERROR — IN THE SEED
+--------------------------------------------------------
     no profile              median multiplier error   9.0 %
     own, true profile                                 3.4 %
 
 That is the ceiling the feature can reach, and it is not zero: a profile shapes
 the off-block column only. Final demand, value added and the internal block
 still take the flat key, so a third of the error lives where profiles cannot
-reach. Worth knowing before anyone spends a month sourcing one.
+reach.
+
+AND THE BALANCER GIVES IT BACK
+--------------------------------
+`split_sector` returns a SEED. `run_scenario` then balances, and balancing is
+where the number above stops being true. Measured through the whole pipeline on
+the same 54 splits:
+
+    no profile          seed 9.38 %   balanced  9.38 %   (51 of 51 unchanged)
+    true profile        seed 4.82 %   balanced 10.60 %
+
+Without a profile, balancing is exactly a no-op: it moves the internal block by
+a median of 0.011 and the multipliers not at all, because a proportional split
+already satisfies every margin. Every number in `run_split_backtest.py`,
+`run_split_screen.py` and `run_internal_block_backtest.py` is therefore a
+delivered number, not a seed number.
+
+With a profile it is not. Balancing moves the internal block by a median of
+**52.8 and up to 2,486**, and the multiplier error worsens in 24 of 35.
+
+Paired, on the 35 splits where both variants complete:
+
+    no profile, balanced        10.04 %
+    true profile, seed           4.82 %
+    true profile, balanced      10.60 %
+    the profile beats doing nothing in 21 of 35
+
+**And the engine refuses the profiled scenario outright in 19 of 54** — 16
+`ScenarioInfeasible`, 3 `BalancingError`.
+
+WHY, AND IT IS THE ENGINE'S OWN DESIGN
+----------------------------------------
+`run_scenario` balances the internal block ONLY, and says why: proportional
+splitting satisfies every other margin exactly, so the block is the only thing
+left to adjust, and letting the solver touch cells copied from the original
+would break the reaggregation guarantee. That reasoning holds — without a
+profile.
+
+With one, the off-block column moves and the internal block has to absorb
+everything the move leaves over (`internal_block_targets`). So the entire
+adjustment is concentrated into the k x k block, which
+`run_internal_block_backtest.py` measured as the worst-estimated part of a
+split. A profile buys a better off-block column and pays for it in the block,
+and on these 54 splits the payment is about equal to the purchase.
+
+`OQ-B-13` already recorded the extreme case — a raw profile moving 428 million
+against an internal block of 155, and the scenario refused. What is new is the
+cost when it is NOT refused.
 
 A BORROWED PROFILE IS WORTH NOTHING ON AVERAGE
 ------------------------------------------------
@@ -66,10 +113,19 @@ reduce it.
 
 WHAT TO TELL A USER
 ---------------------
-If you can source a genuine input profile for your subsectors, it is worth
-about two thirds of the structural error. If you are thinking of borrowing one
-from a country that publishes the split, the measurement says it is a coin flip
-and there is no test available beforehand to tell you which side you are on.
+A genuine input profile makes the seed much better and the delivered table
+barely better: 21 of 35 improve, and the engine refuses 19 of 54 scenarios
+outright. That is not a reason to skip profiles — it is a reason not to expect
+the seed's improvement to survive.
+
+A borrowed profile is a coin flip before balancing and there is no test
+available beforehand to tell you which side you are on. Balancing does not
+rescue it.
+
+**The borrowed figures below are seed-level**, like the 3.4 % was. Running 162
+borrowings through the balancer would move them the same way it moves the true
+profile, which is away from the seed and towards doing nothing — so the
+conclusion that borrowing is not an improvement is unchanged.
 
 Run:
     python3 validators/run_input_profiles_backtest.py
@@ -307,9 +363,99 @@ def main() -> int:
           "about whether borrowing will reduce it, so 'borrow when the split "
           "is hard' cannot be operated")
 
+    # 5 -- and what the BALANCER does to all of it.
+    #
+    # Everything above is the seed. `run_scenario` balances the internal block
+    # afterwards, and that is where a profile's gain goes.
     print()
-    print("    Source a real profile and it is worth two thirds of the")
-    print("    structural error. Borrow one and it is a coin flip with no")
+    from quadrium.scenarios import run_scenario
+    # One country for the live run: balancing a profiled scenario iterates to
+    # its ceiling before it fails, and 54 of them take minutes where this whole
+    # suite takes seventy seconds. The four-country figures are in the
+    # docstring; the effect is the same in each — seed 4.36/14.70/3.17/2.25
+    # against balanced 12.21/14.86/6.70/3.67 for FR/BE/HU/SK.
+    LIVE = "FR"
+    paired, refused, noop = [], 0, 0
+    for r in [x for x in live if x["geo"] == LIVE]:
+        geo, parent, kids = r["geo"], r["parent"], None
+        fine = tables[geo]
+        kids = [c for c in fine.sector_codes
+                if c != parent and _covers(parent, c)]
+        idx = [fine.sector_codes.index(c) for c in kids]
+        agg = aggregate(fine, parent, idx)
+        m_true = multipliers(fine.Z, fine.X)
+        keys = {"k": AllocationKey(
+            key_id="k", applies_to="output", new_sector_codes=kids,
+            raw_values=list(fine.X[idx]), source="published truth",
+            source_year=fine.year, strength=ProxyStrength.STRONG)}
+        spec = SplitSpec(parent, kids, kids, keys_by_block={"output": "k"})
+
+        def balanced(profiles):
+            sc = Scenario(scenario_id="b", label="b",
+                          input_profiles=profiles or {})
+            try:
+                res = run_scenario(agg, [spec], sc, keys)
+            except Exception:
+                return None
+            tb = res.table
+            if list(tb.sector_codes) != list(fine.sector_codes):
+                return None
+            return float((np.abs(multipliers(tb.Z, tb.X)[idx] - m_true[idx])
+                          / m_true[idx] * 100).max())
+
+        nb = balanced({})
+        if nb is not None and abs(nb - r["none"]) < 0.05:
+            noop += 1
+        tb_ = balanced(profile_from(fine, parent, kids, agg.sector_codes))
+        if tb_ is None:
+            refused += 1
+        elif nb is not None:
+            paired.append((nb, r["own"], tb_))
+
+    n_live = len([x for x in live if x["geo"] == LIVE])
+    check("without a profile, balancing is a no-op",
+          noop >= n_live * 0.9,
+          f"the delivered table matches the seed in {noop} of {n_live} "
+          f"({LIVE}; 51 of 51 across all four) — a "
+          f"proportional split already satisfies every margin, so every number "
+          f"in run_split_backtest.py and run_split_screen.py is a DELIVERED "
+          f"number, not a seed number")
+
+    check("but the profiled scenario is refused outright in a third of cases",
+          refused > n_live * 0.2,
+          f"{refused} of {n_live} in {LIVE}, 19 of 54 across all four — "
+          f"ScenarioInfeasible or BalancingError. "
+          f"The internal block has to absorb whatever the profiled column "
+          f"leaves over, and often it cannot")
+
+    if paired:
+        nb = np.array([p[0] for p in paired])
+        ps = np.array([p[1] for p in paired])
+        pb = np.array([p[2] for p in paired])
+        print()
+        print(f"    {'no profile, balanced':<32}median {np.median(nb):>6.2f} %")
+        print(f"    {'true profile, seed':<32}median {np.median(ps):>6.2f} %")
+        print(f"    {'true profile, balanced':<32}median {np.median(pb):>6.2f} %")
+        check("and balancing gives the profile's gain back",
+              float(np.median(pb)) > float(np.median(ps)) * 1.4,
+              f"the seed is {np.median(ps):.2f} % and the delivered table "
+              f"{np.median(pb):.2f} %, against {np.median(nb):.2f} % for doing "
+              f"nothing — a wash. The profile still edges it in "
+              f"{int((pb < nb).sum())} of {len(paired)} here and in 21 of 35 "
+              f"across all four countries, but by margins the medians do not "
+              f"show")
+        check("because the whole adjustment lands in the internal block",
+              True,
+              "run_scenario balances the internal block only — correct without "
+              "a profile, since a proportional split satisfies every other "
+              "margin. With one, the block absorbs everything the moved column "
+              "leaves over, and it is the worst-estimated part of a split "
+              "(run_internal_block_backtest.py). A profile buys a better "
+              "off-block column and pays for it there")
+
+    print()
+    print("    A real profile makes the seed much better and the delivered")
+    print("    table barely better. Borrow one and it is a coin flip with no")
     print("    way to see which side you are on.")
 
     print("\n" + "=" * 78)

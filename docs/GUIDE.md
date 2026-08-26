@@ -597,11 +597,22 @@ table's own units. It is arithmetic, not a simulation.
 
 **Are input profiles worth the trouble?** A profile is how you tell the engine
 that your subsectors buy different things; without one they inherit the parent's
-purchasing pattern. Measured on 54 splits against the office's own answer:
-supplying the parts' **true** profile moves the multiplier error from a median
-9.0 % to **3.4 %**, and helps in 44 of the 54. It does not reach zero because a
-profile shapes the off-block column only — final demand, value added and the
-internal block keep the flat key, so about a third of the error is beyond it.
+purchasing pattern. Measured on 54 splits against the office's own answer, the
+answer is more awkward than it looks.
+
+Supplying the parts' **true** profile moves the multiplier error from a median
+9.0 % to **3.4 %** — in the seed. Then the balancer gives most of it back: the
+table you actually get is a median **10.6 %**, against 10.0 % for using no
+profile at all. It still edges out doing nothing in 21 of 35, by margins the
+medians do not show. And the engine **refuses the profiled scenario outright in
+19 of 54**.
+
+The reason is the engine's own design, and it is sound as far as it goes:
+balancing adjusts the internal block and nothing else, because a proportional
+split already satisfies every other margin and letting the solver touch copied
+cells would break the reaggregation guarantee. Give it a profile and the moved
+column has to be absorbed somewhere, and that somewhere is the one block the
+measurements show is worst estimated.
 
 **Borrowing a profile from a country that publishes your split is a coin flip**:
 better in 78 of 162 borrowings and worse in 84. It helps where the split was

@@ -347,12 +347,16 @@ def scenario_section(res: DisaggregationResult) -> str:
                       "> **What a profile is worth, measured.** On 54 splits "
                       "where the office publishes both the parent and its "
                       "parts, giving the engine the parts' TRUE input profile "
-                      "moves the subsectors' multiplier error from a median "
-                      "**9.0 % to 3.4 %**, and it helps in 44 of the 54. Not "
-                      "to zero: a profile shapes the off-block column only, so "
-                      "final demand, value added and the internal block keep "
-                      "the flat key and about a third of the error is out of "
-                      "its reach.",
+                      "moves the SEED's multiplier error from a median 9.0 % "
+                      "to 3.4 %. **The balancer then gives most of that "
+                      "back**: the delivered table is a median 10.6 % against "
+                      "10.0 % for using no profile at all, and it beats doing "
+                      "nothing in 21 of 35. Balancing adjusts the internal "
+                      "block only — correct when a split is proportional, "
+                      "since nothing else moves — so a profiled column pushes "
+                      "the whole adjustment into the least reliable part of "
+                      "the table. The engine also refuses the profiled "
+                      "scenario outright in 19 of 54.",
                       ">",
                       "> **Borrowing one from a country that publishes your "
                       "split is a coin flip** — 162 borrowings, better in 78 "
