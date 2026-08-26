@@ -644,6 +644,24 @@ being uncertain and says almost nothing about where the answer is. A narrow
 range is not a safer one: the splits where it misses are the wider ones. Treat
 it as evidence that you do not know, not as an interval you can quote.
 
+**Before any of that, check whether the answer is already published for another
+year.** If your office publishes the split you need for a nearby year, use that
+year's shares as the key and ignore the proxies entirely. On the one country
+that publishes three consecutive years at the detail that settles it, last
+year's published split is out by a median **1.2 points** and two years back by
+**2.4**, against **4.8 at best** for the ten proxies and 27 at p90 — about four
+to one in favour of an older answer over a current proxy. The engine already
+records the key's `source_year` and says when it differs from the table's; what
+was missing was the size of the trade.
+
+The clever version — measure the proxy's bias in the published year and subtract
+it in yours — was tried and does not earn its complexity. It beats plain
+carry-over in 54 % of splits, a coin flip, because subtracting "proxy minus
+truth" is a laundered way of using the published year. One country, three years,
+one of them pandemic-affected; the cost doubles from a one-year to a two-year
+gap, which is the shape to expect rather than a law. See
+`validators/run_key_carryover.py`.
+
 Two practical notes. National-accounts employment (`nama_10_a64_e`) is the first
 thing most people reach for and it **cannot be used**: it is published at exactly
 the aggregation of the table you are splitting. The detail only exists in

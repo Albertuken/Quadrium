@@ -153,7 +153,23 @@ def scenario_section(res: DisaggregationResult) -> str:
                       "employment moved 1.9 over the same years. Whether a break "
                       "falls inside the gap is something the analyst can know "
                       "and this engine cannot. See "
-                      "`library/validators/run_key_vintage.py`."]
+                      "`library/validators/run_key_vintage.py`.",
+                      "",
+                      "> **An old ANSWER beats a current proxy, by about four "
+                      "to one.** If the office published your split for a "
+                      "nearby year, use that year's shares as the key instead "
+                      "of any proxy. Measured on the one country that "
+                      "publishes three consecutive years at the detail that "
+                      "settles it: last year's published split is out by a "
+                      "median **1.2 points**, two years back by **2.4**, "
+                      "against **4.8 at best** for the ten downloadable "
+                      "proxies and 27 at p90. Correcting a proxy by a bias "
+                      "measured on a published year was tried and adds "
+                      "nothing — it beats plain carry-over in 54 % of splits, "
+                      "which is a coin flip, because it is that carry-over "
+                      "with extra steps. One country and three years, one of "
+                      "them pandemic-affected. See "
+                      "`validators/run_key_carryover.py`."]
         va = sp.get("va_rows") or {}
         if va.get("pinned"):
             lines += ["",

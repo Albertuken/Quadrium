@@ -92,6 +92,20 @@ The conclusion drawn from it survives on other grounds: the range misses one
 split in four, and where it lands it spans a median 28 points of share. What
 changed is the reason the report gives, not the warning.
 
+AND THE OTHER HALF OF THIS FILE HAS ITS ANSWER TOO
+----------------------------------------------------
+"Two observations are not a calibration and none is proposed here" was the right
+call, and `run_key_carryover.py` says why on 316 triples over Hungary 2021-2023.
+The bias IS moderately stable — it drifts about a third of its own size — and
+the claim above that small biases are the stable ones survives weakly (1.50 pp
+against 2.59, r = +0.154).
+
+It does not matter. Correcting a proxy by a bias measured on a published year
+looks like a factor of four (6.91 pp to 1.56) and is an artefact: simply
+carrying the published year's answer over as the key gives 1.59, and the
+correction beats it in 54 % of splits. **Once you have a published year, the
+proxy contributes nothing.** No calibration, for a better reason than n = 2.
+
 Run:
     python3 validators/run_key_bias.py
 """
