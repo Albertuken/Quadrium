@@ -252,37 +252,41 @@ method and one publisher, and no manual claims otherwise, but do not read
 "projected to 2026" as "a better picture of 2026 than the latest published
 table".
 
-**There is a second method, and on the evidence it is the better one.** Set
-`project_method` to `sut_ras` in the `project` sheet. It takes different targets
-and the `targets` sheet must match them:
+### Which method — and the question is really "what do you know?"
 
-| `project_method` | `kind` rows the `targets` sheet needs |
-|---|---|
-| `sut_euro` (default) | `gva` per industry (basic prices), `final_use` per category (purchasers' prices), `taxes`, `imports` |
-| `sut_ras` | `industry_output` per industry, `use_column_totals` per industry then per final-use category (each industry's output **less** its value added), `taxes`, `imports` |
+There are two methods and **no default**. The `targets` sheet decides which one
+runs, because the two need different things from you:
 
-A sheet written for one will not drive the other, and the engine says so rather
-than reading the wrong column.
+| what you have for the later year | `kind` rows to write | method |
+|---|---|---|
+| value added by industry, final use by category | `gva`, `final_use`, `taxes`, `imports` | `sut_euro` |
+| **industry output** by industry, use column totals | `industry_output`, `use_column_totals`, `taxes`, `imports` | `sut_ras` |
 
-`sut_ras` is the better of the two on every test that has been run: it beats
-`sut_euro` in all 61 back-tests, and in **54 of 54** when both are handed
-exactly the same information (`sut_ras` asks for 64 more numbers than
-`sut_euro`, so the comparison was rerun with its industry outputs estimated
-from `sut_euro`'s own targets). It also hits your industry-output targets
-exactly, because it is given them; `sut_euro` approaches value added
-iteratively and on Spain 2021 → 2022 overshoots the total the office later
-published by 3.6 %.
+`use_column_totals` is one row per industry and then one per final-use
+category. For an industry it is that industry's output **less** its value
+added; for a final-use category it is the same figure `final_use` would carry.
 
-**What that is worth depends on what you actually know.** With a real
+You can put `project_method` in the `project` sheet if you want to say it out
+loud, but it has to agree with the rows. If it disagrees, or the sheet mixes
+the two, or it carries only `taxes` and `imports`, the engine stops and asks
+what you know rather than picking for you.
+
+**Why there is no default.** `sut_ras` is the better of the two on every test
+run: it beats `sut_euro` in all 61 back-tests against tables the offices later
+published, and in **54 of 54** when both are handed exactly the same
+information. It also hits your industry-output targets exactly, because it is
+given them, where `sut_euro` approaches value added iteratively and on Spain
+2021 → 2022 overshoots the published total by 3.6 %. But it needs industry
+outputs, and if you do not have them the answer is not for the engine to invent
+them. Defaulting to either one would be choosing what you measured.
+
+**What a projection is worth depends on that same thing.** With a real
 measurement of the later year's industry output, `sut_ras` beats leaving the
 base year alone in 60 of 61 tests. With only value added and final use it wins
-18 of 54, and `sut_euro` wins none — so on that information a projection buys
-consistency with your targets rather than a better picture of the structure.
-The gap between the two, 6.6 points on average, is what knowing next year's
-industry output is worth.
-
-The default is still `sut_euro`, because changing a default is the project
-owner's call and not a measurement's. If you are projecting, run both.
+18 of 54, and `sut_euro` wins none — on that information a projection buys
+consistency with your totals rather than a better picture of the structure. The
+6.6 points between the two is what knowing next year's industry output is
+worth.
 
 **And SUT-EURO may simply refuse.** 29 of those 61 runs did not reach the Handbook's
 1 % rule in 5,000 iterations — some are only slow (Czechia converges at 18,423)

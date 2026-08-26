@@ -242,12 +242,24 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
             f"from a table as a whole stays missing, and the load stops.")
 
     to_year = meta.get("project_to_year")
-    pmethod = str(meta.get("project_method") or "sut_euro").strip().lower()
-    if pmethod not in ("sut_euro", "sut_ras"):
+    # NO DEFAULT, AND THAT IS THE POINT.
+    #
+    # It defaulted to `sut_euro`, which is the worse of the two methods on
+    # every test that has been run (`OQ-B-16`), so a user who said nothing got
+    # the loser by silence. Changing the default to `sut_ras` would have moved
+    # the problem rather than removed it.
+    #
+    # The two methods take DIFFERENT targets, so the `targets` sheet already
+    # says which one the user means: nobody can reach a default by accident,
+    # because they had to write `gva` rows or `industry_output` rows to get
+    # anywhere. `project_method` is now an OPTIONAL declaration that has to
+    # agree with the sheet, and `_project` reads the method off the sheet.
+    raw = str(meta.get("project_method") or "").strip().lower()
+    if raw and raw not in ("sut_euro", "sut_ras"):
         raise ConfigError(
-            f"project_method {pmethod!r} must be 'sut_euro' (the default) or "
-            f"'sut_ras'.\n\n"
-            f"They take DIFFERENT targets and the `targets` sheet must match:\n"
+            f"project_method {raw!r} must be 'sut_euro' or 'sut_ras', or "
+            f"left out — the `targets` sheet says which one you mean.\n\n"
+            f"They project onto different quantities:\n"
             f"  sut_euro   gva (one per industry, BASIC prices)\n"
             f"             final_use (one per category, PURCHASERS' prices)\n"
             f"             taxes, imports (one row each, totals)\n"
@@ -257,6 +269,7 @@ def _eurostat_sut_paths(meta: dict, base_dir: Path) -> tuple[Path, dict]:
             f"                 LESS its value added)\n"
             f"             taxes, imports (one row each; their sum is the "
             f"total this method balances against)")
+    pmethod = raw or None
     if to_year not in (None, ""):
         try:
             to_year = int(str(to_year).strip())
@@ -294,20 +307,58 @@ def _project(sut, req: dict, targets: list, defaults: list):
     """
     import numpy as np
 
-    method = req["project_method"]
-    wanted = (("gva", "final_use", "taxes", "imports") if method == "sut_euro"
-              else ("industry_output", "use_column_totals", "taxes", "imports"))
+    VOCAB = {"sut_euro": ("gva", "final_use", "taxes", "imports"),
+             "sut_ras": ("industry_output", "use_column_totals",
+                         "taxes", "imports")}
+    SHARED = ("taxes", "imports")
 
-    by_kind: dict = {}
+    kinds = []
     for n, r in enumerate(targets, start=2):
         kind = str(_need(r, "kind", "targets", n)).strip().lower()
-        if kind not in wanted:
+        known = {k for v in VOCAB.values() for k in v}
+        if kind not in known:
             raise ConfigError(
                 f"targets row {n}: kind {kind!r} is not one of "
-                f"{', '.join(wanted)}, which is what "
-                f"`project_method: {method}` takes. The two methods project "
-                f"onto different quantities and a sheet written for one will "
-                f"not drive the other.")
+                f"{', '.join(sorted(known))}.")
+        kinds.append(kind)
+
+    # THE SHEET SAYS WHICH METHOD, BECAUSE ONLY THE SHEET KNOWS WHAT YOU HAVE.
+    #
+    # `gva` and `final_use` belong to SUT-EURO, `industry_output` and
+    # `use_column_totals` to SUT-RAS, and `taxes` and `imports` to both. A
+    # sheet carrying rows of one distinctive set has already chosen. The
+    # question a user can answer is "what do I know about the later year?",
+    # not "which of two methods from chapter 18 do I want", and this is the
+    # place that difference shows up.
+    seen = set(kinds)
+    votes = {m: seen & (set(v) - set(SHARED)) for m, v in VOCAB.items()}
+    chosen = [m for m, hit in votes.items() if hit]
+    if len(chosen) != 1:
+        lines = "\n".join(
+            f"      {m:<9} {', '.join(k for k in VOCAB[m] if k not in SHARED)}"
+            for m in VOCAB)
+        raise ConfigError(
+            ("the `targets` sheet mixes the two projection methods' rows: "
+             + ", ".join(sorted(seen)) if len(chosen) > 1 else
+             "the `targets` sheet carries no rows that say which projection "
+             "method you mean")
+            + f".\n\n  What do you know about {req['project_to_year']}?\n"
+            + lines
+            + "\n      both      taxes, imports\n\n"
+            + "  Write the rows for what you have. There is no default: "
+              "`sut_ras` is the better\n  of the two on every test run "
+              "(OQ-B-16) but it needs industry outputs, and\n  picking one "
+              "for you would be choosing what you measured.")
+    method = chosen[0]
+    if req.get("project_method") and req["project_method"] != method:
+        raise ConfigError(
+            f"project_method says {req['project_method']!r} and the `targets` "
+            f"sheet carries {', '.join(sorted(votes[method]))}, which is what "
+            f"{method!r} takes.\n\nLeave `project_method` out and the sheet "
+            f"decides, or make the two agree.")
+    wanted = VOCAB[method]
+    by_kind: dict = {}
+    for n, (r, kind) in enumerate(zip(targets, kinds), start=2):
         try:
             value = float(r.get("value"))
         except (TypeError, ValueError):
@@ -378,7 +429,7 @@ def _project(sut, req: dict, targets: list, defaults: list):
         taxes=by_kind["taxes"][0][1], imports=by_kind["imports"][0][1],
         method="sut_euro", year=req["project_to_year"])
     print(f"    Projected {sut.year} -> {req['project_to_year']} by "
-          f"{req['project_method']}: output "
+          f"{method}: output "
           f"{sut.q.sum():,.0f} -> {projected.q.sum():,.0f} "
           f"({100 * (projected.q.sum() / sut.q.sum() - 1):+.2f} %)")
     return projected
