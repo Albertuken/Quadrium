@@ -690,11 +690,29 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             lines += [
                 "",
                 "> The error columns are what the subsectors' **multipliers** "
-                "did in comparable splits, with the size key exactly right. "
-                "They are a band, not a prediction for your table: the screen "
-                "ranks, and the spread inside each band is wide. The cut "
-                "points are the medians of the 68 (multiplier 1.553, two "
-                "parts).",
+                "did in comparable splits. They are a band, not a prediction "
+                "for your table: the screen ranks, and the spread inside each "
+                "band is wide. The cut points are the medians of the 68 "
+                "(multiplier 1.553, two parts).",
+                ">",
+                "> **The band does not depend on your key being right.** "
+                "Without an input profile, no allocation key can move a "
+                "subsector's multiplier — the share cancels out of the "
+                "coefficients, so every key gives the same one. Measured on "
+                "372 real published proxies, identical to the answer's own "
+                "multipliers in 372 of 372. What the band measures is "
+                "structure, and your key cannot add to it or subtract from "
+                "it. See `validators/run_key_invariance.py`.",
+                ">",
+                "> **Your key sets the sizes, and that is where it costs "
+                "you.** A share error of a few points is not a subsector a "
+                "few percent out: the error is relative to a part that may be "
+                "small, so it is amplified by a median factor of 3.8. Real "
+                "downloadable proxies are out by a median 7.9 points of "
+                "share, which leaves the worst subsector's output out by a "
+                "median **31 %**, and only 45 of 372 put every subsector "
+                "within 10 % of its true size. See "
+                "`validators/run_real_key.py`.",
                 ">",
                 "> If another country publishes your split, you may be "
                 "tempted to read its error instead. Measured, that is worse: "

@@ -80,11 +80,21 @@ there is.
 
 WHAT THIS MEANS FOR A RESULT
 ------------------------------
-Roughly 5 to 8 points of key error is the realistic case, with a long tail. The
-size of a subsector is wrong by exactly that (`run_split_backtest.py`: the key
-moves levels one for one) and its multiplier is not moved by it at all — the
-multiplier's own error, a median 7.8 %, comes from the structure and is
-measured separately.
+Roughly 5 to 8 points of key error is the realistic case, with a long tail.
+
+The multiplier is **not moved by it at all** — not approximately: running these
+same 372 keys through the engine gives multipliers identical to the ones the
+published answer gives, in 372 of 372, because the key cancels out of the
+multiplier recursion. That is an identity, and `run_key_invariance.py` proves
+it and checks it; this file used to assert it in prose with nothing behind it.
+The multiplier's own error, a median 7.8 %, is structural and is measured
+separately (`run_split_backtest.py`).
+
+What the key does move is **size**, and a point of share error costs more than
+a point of subsector. The error is relative to a part that may be small, so it
+is amplified by a median factor of 3.8: at these key errors the worst part's
+output is out by a median **31 %**, and only 45 of the 372 keys put every
+subsector within 10 % of its true size.
 
 It also supports what the report already does. Since no proxy is reliably best,
 the spread across the proxies a user registers is the honest thing to print —

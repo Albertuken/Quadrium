@@ -144,8 +144,13 @@ START=$(date +%s)
 
 for v in "$VDIR"/*.py; do
     name=$(basename "$v")
+    # A validator is a `run_*.py` or `check_*.py`. Anything else in the
+    # directory is a helper the validators import -- `diagnostics.py` is one --
+    # and running it here inflated the count by one against the number
+    # `run_docs_current.py` audits in INDEX.md.
     case "$name" in
-        __init__.py) continue ;;
+        run_*.py|check_*.py) ;;
+        *) continue ;;
     esac
     # `--quick` drops the two that read 27 years of UK supply-use tables.
     if [ "$QUICK" = 1 ]; then

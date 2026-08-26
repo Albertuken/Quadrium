@@ -1577,6 +1577,73 @@ def test_the_internal_block_conserves_the_parent_cell_at_every_alpha():
           f"alpha 0.5, 1.0, 1.5, 2.0")
 
 
+def test_the_allocation_key_cannot_move_a_multiplier():
+    """Without an input profile, the key sets sizes and nothing else — exactly.
+
+    A proportional split hands every part the parent's own column of technical
+    coefficients: `A[i, part] = s*Z[i, parent] / (s*X[parent])`, and the share
+    cancels. The output multiplier obeys `m_j = 1 + sum_i m_i*A[i,j]`, which
+    reads columns only, and the parts contribute
+    `sum_a m_a*s_a*A[parent,j] = m_parent*A[parent,j]` — the shares sum to one
+    and cancel again. So no key can reach a multiplier.
+
+    This is an identity and the project had been relying on it in prose since
+    `run_real_key.py` was written, with nothing checking it. Measured on 372
+    real proxies it holds in 372 of 372 (`run_key_invariance.py`); here it is
+    checked against two keys chosen to be as far apart as they can be, so a
+    dependence would have nowhere to hide.
+
+    The second half is the boundary: an input profile IS able to move them,
+    which is what makes `OQ-B-17` a question about profiles and not about keys.
+    """
+    from quadrium.disaggregation import split_sector
+    from quadrium.models import AllocationKey
+
+    table = build_table()
+    spec = SplitSpec("ACC", NEW, LBL, keys_by_block={"output": "k"})
+    others = [c for c in table.sector_codes if c != "ACC"]
+
+    def run(raw, profiles):
+        keys = {"k": AllocationKey(
+            key_id="k", applies_to="output", new_sector_codes=NEW,
+            raw_values=list(raw), source="test", source_year=table.year,
+            strength=ProxyStrength.MEDIUM)}
+        sc = Scenario(scenario_id="s", label="s",
+                      keys_by_block={"output": "k"},
+                      input_profiles=profiles or {})
+        seed = split_sector(table, "ACC", NEW, LBL, sc, keys, spec)
+        Z, X = np.asarray(seed["Z"]), np.asarray(seed["X"])
+        A = Z / np.where(X == 0, 1.0, X)
+        m = np.linalg.inv(np.eye(len(X)) - A).sum(0)
+        return m[seed["new_positions"]], X[seed["new_positions"]]
+
+    equal = np.ones(len(NEW))
+    skewed = np.arange(1, len(NEW) + 1, dtype=float) ** 3
+
+    m_a, x_a = run(equal, None)
+    m_b, x_b = run(skewed, None)
+    gap = float(np.abs(m_a - m_b).max() / max(float(np.abs(m_a).max()), 1e-12))
+    check("no key can move a subsector's multiplier without a profile",
+          gap < 1e-12,
+          f"an equal key against one weighted 1, 8, 27, 64 differ by "
+          f"{gap:.2e} — machine precision, not a small effect")
+    check("while the same two keys move the sizes as far as they ask",
+          float(np.abs(x_a - x_b).max() / max(float(x_a.max()), 1e-12)) > 0.5,
+          f"outputs {', '.join(f'{v:,.0f}' for v in x_a)} against "
+          f"{', '.join(f'{v:,.0f}' for v in x_b)}")
+
+    profiled = {NEW[0]: {c: 1.7 for c in others}}
+    m_c, _ = run(equal, profiled)
+    m_d, _ = run(skewed, profiled)
+    moved = float(np.abs(m_c - m_d).max() / max(float(np.abs(m_c).max()), 1e-12))
+    check("but an input profile lets the key reach structure",
+          moved > 1e-6,
+          f"the same two keys now differ by {moved:.2e}. A profile is the only "
+          f"route from a key to a multiplier, and OQ-B-17 measures what that "
+          f"route is worth once the balancer has had it")
+
+
+
 def main() -> int:
     print("quadrium engine checks")
     print("=" * 60)
@@ -1588,6 +1655,7 @@ def main() -> int:
                test_loader_refuses_an_unbalanced_table,
                test_real_ine_table_loads_and_balances,
                test_the_internal_block_conserves_the_parent_cell_at_every_alpha,
+               test_the_allocation_key_cannot_move_a_multiplier,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
                test_the_eurostat_supply_use_loader,
