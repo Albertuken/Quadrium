@@ -425,7 +425,7 @@ def scenario_section(res: DisaggregationResult) -> str:
         # "THE WEAKEST ASSUMPTION IN THE RESULT" WAS HALF RIGHT AND SAID
         # WRONG. Measured on 68 real splits where the office publishes both
         # the parent and its parts: the estimated block misses the published
-        # one by a median of 60.6 %, comfortably the worst-estimated part of a
+        # one by a median of 60.9 %, comfortably the worst-estimated part of a
         # split — and how wrong it is does not predict how wrong the
         # multipliers are, r = +0.03. It is the weakest ASSUMPTION; the result
         # does not rest on it. See `validators/run_internal_block_backtest.py`.
@@ -439,7 +439,7 @@ def scenario_section(res: DisaggregationResult) -> str:
                   f"proportional to each subsector's weight (MVP_0.1 §6.3).",
                   "",
                   "> **It is the weakest assumption here, and the result does "
-                  "not rest on it.** Measured on 68 splits where the office "
+                  "not rest on it.** Measured on 96 splits where the office "
                   "publishes both the parent and its parts, this block misses "
                   "the published one by a median of **60 %** — the "
                   "worst-estimated part of a split, against 42 % for the "
@@ -722,13 +722,16 @@ def build_report(results: list[DisaggregationResult], meta: dict,
     # office publishes both the parent and its parts. `run_split_screen.py`
     # then asks what in the COARSE table predicts the result, since the thing
     # that actually drives it — how unlike the parts are — cannot be known
-    # without the answer. Seven candidates; two independent signals survive:
+    # without the answer. Seven candidates were tried; on 96 splits ONE
+    # survives -- the number of parts. The parent's multiplier ranked at
+    # +0.24 and negative in France, so the four-corner table this printed
+    # until v1.75 is gone. See run_split_screen.py.
     # the parent's own output multiplier (equivalently, one minus its value
     # added share, r = -0.98 between them) and the number of parts.
     #
     # It ranks, it does not predict a number, and it holds on countries it was
     # not fitted on: leave-one-country-out Spearman +0.52 to +0.76, positive in
-    # every fold. The cut points below are the medians of those 68 splits.
+    # every fold. The cut point below is the median of those 96 splits.
     orig = meta.get("original_table")
     if orig is not None and first.splits:
         import numpy as _np
@@ -742,21 +745,17 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             except Exception:
                 continue
             k = len(split["new_codes"])
-            hi_m, hi_k = pm > 1.5525, k > 2
-            med, worst = {(False, False): ("4.8 %", "14.9 %"),
-                          (False, True): ("7.0 %", "23.4 %"),
-                          (True, False): ("7.9 %", "41.6 %"),
-                          (True, True): ("18.6 %", "48.1 %")}[(hi_m, hi_k)]
+            med, worst = ("5.4 %", "41.6 %") if k <= 2 else ("10.6 %", "49.2 %")
             band.append((code, pm, k, med, worst))
         if band:
             lines += [
                 "### How risky was this split, before you made it?", "",
-                "Two numbers from the table you started with rank a split's "
-                "difficulty, measured on 68 real splits where the office "
-                "publishes both the parent and its parts: **the parent's own "
-                "output multiplier** and **how many parts you asked for**. "
-                "They are independent of each other, and together they rank "
-                "difficulty on countries they were not fitted on.", "",
+                "**How many parts you asked for** ranks a split's difficulty, "
+                "measured on 96 real splits where the office publishes both "
+                "the parent and its parts. Held out one country at a time it "
+                "separates in the same direction in all four — BE 7.9 to "
+                "22.5 %, FR 8.2 to 11.2 %, HU 5.3 to 7.9 %, SK 4.4 to "
+                "19.7 %.", "",
                 "| Split | parent multiplier | parts | comparable splits: median error | worst |",
                 "|---|---:|---:|---:|---:|"]
             for code, pm, k, med, worst in band:
@@ -766,8 +765,17 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "> The error columns are what the subsectors' **multipliers** "
                 "did in comparable splits. They are a band, not a prediction "
                 "for your table: the screen ranks, and the spread inside each "
-                "band is wide. The cut points are the medians of the 68 "
-                "(multiplier 1.553, two parts).",
+                "band is wide — the worst column is the worst of 96, not a "
+                "bound on yours. The cut point is the median of the 96, two "
+                "parts.",
+                ">",
+                "> **The parent multiplier column is printed and is no longer "
+                "used to place you in a band.** Fitted on 68 splits it looked "
+                "like a second, independent signal; on 96 it ranks at +0.24 "
+                "and is NEGATIVE in France, and at few parts its two bands "
+                "come out at 5.4 % and 5.3 % — no separation at all. An "
+                "earlier version of this report split you four ways on it. "
+                "See `validators/run_split_screen.py`.",
                 ">",
                 "> **The band does not depend on your key being right.** "
                 "Without an input profile, no allocation key can move a "
@@ -790,12 +798,15 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "within 10 % of its true size. See "
                 "`validators/run_real_key.py`.",
                 ">",
-                "> If another country publishes your split, you may be "
-                "tempted to read its error instead. Measured, that is worse: "
-                "the band above misses a held-out case by 3.7 points and the "
-                "same parent's error borrowed from other countries by 4.9, "
-                "because the spread for one parent varies by a median factor "
-                "of 4.6 between countries.",
+                "> **If ANOTHER YEAR of your own table publishes the "
+                "split, use it and ignore all of this.** The same parent a "
+                "year earlier misses by **0.7 points**, against 2.8 for the "
+                "band above and 5.7 for the same parent borrowed from another "
+                "country. A split\'s difficulty is a property of the table it "
+                "is in, not of the sector — which is why another COUNTRY\'s "
+                "number is the worst of the three, and why "
+                "`run_key_carryover.py` finds the same thing from the key\'s "
+                "side.",
                 ">",
                 "> **Asking for more parts does not make each part worse.** "
                 "A single subsector's error barely moves with the number of "

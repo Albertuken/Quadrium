@@ -1577,6 +1577,57 @@ def test_the_internal_block_conserves_the_parent_cell_at_every_alpha():
           f"alpha 0.5, 1.0, 1.5, 2.0")
 
 
+def test_a_margin_below_the_floor_is_not_a_sign():
+    """An empty line with a rounding-sized target must not be called infeasible.
+
+    A parent with no internal sales gives a block that is exactly zero, and its
+    internal targets are the rounding of a difference of large sums — in the
+    real cases that found this, -2.8e-14 for Hungary 2022 and -0.021 for France
+    2021, against a detectability floor of the order of a tenth. Three sign
+    tests in `gras` compared those against EXACT zero and refused the whole
+    split of `Q87_88`, health and social work, in three countries.
+
+    The caller already computes that floor and passes it as `margin_floor`;
+    `_assert_margins_consistent` was the only place using it. The targets are
+    now snapped once, at the top, and only where the seed line is empty — a
+    small target on a line with mass is a real constraint and stays one.
+    """
+    Z = np.zeros((2, 2))
+    u = np.array([0.0, 0.0])
+    v = np.array([-2.84e-14, 0.0])
+
+    try:
+        balance(Z, u, v, method="GRAS")
+    except BalancingError as exc:
+        check("without a floor, a rounding-sized target is refused", True,
+              f"{str(exc)[:70]}… — which is the behaviour that cost three "
+              f"real splits")
+    else:
+        check("without a floor, a rounding-sized target is refused", False,
+              "it was accepted, so this test no longer covers the defect")
+
+    Zb, info = balance(Z, u, v, method="GRAS", margin_floor=0.1)
+    check("with the floor, the same problem balances to zero",
+          float(np.abs(Zb).max()) == 0.0,
+          f"largest cell {np.abs(Zb).max():.3g} — the block is empty and stays "
+          f"empty, which is the only answer consistent with a parent that has "
+          f"no internal sales")
+
+    # and a small target on a line that is NOT empty is still a constraint
+    Z2 = np.array([[10.0, 5.0], [4.0, 6.0]])
+    try:
+        balance(Z2, np.array([-0.05, 25.05]), np.array([14.0, 11.0]),
+                method="GRAS", margin_floor=0.1)
+    except BalancingError:
+        check("but a line with mass keeps its sign constraint", True,
+              "a floor-sized target on a non-empty line is still refused, so "
+              "the snap did not widen the rule to every small number")
+    else:
+        check("but a line with mass keeps its sign constraint", False,
+              "it was accepted — the snap is reaching lines it should not")
+
+
+
 def test_the_allocation_key_cannot_move_a_multiplier():
     """Without an input profile, the key sets sizes and nothing else — exactly.
 
@@ -1659,6 +1710,7 @@ def main() -> int:
                test_real_ine_table_loads_and_balances,
                test_the_internal_block_conserves_the_parent_cell_at_every_alpha,
                test_the_allocation_key_cannot_move_a_multiplier,
+               test_a_margin_below_the_floor_is_not_a_sign,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
                test_the_eurostat_supply_use_loader,

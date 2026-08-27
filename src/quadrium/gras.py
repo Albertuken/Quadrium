@@ -635,6 +635,32 @@ def gras(T, u, v, *, eps: float = GRAS_EPS, max_iter: int = PROJECT_MAX_ITER,
 
     _assert_margins_consistent(u, v, margin_floor)
     P, N = split_pn(T)
+
+    # A TARGET BELOW THE FLOOR, ON A LINE THAT IS ENTIRELY ZERO, IS ZERO.
+    #
+    # Three sign tests below compare a target against exact zero -- the
+    # per-line one here, the exhaustive one after it, and `_scaling`'s
+    # `target == 0.0` for an empty line. The caller already computes the
+    # tightest residual this problem's own numbers can be held to and passes it
+    # as `margin_floor` (`precision.assertable_tolerance`, via
+    # `balancing.balance`), and `_assert_margins_consistent` uses it one line
+    # above -- but these did not, so a margin the source cannot distinguish
+    # from zero was read as a sign the seed could never match.
+    #
+    # It cost three real splits of `Q87_88`, health and social work, whose
+    # parent has NO internal sales: the block is exactly zero, its targets are
+    # the rounding of a difference of large sums, and Hungary 2022 was refused
+    # over -2.8e-14 while France 2021 was refused over -0.021, against a floor
+    # of the order of a tenth. Snapped here, once, so every test downstream
+    # sees the same consistent problem -- and only where the seed line is
+    # empty, because a small target on a line with mass IS a constraint.
+    if margin_floor:
+        floor = abs(float(margin_floor))
+        empty_r = (P.sum(axis=1) <= 0) & (N.sum(axis=1) <= 0)
+        empty_c = (P.sum(axis=0) <= 0) & (N.sum(axis=0) <= 0)
+        u = np.where(empty_r & (np.abs(u) <= floor), 0.0, u)
+        v = np.where(empty_c & (np.abs(v) <= floor), 0.0, v)
+
     _assert_sign_feasible(P, N, u, v)
     # The exact version of the same question, which the per-line test above can
     # pass while the system is still infeasible. Costs 17 ms on a 65x72 table

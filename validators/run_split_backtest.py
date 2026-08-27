@@ -21,14 +21,14 @@ parent's children into the parent, hand the result to `split_sector` with the
 **true output shares as the key**, and compare what comes back with the fine
 table it came from. A perfect key isolates the METHOD's error from the key's.
 
-    68 splits, 14 parents, 4 countries, 5 tables
+    96 splits, 14 parents, 4 countries, 7 tables
 
 WHAT IT COSTS, WITH THE KEY EXACTLY RIGHT
 -------------------------------------------
     cell error in the touched rows and columns   median 41.6 %   max 112.2 %
-    output multiplier error of the subsectors    median  7.8 %   max  48.1 %
-    splits whose multipliers land within 5 %     21 of 68
-    splits whose multipliers are out by over 15 %  15 of 68
+    output multiplier error of the subsectors    median  7.3 %   max  49.2 %
+    splits whose multipliers land within 5 %     25 of 96
+    splits whose multipliers are out by over 15 %  19 of 96
 
 The size key being exactly right does not make the split right. The parts get
 the parent's average input structure, and they do not have it.
@@ -95,9 +95,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 DATA = ROOT / "data" / "eurostat"
+# Seven tables, FOUR countries. Hungary publishes 2020 through 2023, so it is
+# four of the seven and every pooled median below is Hungary-weighted — the
+# per-country figures are printed beside them so the weighting is visible.
+# `run_source_pairs.py` records that no fifth country publishes an 89-product
+# table that also loads, so this is the whole of what Eurostat offers.
 FINE = ("naio_10_cp1700_FR_2021.json", "naio_10_cp1700_SK_2015.json",
-        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2022.json",
-        "naio_10_cp1700_HU_2020.json")
+        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2020.json",
+        "naio_10_cp1700_HU_2021.json", "naio_10_cp1700_HU_2022.json",
+        "naio_10_cp1700_HU_2023.json")
 COARSE = "naio_10_cp1700_ES_2022.json"
 FAIL: list[str] = []
 

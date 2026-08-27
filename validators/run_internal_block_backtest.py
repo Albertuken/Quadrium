@@ -18,18 +18,18 @@ changes the ANSWER. `run_internal_block.py` never calls the engine;
 `run_split_backtest.py` scores real splits but never isolates the block or
 varies alpha.
 
-This joins them. Same 68 real splits, same published truth, same perfect output
+This joins them. Same 96 real splits, same published truth, same perfect output
 key — and now the k x k block scored on its own, at five values of alpha.
 
 RAISING ALPHA TO THE MEASURED 1.5 MAKES THE ANSWER WORSE
 ----------------------------------------------------------
     alpha    multiplier error          block error     best for
              median      max           median
-    0.50      7.31 %    73.0 %          109.6 %        34 of 68
-    1.00      7.82 %    48.1 %           60.6 %         6 of 68
-    1.25      8.72 %    36.8 %           44.5 %         1 of 68
-    1.50      9.37 %    35.9 %           57.8 %         5 of 68
-    2.00      9.33 %    48.1 %           90.2 %        22 of 68
+    0.50      7.12 %    75.1 %          109.7 %        49 of 96
+    1.00      7.29 %    49.2 %           60.9 %         7 of 96
+    1.25      8.15 %    36.8 %           53.6 %         1 of 96
+    1.50      8.73 %    35.9 %           60.2 %         7 of 96
+    2.00      9.17 %    48.1 %           89.9 %        32 of 96
 
 Against the 1.0 default, alpha = 1.5 improves 28 splits and worsens 37, and
 moves the median from 7.82 % to 9.37 %. **The value measured from observed
@@ -49,7 +49,7 @@ answer better.
 THE BLOCK IS BADLY ESTIMATED AND IT BARELY MATTERS
 ----------------------------------------------------
 At the default, the estimated block misses the published one by a median of
-**60.6 %**. It is comfortably the worst-estimated part of a split — the cell
+**60.9 %**. It is comfortably the worst-estimated part of a split — the cell
 error over the whole touched cross is 41.6 % (`run_split_backtest.py`).
 
     block error       vs multiplier error      r = +0.030
@@ -95,9 +95,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 DATA = ROOT / "data" / "eurostat"
+# Seven tables, FOUR countries. Hungary publishes 2020 through 2023, so it is
+# four of the seven and every pooled median below is Hungary-weighted — the
+# per-country figures are printed beside them so the weighting is visible.
+# `run_source_pairs.py` records that no fifth country publishes an 89-product
+# table that also loads, so this is the whole of what Eurostat offers.
 FINE = ("naio_10_cp1700_FR_2021.json", "naio_10_cp1700_SK_2015.json",
-        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2022.json",
-        "naio_10_cp1700_HU_2020.json")
+        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2020.json",
+        "naio_10_cp1700_HU_2021.json", "naio_10_cp1700_HU_2022.json",
+        "naio_10_cp1700_HU_2023.json")
 COARSE = "naio_10_cp1700_ES_2022.json"
 ALPHAS = (0.5, 1.0, 1.25, 1.5, 2.0)
 DEFAULT = 1.0

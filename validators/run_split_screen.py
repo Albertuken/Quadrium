@@ -4,26 +4,26 @@ Two numbers from your own table that say how risky a split is, before you make i
 THE GAP THIS FILLS
 --------------------
 `run_split_backtest.py` measures what a split costs — with the size key exactly
-right, the subsectors' multipliers land a median 7.8 % from the published truth
+right, the subsectors' multipliers land a median 7.3 % from the published truth
 — and finds the error is set by how UNLIKE the parts are, r = +0.92 against the
 spread of their true multipliers. That is a diagnosis and not advice: knowing
 the spread means already having the answer.
 
 Looking at a country that publishes your split helps a little (the ordering
-survives at Spearman +0.52) and is not always possible. So: **is there anything
+survives at Spearman +0.54) and is not always possible. So: **is there anything
 in the coarse table the analyst already holds?**
 
 Seven candidates were tried, each with a mechanical reason to expect something,
-against the 68 real splits. With n = 68 anything under |r| = 0.24 is noise:
+against the 96 real splits. With n = 96 anything under |r| = 0.20 is noise:
 
-    input concentration, Herfindahl of the parent's input column   +0.469
-    value added / output of the parent                             -0.414
-    the parent's own output multiplier                             +0.405
-    number of parts                                                +0.364
+    input concentration, Herfindahl of the parent's input column   +0.524
+    value added / output of the parent                             -0.450
+    the parent's own output multiplier                             +0.438
+    number of parts                                                +0.372
+    the parent's size as a share of the table                      +0.305
     ------------------------------------------------------------- noise floor
-    sales concentration                                            +0.261
-    the parent's size as a share of the table                      +0.248
-    self-consumption, z_pp / X_p                                   +0.246
+    sales concentration                                            +0.258
+    self-consumption, z_pp / X_p                                   +0.252
 
 AND THE TOP THREE ARE ONE THING
 ---------------------------------
@@ -43,18 +43,47 @@ DOES IT HOLD ON A TABLE IT WAS NOT FITTED ON?
 Leave-one-country-out — fit on three countries, rank the fourth:
 
     model                             BE     FR     HU     SK    median
-    parent multiplier only          +0.27  +0.13  +0.23  +0.51   +0.25
-    number of parts only            +0.52  +0.36  +0.53  +0.57   +0.53
-    both                            +0.52  +0.26  +0.53  +0.66   +0.53
-    input concentration + parts     +0.68  +0.45  +0.42  +0.76   +0.56
+    parent multiplier only          +0.27  +0.13  +0.22  +0.51   +0.24
+    number of parts only            +0.52  +0.36  +0.50  +0.57   +0.51
+    both                            +0.52  +0.23  +0.61  +0.62   +0.56
+    input concentration + parts     +0.66  +0.43  +0.54  +0.74   +0.60
 
 Positive in every fold. It ranks splits by difficulty; it does not predict a
 number, and nothing here should be read as if it did.
 
-WHAT IT LOOKS LIKE IN USE
----------------------------
-Cutting both signals at their median:
+AND ON 96 SPLITS THE SECOND SIGNAL COLLAPSES
+----------------------------------------------
+Fitted on 68 splits this file proposed a four-corner table on the parent's
+multiplier and the number of parts, and `reporting.py` printed it. On 96 the
+multiplier ranks at **+0.24** and is NEGATIVE in France, and cutting both at
+their medians shows why:
 
+    parent multiplier   parts    median error    worst    n
+    low                 few          5.4 %      13.4 %   27
+    low                 many         7.2 %      23.4 %   21
+    high                few          5.3 %      41.6 %   22
+    high                many        13.4 %      49.2 %   26
+
+**At few parts the two multiplier bands are 5.4 % and 5.3 %** — no separation
+at all. What was reported as two independent signals was one signal, the number
+of parts, and a second that only appeared to work while the sample was small.
+
+What survives is `k` alone, two bands, held out one country at a time:
+
+    BE  7.9 to 22.5 %      FR  8.2 to 11.2 %
+    HU  5.3 to  7.9 %      SK  4.4 to 19.7 %
+
+Same direction in all four. Pooled, k <= 2 gives a median 5.4 % (worst 41.6,
+n = 49) and k > 2 a median 10.6 % (worst 49.2, n = 47), and that is what the
+report prints now.
+
+(`input concentration + parts` ranks best out of sample at +0.60, better than
+the multiplier pair's +0.56. It was not adopted: its four corners hold one and
+six observations in two of the folds, which is not a table to put in front of a
+user.)
+
+THE OLD FOUR-CORNER TABLE, FOR THE RECORD
+-------------------------------------------
     parent multiplier   parts    median error    worst    n
     low                 few          4.8 %      14.9 %   20
     low                 many         7.0 %      23.4 %   14
@@ -92,15 +121,15 @@ AND IT BEATS THE OBVIOUS ALTERNATIVE, WHICH WAS NOT THE EXPECTED RESULT
 ------------------------------------------------------------------------
 `run_split_backtest.py` suggests looking at a country that publishes your split.
 Where both are possible — parents measured in three or more countries, one held
-out at a time — the screen's band misses the held-out error by **3.7 points**
-and the other countries' median by **4.9**. Borrowing carries the between-country
+out at a time — the screen's band misses the held-out error by **2.8 points**
+and the other countries' median by **5.7**. Borrowing carries the between-country
 variation with it: the same parent's spread differs by a median factor of 4.6.
 
 This section was written expecting the opposite and the check refused it.
 
 Accommodation is where the screen is wrong: its parent multiplier is high in
 every country (1.51 to 1.94), so the screen puts it in the harder band at 7.9 %,
-and its measured error is 4.9 % median, 0.8 % to 7.9 %. Pessimistic, on the
+and its measured error is 5.3 % median, 0.8 % to 7.9 %. Pessimistic, on the
 sector the Spanish pilot divides. One counterexample is not the rule, but it is
 the direction to expect the screen to be wrong in: a parent can be
 intermediate-intensive and still have look-alike halves.
@@ -120,11 +149,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 DATA = ROOT / "data" / "eurostat"
+# Seven tables, FOUR countries. Hungary publishes 2020 through 2023, so it is
+# four of the seven and every pooled median below is Hungary-weighted — the
+# per-country figures are printed beside them so the weighting is visible.
+# `run_source_pairs.py` records that no fifth country publishes an 89-product
+# table that also loads, so this is the whole of what Eurostat offers.
 FINE = ("naio_10_cp1700_FR_2021.json", "naio_10_cp1700_SK_2015.json",
-        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2022.json",
-        "naio_10_cp1700_HU_2020.json")
+        "naio_10_cp1700_BE_2022.json", "naio_10_cp1700_HU_2020.json",
+        "naio_10_cp1700_HU_2021.json", "naio_10_cp1700_HU_2022.json",
+        "naio_10_cp1700_HU_2023.json")
 COARSE = "naio_10_cp1700_ES_2022.json"
-NOISE = 0.24          # |r| below this is not distinguishable from zero at n = 68
+NOISE = 0.24          # |r| below this is not distinguishable from zero at n = 96
 FAIL: list[str] = []
 
 
@@ -184,6 +219,9 @@ def main() -> int:
     rows, parts = [], []
     for f in have:
         fine = load_iot(DATA / f)
+        # From the FILENAME, not from `country`: that field is the country name,
+        # so `country[:2].upper()` printed Slovakia as "SL" everywhere here.
+        geo_code = f.replace("naio_10_cp1700_", "").split("_")[0]
         m_true = multipliers(fine.Z, fine.X)
         for parent in coarse.sector_codes:
             kids = [c for c in fine.sector_codes
@@ -213,7 +251,8 @@ def main() -> int:
             col = agg.Z[:, p].sum() + agg.VA[:, p].sum()
             inp = agg.Z[:, p] / max(col, 1e-12)
             rows.append(dict(
-                geo=fine.country[:2].upper(), parent=parent, k=float(len(kids)),
+                geo=geo_code, year=int(fine.year),
+                parent=parent, k=float(len(kids)),
                 err=float(errs.max()), mean_err=float(errs.mean()),
                 parent_mult=float(multipliers(agg.Z, agg.X)[p]),
                 hhi_in=float((inp ** 2).sum()),
@@ -313,11 +352,47 @@ def main() -> int:
             quad[(nm, nk)] = (float(np.median(e[m])), float(e[m].max()))
             print(f"    {nm:<20}{nk:<10}{np.median(e[m]):>8.1f}%"
                   f"{e[m].max():>8.1f}%{int(m.sum()):>5}")
-    check("and the corners are four-fold apart",
-          quad[("high", "many")][0] > quad[("low", "few")][0] * 3,
-          f"{quad[('low', 'few')][0]:.1f} % against "
-          f"{quad[('high', 'many')][0]:.1f} % — from two numbers you have "
-          f"before you start")
+    # THE SECOND SIGNAL DID NOT SURVIVE MORE DATA, and the corners say so:
+    # at few parts the two multiplier bands are 5.4 % and 5.3 %, which is no
+    # separation at all. Fitted on 68 splits this looked like two signals; on 96
+    # the parent multiplier ranks at +0.24 and is NEGATIVE in France.
+    check("the parent multiplier no longer separates on its own",
+          abs(quad[("high", "few")][0] - quad[("low", "few")][0])
+          < quad[("low", "few")][0] * 0.3,
+          f"at few parts it gives {quad[('low', 'few')][0]:.1f} % against "
+          f"{quad[('high', 'few')][0]:.1f} % — nothing. The four-corner table "
+          f"this file used to propose was one signal wearing two hats")
+
+    # what DOES survive: k alone, two bands, held out one country at a time.
+    print()
+    bands = {}
+    for held in geos:
+        tr = [r for r in rows if r["geo"] != held]
+        te = [r for r in rows if r["geo"] == held]
+        if len(te) < 5:
+            continue
+        cut = float(np.median([r["k"] for r in tr]))
+        few = [r["err"] for r in te if r["k"] <= cut]
+        many = [r["err"] for r in te if r["k"] > cut]
+        if not few or not many:
+            continue
+        bands[held] = (float(np.median(few)), float(np.median(many)),
+                       len(few), len(many))
+        print(f"    held out {held}: few parts {np.median(few):>6.1f} % "
+              f"(n={len(few)})   many {np.median(many):>6.1f} % (n={len(many)})")
+    cut = float(np.median(V["k"]))
+    few_e = e[V["k"] <= cut]
+    many_e = e[V["k"] > cut]
+    print()
+    print(f"    {'pooled: k <= ' + f'{cut:g}':<28}median {np.median(few_e):>6.1f} %"
+          f"   worst {few_e.max():>6.1f} %   n={len(few_e)}")
+    print(f"    {'pooled: k > ' + f'{cut:g}':<28}median {np.median(many_e):>6.1f} %"
+          f"   worst {many_e.max():>6.1f} %   n={len(many_e)}")
+    check("but the number of parts separates in every country, held out",
+          bool(bands) and all(f < m for f, m, _, _ in bands.values()),
+          f"{', '.join(f'{g} {f:.1f} to {m:.1f} %' for g, (f, m, _, _) in bands.items())}"
+          f" — one signal, two bands, and the direction is the same in all "
+          f"{len(bands)}. The report prints this instead of the four corners")
 
     # k is an extremum effect, which is why OQ-S-02 stands
     print()
@@ -348,20 +423,34 @@ def main() -> int:
     by_parent = collections.defaultdict(list)
     for r in rows:
         by_parent[r["parent"]].append(r)
-    band_med = {("low", "few"): 4.8, ("low", "many"): 7.0,
-                ("high", "few"): 7.9, ("high", "many"): 18.6}
+    # Computed, not transcribed. These four numbers were hard-coded from an
+    # earlier fit and are also what `reporting.py` prints, so a stale copy here
+    # would have been a stale copy in every user's report.
+    band_med = {k: v[0] for k, v in quad.items()}
     med_pm, med_k = float(np.median(V["parent_mult"])), float(np.median(V["k"]))
-    screen_miss, direct_miss = [], []
+    # ANOTHER COUNTRY HAS TO MEAN ANOTHER COUNTRY. This grouped by parent alone
+    # and took every other row as "borrowed from another country". That was true
+    # while each country supplied one table; Hungary now supplies four, so for a
+    # Hungarian split it was quietly borrowing from Hungary a year earlier —
+    # which `run_key_carryover.py` measured as nearly the same answer. The check
+    # reported a reversal that was an artefact of its own grouping.
+    screen_miss, direct_miss, year_miss = [], [], []
     for parent, rs in by_parent.items():
-        if len(rs) < 3:
-            continue
-        for i, held in enumerate(rs):
-            others = [x for x in rs if x is not held]
+        for held in rs:
+            abroad = [x for x in rs if x["geo"] != held["geo"]]
+            same_country = [x for x in rs
+                            if x["geo"] == held["geo"] and x is not held]
             key = ("high" if held["parent_mult"] > med_pm else "low",
                    "many" if held["k"] > med_k else "few")
-            screen_miss.append(abs(band_med[key] - held["err"]))
-            direct_miss.append(abs(float(np.median([x["err"] for x in others]))
-                                   - held["err"]))
+            if len(abroad) >= 2:
+                screen_miss.append(abs(band_med[key] - held["err"]))
+                direct_miss.append(
+                    abs(float(np.median([x["err"] for x in abroad]))
+                        - held["err"]))
+            if same_country:
+                year_miss.append(
+                    abs(float(np.median([x["err"] for x in same_country]))
+                        - held["err"]))
     # WRITTEN EXPECTING THE OPPOSITE. The obvious thing to say is that a direct
     # measurement of your own parent somewhere else beats a two-variable
     # screen. It does not: the same parent's spread varies by a median 4.6x
@@ -369,10 +458,28 @@ def main() -> int:
     # number carries that variation with it.
     check("the screen beats borrowing the same parent from another country",
           float(np.median(screen_miss)) < float(np.median(direct_miss)),
-          f"leaving one country out on parents measured in 3 or more: the "
-          f"screen's band misses by {np.median(screen_miss):.1f} points and "
-          f"the other countries' median by {np.median(direct_miss):.1f}, over "
+          f"on parents measured abroad in 2 or more countries: the screen's "
+          f"band misses by {np.median(screen_miss):.1f} points and the other "
+          f"COUNTRIES' median by {np.median(direct_miss):.1f}, over "
           f"{len(screen_miss)} held-out cases")
+    if year_miss:
+        print()
+        print(f"    {'the screen band':<38}misses by "
+              f"{np.median(screen_miss):>5.1f} points")
+        print(f"    {'the same parent, another COUNTRY':<38}"
+              f"{'':<10}{np.median(direct_miss):>5.1f}")
+        print(f"    {'the same parent, another YEAR of the same country':<48}"
+              f"{np.median(year_miss):>5.1f}")
+        check("but the same parent a year earlier beats both, easily",
+              float(np.median(year_miss)) < float(np.median(screen_miss)),
+              f"{np.median(year_miss):.1f} points against the screen's "
+              f"{np.median(screen_miss):.1f} and another country's "
+              f"{np.median(direct_miss):.1f}, over {len(year_miss)} cases. "
+              f"Same finding as run_key_carryover.py from the other side: what "
+              f"travels badly is the COUNTRY, not the year. A split's "
+              f"difficulty is a property of the table it is in, not of the "
+              f"sector — so if you have last year's answer, that is the "
+              f"evidence to use")
 
     ho = [r for r in rows if r["parent"] == "I"]
     if len(ho) >= 4:

@@ -692,28 +692,38 @@ that mismatch is not a shortcut, it is the only road there is.
 **How risky is this split, before you make it?** Two numbers from the table you
 already have rank the difficulty: **the parent's own output multiplier** and
 **how many parts you are asking for**. They are independent of each other, and
-fitted on three countries they rank a fourth they were never fitted on
-(Spearman +0.52 to +0.76, positive in every fold). Cut both at the median of the
-68 measured splits:
+fitted on three countries it ranks a fourth it was never fitted on. Cut at the
+median of the 96 measured splits:
 
-| parent multiplier | parts | median error | worst |
-|---|---|---:|---:|
-| low | few | 4.8 % | 14.9 % |
-| low | many | 7.0 % | 23.4 % |
-| high | few | 7.9 % | 41.6 % |
-| high | many | **18.6 %** | 48.1 % |
+| parts | median error | worst |
+|---|---:|---:|
+| few (k ≤ 2) | 5.4 % | 41.6 % |
+| many (k > 2) | **10.6 %** | 49.2 % |
+
+Held out one country at a time it separates in the same direction in all four —
+BE 7.9 to 22.5 %, FR 8.2 to 11.2 %, HU 5.3 to 7.9 %, SK 4.4 to 19.7 %.
 
 The report prints which band your split falls in. **It ranks; it does not
-predict your number** — the spread inside each band is wide. And if another
-country publishes your split, reading its error instead is worse, not better:
-the band misses a held-out case by 3.7 points and the borrowed number by 4.9,
-because one parent's spread varies by a median factor of 4.6 between countries.
+predict your number** — the spread inside each band is wide, and the worst
+column is the worst of 96, not a bound on yours.
+
+Until the evidence base was widened this guide printed a **four-way** table on
+the parent's own output multiplier as well. On 96 splits that signal ranks at
++0.24 and is negative in France, and at few parts its two bands come out at
+5.4 % and 5.3 % — no separation. It was one signal wearing two hats, and it is
+gone.
+
+**If another YEAR of your own table publishes the split, use it and ignore all
+of this.** The same parent a year earlier misses by **0.7 points**, against 2.8
+for the band and **5.7** for the same parent borrowed from another country. A
+split's difficulty is a property of the table it is in, not of the sector, which
+is why another country's number is the worst of the three.
 
 **And how wrong is it if your key is RIGHT?** That is a different question and
 it has been measured. Several countries publish a table where the office gives
 both a parent and its parts, so a split can be scored against the real answer.
-Across 68 such splits in 4 countries, **with the size key exactly right**, the
-subsectors' multipliers land a median of 7.8 % from the published truth, and 15
+Across 96 such splits in 4 countries, **with the size key exactly right**, the
+subsectors' multipliers land a median of 7.3 % from the published truth, and 19
 of the 68 are out by more than 15 %. A perfect key does not buy a right answer:
 the parts inherit the parent's average input structure and they do not have it.
 
@@ -737,7 +747,7 @@ statuses:
 | `user_constraint` | A value you pinned by hand |
 
 **Read this as a map of what was estimated, not as a warning about your
-multipliers.** On those same 68 splits, how much of the table a split had to
+multipliers.** On those same 96 splits, how much of the table a split had to
 estimate has *no* relationship to how far the multipliers land from the truth —
 correlation −0.01. A split can be badly wrong cell by cell and put its
 multipliers inside 4 %, or be tidy in the cells and 40 % out.

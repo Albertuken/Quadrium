@@ -34,29 +34,31 @@ AND THE BALANCER GIVES IT BACK
 --------------------------------
 `split_sector` returns a SEED. `run_scenario` then balances, and balancing is
 where the number above stops being true. Measured through the whole pipeline on
-the same 54 splits:
+all 96 splits:
 
-    no profile          seed 9.38 %   balanced  9.38 %   (51 of 51 unchanged)
-    true profile        seed 4.82 %   balanced 10.60 %
+    no profile          seed 7.78 %   balanced  7.78 %   (96 of 96 unchanged)
+    true profile        seed 3.48 %   balanced  7.79 %
 
-Without a profile, balancing is exactly a no-op: it moves the internal block by
-a median of 0.011 and the multipliers not at all, because a proportional split
-already satisfies every margin. Every number in `run_split_backtest.py`,
-`run_split_screen.py` and `run_internal_block_backtest.py` is therefore a
-delivered number, not a seed number.
+Without a profile, balancing is exactly a no-op: the delivered table matches the
+seed in **96 of 96**, because a proportional split already satisfies every
+margin. Every number in `run_split_backtest.py`, `run_split_screen.py` and
+`run_internal_block_backtest.py` is therefore a delivered number, not a seed
+number.
 
-With a profile it is not. Balancing moves the internal block by a median of
-**52.8 and up to 2,486**, and the multiplier error worsens in 24 of 35.
+(It was 93 of 96 until the three splits of `Q87_88` that the engine refused
+outright were fixed — a parent with no internal sales whose zero block carried
+a rounding-sized target that three sign tests read as a sign. See
+`tests/test_engine.py`.)
 
-Paired, on the 35 splits where both variants complete:
+With a profile it is not. The multiplier error worsens in 42 of the 56 splits
+where both variants complete:
 
-    no profile, balanced        10.04 %
-    true profile, seed           4.82 %
-    true profile, balanced      10.60 %
-    the profile beats doing nothing in 21 of 35
+    no profile, balanced         7.78 %
+    true profile, seed           3.48 %
+    true profile, balanced       7.79 %
+    the profile beats doing nothing in 30 of 56
 
-**And the engine refuses the profiled scenario outright in 19 of 54** — 16
-`ScenarioInfeasible`, 3 `BalancingError`.
+**And the engine refuses the profiled scenario outright in 40 of 96.**
 
 WHY, AND IT IS THE ENGINE'S OWN DESIGN
 ----------------------------------------
@@ -84,16 +86,16 @@ total the block still has, over the block's own size — and the report prints i
 "so the limit is visible before you hit it". On these 54 splits it is not a hint
 about the refusal, it IS the refusal:
 
-    headroom negative in the seed    16    refused    16
-    headroom positive                35    refused     0
+    headroom negative in the seed    37    refused    37
+    headroom positive                56    refused     0
 
-Exact, both ways, with no threshold to tune. Three splits have no internal
-block at all, so there is no headroom to read on them.
+Exact, both ways, with no threshold to tune, on 93 of the 96 — the other three
+have no internal block at all, so there is no headroom to read on them.
 
 What it does NOT do is say how much a SURVIVING profile will cost. The sign is
-consistent — less room, more damage, r = -0.42 pooled and negative in all four
-countries (FR -0.28, BE -0.43, HU -0.48, SK -0.48) — but splitting the
-survivors at the median gives +7.5 points against +0.3 pooled and only +6.9
+consistent — less room, more damage, r = -0.45 pooled and negative in all four
+countries (FR -0.28, BE -0.43, HU -0.50, SK -0.48) — but splitting the
+survivors at the median gives +6.5 points against +0.9 pooled and only +6.9
 against +5.5 within France. That is enough to confirm the mechanism and not
 enough to set a rule on.
 
@@ -137,7 +139,7 @@ reduce it.
 WHAT TO TELL A USER
 ---------------------
 A genuine input profile makes the seed much better and the delivered table
-barely better: 21 of 35 improve, and the engine refuses 19 of 54 scenarios
+barely better: 30 of 56 improve, and the engine refuses 40 of 96 scenarios
 outright. That is not a reason to skip profiles — it is a reason not to expect
 the seed's improvement to survive.
 
@@ -167,8 +169,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 DATA = ROOT / "data" / "eurostat"
-FINE = {"FR": "naio_10_cp1700_FR_2021.json", "SK": "naio_10_cp1700_SK_2015.json",
-        "BE": "naio_10_cp1700_BE_2022.json", "HU": "naio_10_cp1700_HU_2022.json"}
+# Keyed by country-year, not country: Hungary publishes four consecutive years
+# and keying on "HU" alone kept one of them and silently dropped three.
+FINE = {"FR 2021": "naio_10_cp1700_FR_2021.json",
+        "SK 2015": "naio_10_cp1700_SK_2015.json",
+        "BE 2022": "naio_10_cp1700_BE_2022.json",
+        "HU 2020": "naio_10_cp1700_HU_2020.json",
+        "HU 2021": "naio_10_cp1700_HU_2021.json",
+        "HU 2022": "naio_10_cp1700_HU_2022.json",
+        "HU 2023": "naio_10_cp1700_HU_2023.json"}
 COARSE = "naio_10_cp1700_ES_2022.json"
 FAIL: list[str] = []
 
@@ -315,8 +324,19 @@ def main() -> int:
           float((own < none).mean()) > 0.8,
           f"better in {int((own < none).sum())} of {len(live)}")
 
+    # ANOTHER COUNTRY, NOT ANOTHER YEAR. Hungary supplies four of the seven
+    # tables, so `from_*` now mixes two very different things: a profile taken
+    # from a different country, and one taken from the same country a year
+    # apart. run_key_carryover.py measured the second as nearly free, so pooling
+    # them would have turned a coin flip into a spurious 62 % win rate.
     pairs = [(r["geo"], r["parent"], r["none"], v) for r in live
-             for k, v in r.items() if k.startswith("from_") and v is not None]
+             for k, v in r.items()
+             if k.startswith("from_") and v is not None
+             and k[len("from_"):].split()[0] != r["geo"].split()[0]]
+    same_country = [(r["none"], v) for r in live
+                    for k, v in r.items()
+                    if k.startswith("from_") and v is not None
+                    and k[len("from_"):].split()[0] == r["geo"].split()[0]]
     base = np.array([p[2] for p in pairs])
     bor = np.array([p[3] for p in pairs])
     gain = base - bor
@@ -324,6 +344,18 @@ def main() -> int:
     print()
     print(f"    {'borrowed from another country':<38}"
           f"median {np.median(bor):>5.1f} %   ({len(pairs)} borrowings)")
+    if same_country:
+        sb = np.array([a for a, _ in same_country])
+        sv = np.array([b for _, b in same_country])
+        print(f"    {'borrowed from the SAME country, another year':<46}"
+              f"median {np.median(sv):>5.1f} %   ({len(sv)} borrowings)")
+        check("while the same country a year apart is not a coin flip at all",
+              float((sv < sb).mean()) > 0.6,
+              f"improves in {int((sv < sb).sum())} of {len(sv)} — "
+              f"{(sv < sb).mean() * 100:.0f} %. What travels is the TABLE, not "
+              f"the sector, the same way run_key_carryover.py and "
+              f"run_split_screen.py find it from their own sides")
+
     check("a borrowed profile is a coin flip",
           0.4 < float((gain > 0).mean()) < 0.6,
           f"improves in {int((gain > 0).sum())} of {len(pairs)}, worsens in "
@@ -399,7 +431,7 @@ def main() -> int:
     # suite takes seventy seconds. The four-country figures are in the
     # docstring; the effect is the same in each — seed 4.36/14.70/3.17/2.25
     # against balanced 12.21/14.86/6.70/3.67 for FR/BE/HU/SK.
-    LIVE = "FR"
+    LIVE = "FR 2021"   # keyed by country-year since Hungary supplies four
     paired, refused, noop, head = [], 0, 0, []
     for r in [x for x in live if x["geo"] == LIVE]:
         geo, parent, kids = r["geo"], r["parent"], None
@@ -484,8 +516,8 @@ def main() -> int:
               f"the seed is {np.median(ps):.2f} % and the delivered table "
               f"{np.median(pb):.2f} %, against {np.median(nb):.2f} % for doing "
               f"nothing — a wash. The profile still edges it in "
-              f"{int((pb < nb).sum())} of {len(paired)} here and in 21 of 35 "
-              f"across all four countries, but by margins the medians do not "
+              f"{int((pb < nb).sum())} of {len(paired)} here and in 30 of 56 "
+              f"over all seven tables, but by margins the medians do not "
               f"show")
         check("because the whole adjustment lands in the internal block",
               True,
