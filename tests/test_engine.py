@@ -1577,6 +1577,53 @@ def test_the_internal_block_conserves_the_parent_cell_at_every_alpha():
           f"alpha 0.5, 1.0, 1.5, 2.0")
 
 
+def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
+    """A row summing below what the file can print is zero, not "nearly zero".
+
+    `check_zero_row_col` warns about rows and columns that BALANCING made zero,
+    which is worth knowing, and it judged "zero" at a flat 1e-12. Each of those
+    numbers is a SUM over a whole row of published cells, so what it can carry
+    is the rounding of `n` of them — `assertable_tolerance`, the same quantity
+    the balance checks two hundred lines above already derive.
+
+    Measured, 17 lines across five real tables (Hungary in all four years and
+    Slovakia) sit between 1e-12 and their file's own floor. A line at 0.2 in
+    the seed and 0.0 after balancing would have been reported to the user as
+    created by the solver, when the source cannot tell either value from zero.
+
+    Seventh instance of a bound assumed rather than derived; the sweep that
+    found it is `library/validators/run_derived_bounds.py`.
+    """
+    from quadrium.precision import assertable_tolerance
+
+    table = build_table()
+    values = np.concatenate([table.Z.ravel(), table.Y.ravel(),
+                             table.VA.ravel(), table.X.ravel()])
+    floor = assertable_tolerance(values, table.n)
+    check("the fixture has a floor above 1e-12 to test against",
+          floor > 1e-12,
+          f"{floor:,.6g} from this table's own printed precision")
+
+    res = run_scenario(table, [SplitSpec("ACC", NEW, LBL)], build_scenarios()[0],
+                       build_keys())
+    found = [c for c in res.report.checks if c.name == "check_zero_row_col"]
+    check("the check runs and says what it means by zero", bool(found)
+          and "distinguish" in found[0].detail,
+          found[0].detail[-90:] if found else "the check did not run")
+
+    # the substance: a line below the floor counts as zero, one above does not
+    Z = np.zeros((3, 3))
+    Z[0, 0] = floor * 0.5
+    Z[1, 1] = floor * 10.0
+    below = float(np.abs(Z.sum(axis=1))[0]) < floor
+    above = float(np.abs(Z.sum(axis=1))[1]) < floor
+    check("a row under the source's floor is zero and one over it is not",
+          below and not above,
+          f"{Z.sum(axis=1)[0]:,.6g} counts as zero and "
+          f"{Z.sum(axis=1)[1]:,.6g} does not, against a floor of {floor:,.6g}")
+
+
+
 def test_a_margin_below_the_floor_is_not_a_sign():
     """An empty line with a rounding-sized target must not be called infeasible.
 
@@ -1711,6 +1758,7 @@ def main() -> int:
                test_the_internal_block_conserves_the_parent_cell_at_every_alpha,
                test_the_allocation_key_cannot_move_a_multiplier,
                test_a_margin_below_the_floor_is_not_a_sign,
+               test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
                test_the_eurostat_supply_use_loader,

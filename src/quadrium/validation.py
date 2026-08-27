@@ -625,17 +625,33 @@ def validate_scenario(table: IOTable, scenario: Scenario, seed: dict,
     # final consumption, and T97, households as employers, has neither sales nor
     # purchases because it is pure labour. A zero that BALANCING created is a
     # different animal and is the one worth investigating.
+    #
+    # ZERO IS THE SOURCE'S ZERO, NOT 1e-12. Each of these is a SUM over a whole
+    # row or column, so what it can carry is the rounding of `n` published
+    # cells -- `assertable_tolerance`, the same quantity the balance checks
+    # above derive. Judged at 1e-12 instead, Hungary 2020 and 2021 each have
+    # FOUR lines the file cannot tell from zero and this check calls non-zero:
+    # a line sitting at 0.2 in the seed and at 0.0 after balancing would be
+    # reported to the user as "created by balancing" when it was already zero
+    # as far as the source can say. Seventh instance of a bound assumed rather
+    # than derived (INDEX.md section 9); `run_derived_bounds.py` holds the
+    # sweep that found it.
     codes = seed["codes"]
-    zr = np.flatnonzero(np.abs(Z_balanced.sum(axis=1)) < 1e-12)
-    zc = np.flatnonzero(np.abs(Z_balanced.sum(axis=0)) < 1e-12)
-    was_zr = set(np.flatnonzero(np.abs(seed["Z"].sum(axis=1)) < 1e-12).tolist())
-    was_zc = set(np.flatnonzero(np.abs(seed["Z"].sum(axis=0)) < 1e-12).tolist())
+    src_values = np.concatenate([table.Z.ravel(), table.Y.ravel(),
+                                 table.VA.ravel(), table.X.ravel()])
+    zero_tol = max(assertable_tolerance(src_values, table.n), 1e-12)
+    zr = np.flatnonzero(np.abs(Z_balanced.sum(axis=1)) < zero_tol)
+    zc = np.flatnonzero(np.abs(Z_balanced.sum(axis=0)) < zero_tol)
+    was_zr = set(np.flatnonzero(np.abs(seed["Z"].sum(axis=1)) < zero_tol).tolist())
+    was_zc = set(np.flatnonzero(np.abs(seed["Z"].sum(axis=0)) < zero_tol).tolist())
     new_zeros = ([f"row {codes[i]}" for i in zr if i not in was_zr]
                  + [f"col {codes[j]}" for j in zc if j not in was_zc])
     pre = ([f"row {codes[i]}" for i in zr if i in was_zr]
            + [f"col {codes[j]}" for j in zc if j in was_zc])
     detail = (f"{len(new_zeros)} zero row/column(s) created by balancing"
-              + (f": {', '.join(new_zeros)}" if new_zeros else ""))
+              + (f": {', '.join(new_zeros)}" if new_zeros else "")
+              + f". Zero means below {zero_tol:,.4g}, which is what this "
+                f"source's own precision can distinguish from it")
     if pre:
         detail += (f". {len(pre)} were already zero in the seed and are not "
                    f"attributable to the solver: {', '.join(pre)}")

@@ -574,16 +574,29 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
                                                 ava_dim: total_code})
     got = sum(cube.at(stk_flow=flow, **{use_dim: "TU", ava_dim: c})
               for c in codes)
-    # Relative, for the reason given in `load_sut`: cells are rounded to two
-    # decimals and the aggregate is published independently, so a 65-term sum
-    # lands a few hundredths away. A set that genuinely mixed levels would be
-    # out by a factor, not by a rounding -- Italy's was 2.4x before the
-    # hierarchy filter.
+    # THE THIRD TILING CHECK IN THIS FILE, AND THE LAST ONE STILL GUESSING.
+    #
+    # The reasoning was right and the quantity was wrong: cells are rounded and
+    # the aggregate is published independently, so a 65-term sum lands a few
+    # hundredths away, and a set that genuinely mixed levels would be out by a
+    # factor (Italy's was 2.4x before the hierarchy filter). But the rounding a
+    # sum carries scales with the NUMBER OF TERMS, not with the total's size,
+    # so `1e-6 x total` bounds the wrong thing -- and `_rounding_tol`, which
+    # bounds the right one, is called two lines above for the tiling itself.
+    #
+    # Measured on the 14 pairs held here, the two disagree every time and the
+    # direction flips with the table: the Netherlands 2022 floor is 32.5 and
+    # the constant 2.87, eleven times too TIGHT, which is the direction that
+    # refuses a valid file; France 2022 is 4.45 against 6.12, too loose. Seventh
+    # instance of a bound assumed rather than derived (INDEX.md section 9).
+    tiling_tol = _rounding_tol(len(codes), published_values)
     if (published_total is not None
-            and abs(got - published_total) > 1e-6 * abs(published_total)):
+            and abs(got - published_total) > tiling_tol):
         raise EurostatError(
             f"the {len(codes)} codes that carry values sum to {got:,.1f} "
-            f"against a published total of {published_total:,.1f}"
+            f"against a published total of {published_total:,.1f}, which is "
+            f"further apart than the {tiling_tol:,.4g} this file's own "
+            f"rounding can account for"
             + _shortfall_diagnosis(cube, use_dim, ava_dim, flow, pref,
                                    total_code, codes, got, published_total,
                                    aggregated_away))
