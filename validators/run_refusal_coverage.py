@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     159 refusal sites of the engine's own types
-     81 reached by something in the suite
-     78 never reached
+     84 reached by something in the suite
+     75 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -50,14 +50,14 @@ nothing."*
 messages and recording what each one judges gives:
 
     what it judges                          total   unreached
-    a file or response from an office          52          35
+    a file or response from an office          52          32
     the user's own spreadsheet                 56          16
     what they asked for in that spreadsheet    20           7
     the numbers themselves                     19           9
     an internal API contract (the CALLER)       7           6
     a failure elsewhere, re-raised               5           5
 
-**Six of the 78 are caller checks — 8 %, not "most".** The largest group is
+**Six of the 75 are caller checks — 8 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
@@ -102,6 +102,14 @@ then indexed `doc["dimension"]` two lines below, so a response carrying the
 first two and not the third came out as a raw `KeyError` — a traceback where the
 user should have had *"this is not a JSON-stat response"*. Nothing in the suite
 had ever handed the loader a half-formed response. Fixed to require all three.
+
+And twice it caught the test looking in the wrong place, which is the same
+lesson from the other side: the INE's interior table does not balance as
+published (`OQ-D-04`), so every mutation met the balance refusal until the case
+passed the policy that gets past it; and the product codes are read from
+`Tabla2` over a row range computed per vintage, so a case aimed at `Tabla1`
+quietly changed nothing and the table loaded. The row is now found by the
+pattern the loader itself matches.
 
 Four times in these passes the engine gave an EARLIER and more specific refusal
 than the case was aiming at — a split's rows must agree on their key before the

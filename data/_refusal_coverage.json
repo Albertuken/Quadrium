@@ -49,6 +49,7 @@
   "eurostat.py:1257",
   "eurostat.py:461",
   "eurostat.py:512",
+  "eurostat.py:517",
   "eurostat.py:523",
   "eurostat.py:537",
   "eurostat.py:572",
@@ -72,6 +73,8 @@
   "io_loader.py:212",
   "io_loader.py:356",
   "io_loader.py:564",
+  "io_loader.py:599",
+  "io_loader.py:605",
   "io_loader.py:627",
   "io_loader.py:685",
   "io_loader.py:688",
@@ -108,11 +111,11 @@
   },
   "EurostatError": {
    "total": 27,
-   "fired": 14
+   "fired": 15
   },
   "LoaderError": {
    "total": 39,
-   "fired": 17
+   "fired": 19
   },
   "MarginImbalanceError": {
    "total": 1,

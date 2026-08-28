@@ -1700,6 +1700,71 @@ def test_the_refusals_about_a_FILE_FROM_AN_OFFICE():
             else:
                 check(f"the engine refuses {name}", False, "it built a table")
 
+        # Value edits rather than structural ones: the file keeps its shape and
+        # stops adding up, which is the harder half of what an office can send.
+        def blank(codes, dim="prd_ava"):
+            """Erase every value on one axis position, leaving the shape."""
+            def edit(d):
+                ids, size = d["id"], d["size"]
+                if dim not in ids:
+                    return
+                k = ids.index(dim)
+                stride = 1
+                for j in range(k + 1, len(size)):
+                    stride *= size[j]
+                idx = d["dimension"][dim]["category"]["index"]
+                wanted = {idx[c] for c in codes if c in idx}
+                d["value"] = {f: v for f, v in d["value"].items()
+                              if (int(f) // stride) % size[k] not in wanted}
+            return edit
+
+        try:
+            load_iot(base, variant="imports")
+        except EurostatError as exc:
+            check("the engine refuses the one valuation that has no output "
+                  "vector, and explains why",
+                  "imports" in str(exc) and "P1" in str(exc),
+                  str(exc)[:86] + "…")
+        except Exception as exc:                       # noqa: BLE001
+            check("the engine refuses the one valuation that has no output "
+                  "vector, and explains why", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("the engine refuses the one valuation that has no output "
+                  "vector, and explains why", False, "it built a table")
+
+        try:
+            load_iot(base, variant="sideways")
+        except EurostatError as exc:
+            check("and any valuation that is not one of the three",
+                  "sideways" in str(exc), str(exc)[:86] + "…")
+        except Exception as exc:                       # noqa: BLE001
+            check("and any valuation that is not one of the three", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("and any valuation that is not one of the three", False,
+                  "it built a table")
+
+        # A file whose parts stop adding up to the total it also publishes. The
+        # shape is untouched; one product simply carries no value any more, so
+        # the codes that remain fall short of `CPA_TOTAL`.
+        one = next(c for c in load_iot(base).sector_codes[:5])
+        try:
+            load_iot(mutated(blank([f"CPA_{one}"]), "short.json"))
+        except EurostatError as exc:
+            check("the engine refuses a file whose products no longer sum to "
+                  "the total it publishes",
+                  "sum" in str(exc).lower() or "populated" in str(exc).lower(),
+                  str(exc)[:86] + "…")
+        except Exception as exc:                       # noqa: BLE001
+            check("the engine refuses a file whose products no longer sum to "
+                  "the total it publishes", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("the engine refuses a file whose products no longer sum to "
+                  "the total it publishes", False,
+                  "it built a table from parts that do not add up")
+
         # A PAIR has to be the same country and year, and the message says so.
         supply = DATA / "naio_10_cp15_ES_2022.json"
         use = DATA / "naio_10_cp16_ES_2022.json"
@@ -1806,6 +1871,55 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
                 lambda: load_ine_tio(
                     variant(ine, drop_sheet("Tabla2"), "ine2.xlsx")),
                 "is missing")
+
+        # One cell at a time, inside a sheet that is present and the right
+        # shape. The INE's interior table does not balance as published
+        # (`OQ-D-04`), so these pass the policy the loader needs to get past
+        # that -- otherwise every mutation would meet the balance refusal
+        # instead of the one it aims at, which is what the first version did.
+        from quadrium.io_loader import _INE
+        col = _INE["col_label"] + 1
+        ok_policy = dict(unbalanced="residual_column")
+
+        # The product codes are read from `Tabla2`, not `Tabla1`, and from a row
+        # range the loader computes per vintage -- so the row is found by the
+        # pattern the loader itself matches rather than assumed. The first
+        # version of this aimed at Tabla1 and quietly changed nothing.
+        import re as _re
+        _numbered = _re.compile(r"^\s*\d{1,3}(?:\s+bis)?\s*\.")
+
+        def first_label_row(path=ine, sheet="Tabla2"):
+            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+            for r, row in enumerate(wb[sheet].iter_rows(values_only=True), 1):
+                if len(row) > col - 1 and row[col - 1] is not None \
+                        and _numbered.match(str(row[col - 1])):
+                    return r
+            return None
+
+        row0 = first_label_row()
+        check("the INE product labels are where the loader says they are",
+              row0 is not None,
+              f"first numbered label on 'Tabla2' row {row0}")
+        if row0 is None:
+            return
+
+        refuses("an INE product label that is not numbered the way the INE "
+                "numbers them",
+                lambda: load_ine_tio(variant(
+                    ine,
+                    lambda wb: setattr(wb["Tabla2"].cell(row=row0, column=col),
+                                       "value", "just a name"), "ine3.xlsx"),
+                    **ok_policy),
+                "not a numbered product label")
+
+        refuses("two INE products that carry the same code",
+                lambda: load_ine_tio(variant(
+                    ine,
+                    lambda wb: setattr(
+                        wb["Tabla2"].cell(row=row0 + 1, column=col), "value",
+                        wb["Tabla2"].cell(row=row0, column=col).value),
+                    "ine4.xlsx"), **ok_policy),
+                "duplicate INE product codes")
 
 
 
