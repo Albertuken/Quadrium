@@ -1624,6 +1624,92 @@ def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
 
 
 
+def test_the_refusals_that_judge_DATA_actually_fire():
+    """Four promises the engine makes to a user that nothing had ever tested.
+
+    `run_refusal_coverage.py` wrapped every exception type the engine defines,
+    ran the whole suite, and found **49 of 159 refusal sites reached**. Most of
+    the rest are argument checks that judge what the CALLER passed — `model 'X'
+    is not one of the four` — and no published table can reach them, so their
+    being unexercised costs nothing.
+
+    Four are different: they judge the DATA, so they are what a user meets
+    first if their table is the wrong shape of wrong, and not one had a case.
+    `transformation.py` is the starkest — the SUT-to-IOT step carries four
+    models from CORE_013 and ONE of its eleven refusals had ever fired.
+
+    Each is reachable with a table of the right shape and the wrong contents,
+    which is what this builds.
+    """
+    from quadrium.sut_ras import DegenerateMarginError, sut_ras
+    from quadrium.transformation import (TransformationError, market_shares,
+                                         product_mix)
+
+    V_T = np.array([[80.0, 0.0], [20.0, 0.0]])   # product 2 is made by nobody
+    g = V_T.sum(axis=0)
+    x = V_T.sum(axis=1)
+    try:
+        product_mix(V_T, g)
+    except TransformationError as exc:
+        check("a zero industry total refuses the transformation by name",
+              "industry output g" in str(exc) and "zero" in str(exc),
+              str(exc)[:88] + "…")
+    else:
+        check("a zero industry total refuses the transformation by name", False,
+              "it returned a matrix built on a division by zero")
+
+    V_T2 = np.array([[80.0, 20.0], [0.0, 0.0]])   # product 2 has no output
+    try:
+        market_shares(V_T2, V_T2.sum(axis=1))
+    except TransformationError as exc:
+        check("and so does a zero product total, from the other coefficient",
+              "product output x" in str(exc),
+              str(exc)[:88] + "…")
+    else:
+        check("and so does a zero product total, from the other coefficient",
+              False, "it returned a matrix built on a division by zero")
+
+    # SUT-RAS: a product row whose non-negative part sums to zero has no root.
+    n = 2
+    Pd = np.zeros((n, n))
+    Nd = np.array([[0.0, 5.0], [5.0, 0.0]])       # everything negative
+    Pm = np.zeros((n, n))
+    Nm = np.zeros((n, n))
+    Pv = np.zeros((n, n))
+    Nv = np.zeros((n, n))
+    try:
+        sut_ras(Pd, Nd, Pm, Nm, Pv, Nv,
+                m=np.zeros(n), x=np.ones(n), u=np.ones(n),
+                MT=np.zeros(n))
+        check("a product row with no non-negative part is refused, not solved",
+              False, "it returned a table")
+    except DegenerateMarginError as exc:
+        check("a product row with no non-negative part is refused, not solved",
+              "product rows" in str(exc) or "import rows" in str(exc),
+              str(exc)[:88] + "…")
+    except Exception as exc:                       # noqa: BLE001
+        check("a product row with no non-negative part is refused, not solved",
+              False, f"{type(exc).__name__} instead: {str(exc)[:70]}")
+
+    # The import side has its own root and its own refusal, and the distinction
+    # that matters is INERT against DEGENERATE: a row that is entirely empty is
+    # left alone with a factor of 1 (the fix that made SUT-RAS runnable on real
+    # tables at all), while one that has negative mass and no positive mass is
+    # genuinely unsolvable. This builds the second, not the first.
+    from quadrium.sut_ras import _import_factors
+    Pm = np.zeros((2, 2))
+    Nm = np.array([[0.0, 4.0], [0.0, 0.0]])
+    try:
+        _import_factors(Pm, Nm, m=np.array([1.0, 0.0]), s=np.ones(2), r=1.0)
+        check("and an import row that is negative-only is refused, not inert",
+              False, "it returned a factor for a row that has no root")
+    except DegenerateMarginError as exc:
+        check("and an import row that is negative-only is refused, not inert",
+              "import rows" in str(exc),
+              str(exc)[:88] + "…")
+
+
+
 def test_a_margin_below_the_floor_is_not_a_sign():
     """An empty line with a rounding-sized target must not be called infeasible.
 
@@ -1758,6 +1844,7 @@ def main() -> int:
                test_the_internal_block_conserves_the_parent_cell_at_every_alpha,
                test_the_allocation_key_cannot_move_a_multiplier,
                test_a_margin_below_the_floor_is_not_a_sign,
+               test_the_refusals_that_judge_DATA_actually_fire,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,

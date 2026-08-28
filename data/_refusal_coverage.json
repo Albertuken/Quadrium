@@ -1,0 +1,109 @@
+{
+ "_note": "Which of the engine's own refusals anything in the suite has ever reached. Taken 2026-08-27 by wrapping each quadrium exception class so that constructing one records the raise site, then running every validator and the unit tests as separate processes. Sites are file:line of the `raise`. See run_refusal_coverage.py.",
+ "taken": "2026-08-28",
+ "n_sites": 159,
+ "fired": [
+  "acquire.py:167",
+  "balancing.py:198",
+  "balancing.py:63",
+  "config.py:121",
+  "config.py:128",
+  "config.py:136",
+  "config.py:146",
+  "config.py:340",
+  "config.py:354",
+  "config.py:585",
+  "config.py:701",
+  "config.py:797",
+  "config.py:815",
+  "config.py:830",
+  "config.py:862",
+  "config.py:869",
+  "config.py:912",
+  "config.py:955",
+  "disaggregation.py:255",
+  "disaggregation.py:291",
+  "disaggregation.py:299",
+  "disaggregation.py:303",
+  "disaggregation.py:312",
+  "disaggregation.py:625",
+  "disaggregation.py:638",
+  "disaggregation.py:647",
+  "eurostat.py:1068",
+  "eurostat.py:1250",
+  "eurostat.py:505",
+  "eurostat.py:565",
+  "eurostat.py:595",
+  "eurostat.py:659",
+  "eurostat.py:669",
+  "eurostat.py:695",
+  "eurostat.py:733",
+  "eurostat.py:836",
+  "gras.py:288",
+  "gras.py:367",
+  "gras.py:473",
+  "io_loader.py:1148",
+  "io_loader.py:1182",
+  "io_loader.py:1193",
+  "io_loader.py:1199",
+  "io_loader.py:356",
+  "io_loader.py:564",
+  "io_loader.py:704",
+  "scenarios.py:106",
+  "sut_euro.py:273",
+  "sut_ras.py:126",
+  "sut_ras.py:172",
+  "transformation.py:122",
+  "transformation.py:401"
+ ],
+ "by_type": {
+  "AcquisitionRefused": {
+   "total": 6,
+   "fired": 1
+  },
+  "BalancingError": {
+   "total": 4,
+   "fired": 2
+  },
+  "ConfigError": {
+   "total": 41,
+   "fired": 15
+  },
+  "DegenerateMarginError": {
+   "total": 2,
+   "fired": 2
+  },
+  "DisaggregationError": {
+   "total": 20,
+   "fired": 8
+  },
+  "EurostatError": {
+   "total": 27,
+   "fired": 10
+  },
+  "LoaderError": {
+   "total": 39,
+   "fired": 7
+  },
+  "MarginImbalanceError": {
+   "total": 1,
+   "fired": 1
+  },
+  "ScenarioInfeasible": {
+   "total": 1,
+   "fired": 1
+  },
+  "SignInfeasibleError": {
+   "total": 3,
+   "fired": 2
+  },
+  "SutEuroError": {
+   "total": 4,
+   "fired": 1
+  },
+  "TransformationError": {
+   "total": 11,
+   "fired": 2
+  }
+ }
+}
