@@ -15,7 +15,10 @@
   "config.py:585",
   "config.py:693",
   "config.py:701",
+  "config.py:719",
   "config.py:767",
+  "config.py:783",
+  "config.py:794",
   "config.py:797",
   "config.py:815",
   "config.py:830",
@@ -23,6 +26,7 @@
   "config.py:869",
   "config.py:876",
   "config.py:883",
+  "config.py:889",
   "config.py:906",
   "config.py:912",
   "config.py:917",
@@ -32,6 +36,11 @@
   "disaggregation.py:299",
   "disaggregation.py:303",
   "disaggregation.py:312",
+  "disaggregation.py:333",
+  "disaggregation.py:336",
+  "disaggregation.py:55",
+  "disaggregation.py:61",
+  "disaggregation.py:621",
   "disaggregation.py:625",
   "disaggregation.py:638",
   "disaggregation.py:647",
@@ -78,7 +87,7 @@
   },
   "ConfigError": {
    "total": 41,
-   "fired": 21
+   "fired": 25
   },
   "DegenerateMarginError": {
    "total": 2,
@@ -86,7 +95,7 @@
   },
   "DisaggregationError": {
    "total": 20,
-   "fired": 8
+   "fired": 13
   },
   "EurostatError": {
    "total": 27,

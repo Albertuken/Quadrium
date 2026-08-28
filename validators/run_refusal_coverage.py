@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     159 refusal sites of the engine's own types
-     63 reached by something in the suite
-     96 never reached
+     72 reached by something in the suite
+     87 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -51,13 +51,13 @@ messages and recording what each one judges gives:
 
     what it judges                          total   unreached
     a file or response from an office          52          41
-    the user's own spreadsheet                 56          23
-    what they asked for in that spreadsheet    20          11
+    the user's own spreadsheet                 56          19
+    what they asked for in that spreadsheet    20           7
     the numbers themselves                     19           9
-    an internal API contract (the CALLER)       7           7
+    an internal API contract (the CALLER)       7           6
     a failure elsewhere, re-raised               5           5
 
-**Seven of the 96 are caller checks — 7 %, not "most".** The largest group is
+**Six of the 87 are caller checks — 7 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
@@ -81,8 +81,21 @@ of a split's key gives *"names more than one allocation key"* — the rows of on
 split must agree before anything else is asked — which is an earlier and correct
 refusal, and the case was rewritten to cover both.
 
-Workbook coverage went 22 of 56 to 33 of 56; `config.py` 15 of 41 to 21 of 41,
-`io_loader.py` 7 of 39 to 12 of 39.
+A third pass took the refusals that judge what was ASKED FOR — a split into
+fewer than two parts, a key with the wrong number of weights, a scenario naming
+a key nobody defined, a new code that already exists in the table. Those are a
+direct call from the synthetic fixture away, so nothing but not looking had kept
+them untested.
+
+Workbook coverage went 22 of 56 to 37 of 56, `scenario` 9 of 20 to 13 of 20;
+`config.py` 15 of 41 to 25 of 41, `io_loader.py` 7 of 39 to 12 of 39.
+
+Three times in these passes the engine gave an EARLIER and more specific refusal
+than the case was aiming at — a split's rows must agree on their key before the
+key is looked up; a new code that already exists is caught before the collision
+with the sector being split; an absent `keys` sheet reads as empty, so the
+split's own check fires first. Each time the test was rewritten, not the
+engine.
 
 The classification lives in `data/_refusal_coverage.json` so it is held rather
 than repeated, and it was made by reading each message rather than by matching

@@ -1624,6 +1624,82 @@ def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
 
 
 
+def test_the_refusals_about_what_was_ASKED_FOR():
+    """Eleven refusals judge the split itself, and none had a case.
+
+    These sit between the workbook and the numbers: the sheets parsed, the
+    table loaded, and then what the user asked for does not hold together — a
+    key with the wrong number of weights, weights that do not sum to one, a new
+    subsector code that collides with a sector being split. They are a direct
+    call away from the synthetic fixture, so there was no reason for them to be
+    untested beyond nobody having looked.
+    """
+    from quadrium.disaggregation import (DisaggregationError, split_sector,
+                                         split_sectors)
+    from quadrium.models import AllocationKey
+
+    table = build_table()
+    keys = build_keys()
+    sc = Scenario(scenario_id="s", label="s",
+                  keys_by_block={"output": "key_turnover"})
+    spec = SplitSpec("ACC", NEW, LBL, keys_by_block={"output": "key_turnover"})
+
+    def refuses(name, fn, fragment):
+        try:
+            fn()
+        except DisaggregationError as exc:
+            check(f"the engine refuses {name}", fragment.lower() in str(exc).lower(),
+                  str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+        except Exception as exc:                       # noqa: BLE001
+            check(f"the engine refuses {name}", False,
+                  f"{type(exc).__name__} instead: {str(exc)[:66]}")
+        else:
+            check(f"the engine refuses {name}", False, "it went ahead")
+
+    refuses("a split into fewer than two subsectors",
+            lambda: split_sector(table, "ACC", NEW[:1], LBL[:1], sc, keys, spec),
+            "fewer than 2")
+    refuses("codes and labels of different lengths",
+            lambda: split_sector(table, "ACC", NEW, LBL[:2], sc, keys, spec),
+            "differ in length")
+    refuses("a scenario that asks for no splits at all",
+            lambda: split_sectors(table, [], sc, keys),
+            "no splits requested")
+    # Aimed at "repeats the code of a sector being split" and met an earlier,
+    # more specific one: the code already exists in the table at all, which is
+    # checked first. That is the engine being right; the case covers what it
+    # actually says.
+    refuses("a new subsector code that already exists in the table",
+            lambda: split_sectors(
+                table,
+                [SplitSpec("ACC", ["ACC", "CAM"], ["a", "b"],
+                           keys_by_block={"output": "key_turnover"})],
+                sc, keys),
+            "already exist in the table")
+
+    # a key whose weights do not match the number of parts, and one the
+    # scenario names but the workbook never defined
+    bad_len = dict(keys)
+    k = keys["key_turnover"]
+    bad_len["key_turnover"] = AllocationKey(
+        key_id="key_turnover", applies_to="output", new_sector_codes=NEW[:2],
+        raw_values=[1.0, 1.0], source=k.source, source_year=k.source_year,
+        strength=k.strength)
+    refuses("a key with the wrong number of weights for the split",
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, bad_len, spec),
+            "weights for")
+    refuses("a scenario naming a key that was never defined",
+            lambda: split_sector(
+                table, "ACC", NEW, LBL,
+                Scenario(scenario_id="s", label="s",
+                         keys_by_block={"output": "absent"}),
+                keys,
+                SplitSpec("ACC", NEW, LBL,
+                          keys_by_block={"output": "absent"})),
+            "not among the loaded keys")
+
+
+
 def test_the_config_refusals_a_stranger_meets_next():
     """The other half of the front door: the sheets that say what to split.
 
@@ -1713,6 +1789,17 @@ def test_the_config_refusals_a_stranger_meets_next():
              set_cell("profiles", 2, 4, "a lot"), "intensity"),
             ("a key row with an empty required field",
              set_cell("keys", 2, 4, None), "empty"),
+            ("a table_path that points at nothing",
+             set_project("table_path", "no/such/table.xlsx"), "does not"),
+            ("a table_unbalanced that is not one of the two policies",
+             set_project("table_unbalanced", "shrug"), "table_unbalanced"),
+            # `keys` absent is read as empty, not missing, so the split's own
+            # key check fires first -- which is a better message anyway. The
+            # required-sheet refusal needs one of the sheets that must exist.
+            ("a workbook with one of the required sheets deleted",
+             lambda wb: wb.remove(wb["splits"]), "missing the sheet"),
+            ("a split whose subsectors and whose key disagree",
+             set_cell("keys", 2, 2, "I999"), "but key"),
         ]
         for name, edit, fragment in cases:
             try:
@@ -2047,6 +2134,7 @@ def main() -> int:
                test_the_refusals_that_judge_DATA_actually_fire,
                test_the_workbook_refusals_a_stranger_meets_first,
                test_the_config_refusals_a_stranger_meets_next,
+               test_the_refusals_about_what_was_ASKED_FOR,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
