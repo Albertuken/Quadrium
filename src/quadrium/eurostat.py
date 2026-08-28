@@ -184,6 +184,37 @@ def fetch(dataset: str, geo: str, year: int, dest: Path | str,
             "n_values": len(doc["value"])}
 
 
+
+def _read_cube(path) -> dict:
+    """Read a saved JSON-stat file, refusing anything that is not one BY NAME.
+
+    `json.loads(path.read_text())` raises `UnicodeDecodeError` on a binary file
+    and `JSONDecodeError` on a text one, and both reach the user as a traceback.
+    That is reachable by an ordinary mistake: `table_kind` and `table_path` sit
+    next to each other in the template, so pointing the Eurostat route at a
+    spreadsheet is one wrong line, and the engine answered it with a codec
+    error from `codecs.py`.
+
+    The download path already refuses a non-JSON response by name
+    (`{url} did not return JSON`); the read path did not.
+    """
+    path = Path(path)
+    try:
+        raw = path.read_text()
+    except (UnicodeDecodeError, OSError) as exc:
+        raise EurostatError(
+            f"{path.name} is not a JSON-stat file: it is not even text "
+            f"({type(exc).__name__}). A saved Eurostat download is JSON — a "
+            f"spreadsheet here usually means `table_kind` says `eurostat` "
+            f"while `table_path` points at a workbook.") from None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise EurostatError(
+            f"{path.name} is not JSON: {exc}. A saved Eurostat download is a "
+            f"JSON-stat response; this file is text but not that.") from None
+
+
 def _shortfall_diagnosis(cube, use_dim, ava_dim, flow, pref, total_code,
                          codes, got, published, aggregated_away) -> str:
     """Say WHY the codes do not sum to the total, not just that they do not.
@@ -517,7 +548,7 @@ def load_iot(path: Path | str, variant: str = "domestic") -> IOTable:
         raise EurostatError(f"variant must be 'domestic' or 'total', "
                             f"not {variant!r}")
     path = Path(path)
-    cube = _Cube(json.loads(path.read_text()))
+    cube = _Cube(_read_cube(path))
     flow = VARIANTS[variant]
     if "stk_flow" not in cube.ids:
         raise EurostatError(f"{path.name} has no `stk_flow` dimension; this "
@@ -831,8 +862,8 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     prefixed the way `naio_10_cp1700` is: products carry `CPA_`, industries are
     bare (`A01`, `C10-12`).
     """
-    sup = _Cube(json.loads(Path(supply_path).read_text()))
-    use = _Cube(json.loads(Path(use_path).read_text()))
+    sup = _Cube(_read_cube(supply_path))
+    use = _Cube(_read_cube(use_path))
     for dim, cube, name in (("prd_amo", sup, "supply"), ("prd_ava", use, "use")):
         if dim not in cube.ids:
             raise EurostatError(f"the {name} file has no `{dim}` dimension; "
@@ -947,7 +978,7 @@ def load_sut(supply_path: Path | str, use_path: Path | str,
     #
     # An alternative is now accepted only if EVERY file that will be read with
     # it has every one of its columns, for every product.
-    _cubes = [use] + ([_Cube(json.loads(Path(use_basic_path).read_text()))]
+    _cubes = [use] + ([_Cube(_read_cube(use_basic_path))]
                       if use_basic_path is not None else [])
 
     def _populated(cand):

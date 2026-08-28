@@ -1,11 +1,13 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Taken 2026-08-27 by wrapping each quadrium exception class so that constructing one records the raise site, then running every validator and the unit tests as separate processes. Sites are file:line of the `raise`. See run_refusal_coverage.py.",
  "taken": "2026-08-28",
- "n_sites": 159,
+ "n_sites": 161,
  "fired": [
   "acquire.py:167",
+  "balancing.py:181",
   "balancing.py:198",
   "balancing.py:63",
+  "balancing.py:94",
   "config.py:121",
   "config.py:128",
   "config.py:136",
@@ -44,21 +46,22 @@
   "disaggregation.py:625",
   "disaggregation.py:638",
   "disaggregation.py:647",
-  "eurostat.py:1024",
-  "eurostat.py:1075",
-  "eurostat.py:1257",
-  "eurostat.py:461",
-  "eurostat.py:512",
-  "eurostat.py:517",
-  "eurostat.py:523",
-  "eurostat.py:537",
-  "eurostat.py:572",
-  "eurostat.py:602",
-  "eurostat.py:666",
-  "eurostat.py:676",
-  "eurostat.py:702",
-  "eurostat.py:740",
-  "eurostat.py:843",
+  "eurostat.py:1055",
+  "eurostat.py:1106",
+  "eurostat.py:1288",
+  "eurostat.py:205",
+  "eurostat.py:492",
+  "eurostat.py:543",
+  "eurostat.py:548",
+  "eurostat.py:554",
+  "eurostat.py:568",
+  "eurostat.py:603",
+  "eurostat.py:633",
+  "eurostat.py:697",
+  "eurostat.py:707",
+  "eurostat.py:733",
+  "eurostat.py:771",
+  "eurostat.py:874",
   "gras.py:288",
   "gras.py:367",
   "gras.py:473",
@@ -83,10 +86,13 @@
   "io_loader.py:84",
   "scenarios.py:106",
   "sut_euro.py:273",
+  "sut_euro.py:280",
   "sut_ras.py:126",
   "sut_ras.py:172",
   "transformation.py:122",
-  "transformation.py:401"
+  "transformation.py:401",
+  "transformation.py:428",
+  "transformation.py:506"
  ],
  "by_type": {
   "AcquisitionRefused": {
@@ -95,7 +101,7 @@
   },
   "BalancingError": {
    "total": 4,
-   "fired": 2
+   "fired": 4
   },
   "ConfigError": {
    "total": 41,
@@ -110,8 +116,8 @@
    "fired": 13
   },
   "EurostatError": {
-   "total": 27,
-   "fired": 15
+   "total": 29,
+   "fired": 16
   },
   "LoaderError": {
    "total": 39,
@@ -131,11 +137,11 @@
   },
   "SutEuroError": {
    "total": 4,
-   "fired": 1
+   "fired": 2
   },
   "TransformationError": {
    "total": 11,
-   "fired": 2
+   "fired": 4
   }
  },
  "classified": {
@@ -214,7 +220,6 @@
   "eurostat.py:168": "source",
   "eurostat.py:172": "source",
   "eurostat.py:175": "source",
-  "eurostat.py:1017": "source",
   "gras.py:288": "data",
   "gras.py:367": "data",
   "gras.py:473": "data",
@@ -276,28 +281,31 @@
   "transformation.py:401": "data",
   "transformation.py:428": "data",
   "transformation.py:506": "data",
-  "eurostat.py:461": "source",
-  "eurostat.py:485": "source",
-  "eurostat.py:512": "source",
-  "eurostat.py:517": "source",
-  "eurostat.py:523": "source",
-  "eurostat.py:537": "source",
-  "eurostat.py:572": "source",
-  "eurostat.py:602": "source",
-  "eurostat.py:666": "source",
-  "eurostat.py:676": "source",
-  "eurostat.py:702": "source",
-  "eurostat.py:718": "source",
-  "eurostat.py:740": "source",
-  "eurostat.py:838": "source",
-  "eurostat.py:843": "source",
-  "eurostat.py:855": "source",
   "eurostat.py:886": "source",
   "eurostat.py:917": "source",
-  "eurostat.py:989": "source",
-  "eurostat.py:1024": "source",
-  "eurostat.py:1075": "source",
-  "eurostat.py:1257": "source"
+  "eurostat.py:205": "source",
+  "eurostat.py:213": "source",
+  "eurostat.py:492": "source",
+  "eurostat.py:516": "source",
+  "eurostat.py:543": "source",
+  "eurostat.py:548": "source",
+  "eurostat.py:554": "source",
+  "eurostat.py:568": "source",
+  "eurostat.py:603": "source",
+  "eurostat.py:633": "source",
+  "eurostat.py:697": "source",
+  "eurostat.py:707": "source",
+  "eurostat.py:733": "source",
+  "eurostat.py:749": "source",
+  "eurostat.py:771": "source",
+  "eurostat.py:869": "source",
+  "eurostat.py:874": "source",
+  "eurostat.py:948": "source",
+  "eurostat.py:1020": "source",
+  "eurostat.py:1048": "source",
+  "eurostat.py:1055": "source",
+  "eurostat.py:1106": "source",
+  "eurostat.py:1288": "source"
  },
  "_classification": "What each refusal judges, decided on 2026-08-28 by reading every message: `workbook` the user's own spreadsheet, `scenario` what they asked for in it, `source` a file or response from a statistical office, `upstream` a failure elsewhere re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves. An earlier claim that most unreached sites were caller checks was made without this and was wrong."
 }

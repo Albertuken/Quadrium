@@ -1923,6 +1923,68 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
 
 
 
+def test_the_refusals_the_METHODS_make():
+    """What the balancing, transformation and projection steps refuse.
+
+    These sit past the loaders: the file was read and the split was legal, and
+    the method itself will not proceed. Each is one call away from a matrix
+    written by hand, so nothing but not looking had kept them untested.
+    """
+    from quadrium.balancing import BalancingError, balance, ras
+    from quadrium.sut_euro import SutEuroError, sut_euro
+    from quadrium.transformation import (TransformationError, choose_model,
+                                         transform)
+
+    def refuses(name, fn, kind, fragment):
+        try:
+            fn()
+        except kind as exc:
+            check(f"the engine refuses {name}",
+                  fragment.lower() in str(exc).lower(),
+                  str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+        except Exception as exc:                       # noqa: BLE001
+            check(f"the engine refuses {name}", False,
+                  f"{type(exc).__name__} instead: {str(exc)[:64]}")
+        else:
+            check(f"the engine refuses {name}", False, "it went ahead")
+
+    neg = np.array([[10.0, -2.0], [3.0, 8.0]])
+    refuses("a negative seed handed to RAS, and names the method that takes one",
+            lambda: ras(neg, np.array([8.0, 11.0]), np.array([13.0, 6.0])),
+            BalancingError, "non-negative seed")
+
+    pos = np.array([[10.0, 5.0], [4.0, 6.0]])
+    refuses("interior cells pinned under a method that only takes margins",
+            lambda: balance(pos, np.array([15.0, 10.0]), np.array([14.0, 11.0]),
+                            method="GRAS", locked_cells=[(0, 0)]),
+            BalancingError, "locked cells")
+
+    refuses("a secondary-production type that is not one of the three",
+            lambda: choose_model(square=True, secondary_type="mysterious"),
+            TransformationError, "not one of")
+
+    V_T = np.array([[80.0, 20.0], [10.0, 90.0]])
+    Ud = np.array([[30.0, 20.0], [15.0, 25.0]])
+    Um = np.zeros((2, 2))
+    Yd = np.array([[50.0], [60.0]])
+    Ym = np.zeros((2, 1))
+    W = np.array([[45.0, 65.0]])
+    g = V_T.sum(axis=0)
+    x = V_T.sum(axis=1)
+    refuses("the hybrid model asked for without the matrix that defines it",
+            lambda: transform("E", V_T, Ud, Um, Yd, Ym, W, g, x),
+            TransformationError, "needs the hybrid")
+
+    refuses("a projection whose pieces are not one supply-use pair",
+            lambda: sut_euro(
+                np.zeros((3, 4)), np.zeros((2, 2)), np.zeros(3),
+                np.zeros((3, 3)),
+                va_target=np.zeros(3), final_use_target=np.zeros(1),
+                tls_target=np.zeros(3), imports_target=np.zeros(3)),
+            SutEuroError, "one SUT pair")
+
+
+
 def test_the_refusals_about_what_was_ASKED_FOR():
     """Eleven refusals judge the split itself, and none had a case.
 
@@ -2014,6 +2076,7 @@ def test_the_config_refusals_a_stranger_meets_next():
     """
     import openpyxl
     from quadrium.config import ConfigError, load_config
+    from quadrium.eurostat import EurostatError
 
     example = ROOT / "configs" / "ejemplo.xlsx"
     if not example.exists():
@@ -2099,11 +2162,37 @@ def test_the_config_refusals_a_stranger_meets_next():
              lambda wb: wb.remove(wb["splits"]), "missing the sheet"),
             ("a split whose subsectors and whose key disagree",
              set_cell("keys", 2, 2, "I999"), "but key"),
+            # The Eurostat route: the engine downloads the table itself, so
+            # these three are all a user gives it and all it can check.
+            ("a Eurostat country that is not a country code",
+             lambda wb: [set_project("table_kind", "eurostat")(wb),
+                         set_project("eurostat_geo", "Spain")(wb)],
+             "two-letter country code"),
+            ("a Eurostat year that is not a year",
+             lambda wb: [set_project("table_kind", "eurostat")(wb),
+                         set_project("eurostat_geo", "ES")(wb),
+                         set_project("eurostat_year", "recently")(wb)],
+             "not a year"),
+            # The Eurostat route resolves `table_path` before it validates
+            # the model, so pointing it at a workbook is what a wrong
+            # `table_kind` actually produces -- and it produced a raw
+            # UnicodeDecodeError until this found it.
+            ("the Eurostat route pointed at a spreadsheet",
+             lambda wb: [set_project("table_kind", "eurostat")(wb),
+                         set_project("eurostat_geo", "ES")(wb),
+                         set_project("eurostat_year", 2022)(wb)],
+             "not a JSON-stat file"),
         ]
+        # NOT covered here, and why: `eurostat_model` is validated only after
+        # the table resolves, and `project_method` / `project_to_year` only
+        # when a `targets` sheet exists, which the shipped example has none of.
+        # Reaching them needs a second fixture rather than one changed cell.
         for name, edit, fragment in cases:
             try:
                 load_config(variant(edit))
-            except ConfigError as exc:
+            # A config can legitimately surface a LOADER's refusal: the sheets
+            # were readable and what they pointed at was not.
+            except (ConfigError, EurostatError) as exc:
                 check(f"the engine refuses {name}, and says where",
                       fragment.lower() in str(exc).lower(),
                       str(exc).replace("\n", " ")[:86] + "…")
@@ -2434,6 +2523,7 @@ def main() -> int:
                test_the_workbook_refusals_a_stranger_meets_first,
                test_the_config_refusals_a_stranger_meets_next,
                test_the_refusals_about_what_was_ASKED_FOR,
+               test_the_refusals_the_METHODS_make,
                test_the_refusals_about_an_OFFICE_WORKBOOK,
                test_the_refusals_about_a_FILE_FROM_AN_OFFICE,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,

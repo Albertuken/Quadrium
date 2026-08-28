@@ -22,9 +22,9 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    159 refusal sites of the engine's own types
-     84 reached by something in the suite
-     75 never reached
+    161 refusal sites of the engine's own types
+     90 reached by something in the suite
+     71 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -50,14 +50,14 @@ nothing."*
 messages and recording what each one judges gives:
 
     what it judges                          total   unreached
-    a file or response from an office          52          32
+    a file or response from an office          54          33
     the user's own spreadsheet                 56          16
     what they asked for in that spreadsheet    20           7
-    the numbers themselves                     19           9
+    the numbers themselves                     19           4
     an internal API contract (the CALLER)       7           6
     a failure elsewhere, re-raised               5           5
 
-**Six of the 75 are caller checks — 8 %, not "most".** The largest group is
+**Six of the 71 are caller checks — 8 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
@@ -97,11 +97,28 @@ these without anyone having read one aloud. No network and no invented fixture:
 so one is loaded, one thing is removed or emptied, and it goes to a temporary
 file. The office workbooks are mutated the same way.
 
-**That pass found a defect.** `_Cube.__init__` guarded on `id` and `size` and
+**A fifth pass took what the METHODS refuse** — a negative seed handed to RAS,
+interior cells pinned under a method that takes only margins, a
+secondary-production type that is not one of the three, the hybrid model without
+the matrix that defines it, a projection whose pieces are not one pair. Those
+are a hand-written matrix away, so `data` went from 9 unreached to 4.
+
+**Two passes found two defects, both of the same shape: a malformed input
+reaching the user as a traceback instead of a refusal.**
+
+`_Cube.__init__` guarded on `id` and `size` and
 then indexed `doc["dimension"]` two lines below, so a response carrying the
 first two and not the third came out as a raw `KeyError` — a traceback where the
 user should have had *"this is not a JSON-stat response"*. Nothing in the suite
 had ever handed the loader a half-formed response. Fixed to require all three.
+
+And `load_iot` read a saved download with `json.loads(path.read_text())`, which
+raises `UnicodeDecodeError` on a binary file and `JSONDecodeError` on a text
+one — both reaching the user from `codecs.py`. That is one wrong line away in
+the template, where `table_kind` and `table_path` sit next to each other: say
+`eurostat` and leave the path on a workbook and the engine answered with a codec
+error. The download path had refused a non-JSON response by name since it was
+written; the read path had not. `_read_cube` now does, at all four call sites.
 
 And twice it caught the test looking in the wrong place, which is the same
 lesson from the other side: the INE's interior table does not balance as
@@ -285,13 +302,12 @@ def main() -> int:
           f"drifted from the code and must be re-taken")
 
     worst = min(tot, key=lambda m: got[m] / tot[m] if tot[m] else 1)
-    check("the transformation is still the thinnest-covered module, and it is "
-          "a headline feature",
-          got["transformation.py"] <= 3,
+    check("the transformation is no longer the thinnest-covered module",
+          got["transformation.py"] >= 4,
           f"{got['transformation.py']} of {tot['transformation.py']} in "
           f"transformation.py, the SUT-to-IOT step with four models from "
-          f"CORE_013. The least covered overall is {worst} at {got[worst]} of "
-          f"{tot[worst]}")
+          f"CORE_013, against 1 of 11 when this sweep began. The least covered "
+          f"overall is now {worst} at {got[worst]} of {tot[worst]}")
 
     print()
     print("    A refusal is a promise to the user. This does not keep the")
