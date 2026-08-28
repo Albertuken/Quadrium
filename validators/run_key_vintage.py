@@ -13,9 +13,10 @@ subsectors — the INE's structural business survey for CNAE 55 and 56.
 
 The result decided the design, and it is printed below:
 
-  * In an ordinary year a share barely moves. Employment did not move at all
-    between 2018 and 2019.
-  * Across 2020 it moves by up to 21 points.
+  * In an ordinary year a share barely moves. Employment moved 0.1 points
+    between 2018 and 2019 and the output share 0.6 points, which is the pair
+    the report prints beside a stale key.
+  * Across 2020 it moves by up to 21 points, and output by 11.9.
   * So the cost of a one-year gap is NOT a function of the gap. It depends on
     whether a break falls inside it, which the engine cannot see and the analyst
     can. The check therefore reports the gap and the measured volatility, and
@@ -96,11 +97,22 @@ def main() -> int:
                         for y in all_years)
               + f"{max(moves):>10.1f} pp")
 
+    # Printed, not just tested: the report quotes both of these year-on-year
+    # moves at the reader, and `run_report_claims.py` can only see a figure a
+    # validator actually states.
+    emp_move = abs(
+        series("Personal ocupado")[2019][0] / sum(series("Personal ocupado")[2019])
+        - series("Personal ocupado")[2018][0] / sum(series("Personal ocupado")[2018])
+    ) * 100
+    out_move = abs(
+        series("Valor de la producción")[2019][0] / sum(series("Valor de la producción")[2019])
+        - series("Valor de la producción")[2018][0] / sum(series("Valor de la producción")[2018])
+    ) * 100
     check("an ordinary year moves the share very little",
-          abs(series("Personal ocupado")[2019][0] / sum(series("Personal ocupado")[2019])
-              - series("Personal ocupado")[2018][0] / sum(series("Personal ocupado")[2018]))
-          * 100 < 0.5,
-          "employment 2018 -> 2019")
+          emp_move < 0.5,
+          f"employment 2018 -> 2019 moved {emp_move:.1f} pp, and the output "
+          f"share {out_move:.1f} pp over the same year — which is the pair the "
+          f"report prints beside a stale key")
     check("a break moves it by more than ten points",
           volatility["output"] > 10.0,
           f"output, worst year-on-year move {volatility['output']:.1f} pp")

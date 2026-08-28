@@ -44,6 +44,12 @@ The pilot's seven keys, both years, against the truth:
     2022   span 21.24 to 55.19   truth INSIDE
     2021   span 19.34 to 40.07   truth OUTSIDE, by 0.60 points
 
+The widest single disagreement in 2022 is between the driving key and
+employment — 33.73 against 21.24, which is **58.8 %** of the smaller. That is
+the figure the report quotes when it explains why it no longer ranks scenarios
+by how little they disagree: the key that disagreed MOST was the closest to the
+answer.
+
 **In 2021 all seven keys overstate accommodation**, the closest by 0.6 points,
 so the whole spread sits above the answer and the error bar misses it. In 2022
 six of the seven still overstate and the seventh — employment — undershoots by

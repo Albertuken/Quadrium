@@ -153,7 +153,7 @@ def scenario_section(res: DisaggregationResult) -> str:
                       "employment moved 1.9 over the same years. Whether a break "
                       "falls inside the gap is something the analyst can know "
                       "and this engine cannot. See "
-                      "`library/validators/run_key_vintage.py`.",
+                      "`validators/run_key_vintage.py`.",
                       "",
                       "> **An old ANSWER beats a current proxy, by about four "
                       "to one.** If the office published your split for a "
@@ -174,7 +174,7 @@ def scenario_section(res: DisaggregationResult) -> str:
         # How wrong each subsector's SIZE will be, from the key's own weights.
         # Not a fitted screen: a proportional split gives part i an output of
         # `share_i * X_parent`, so an error of e POINTS in that share is an
-        # error of `e / share_i` in the part itself. `run_size_screen.py`
+        # error of `e / share_i` in the part itself. `validators/run_size_screen.py`
         # calibrates the constant and holds out one country at a time.
         out_w = sp.get("weights", {}).get("output")
         if out_w is not None and len(out_w) == len(sp.get("new_codes", [])):
@@ -197,7 +197,7 @@ def scenario_section(res: DisaggregationResult) -> str:
                     "error of `e / share` in that part's own size. The two "
                     "columns put the median and p90 error of a real "
                     "downloadable key — 7.3 and 27.4 points "
-                    "(`run_real_key.py`) — through that division. Measured on "
+                    "(`validators/run_real_key.py`) — through that division. Measured on "
                     "1,583 subsector-and-proxy pairs, the typical column runs "
                     "about 0.65 of the truth and the p90 column contains it "
                     "**92 %** of the time, holding at 88.7 to 92.9 % with each "
@@ -207,7 +207,7 @@ def scenario_section(res: DisaggregationResult) -> str:
                     "key error is the whole of a 5 % subsector. If your key "
                     "came from the office's own published split for another "
                     "year rather than from a proxy, use 1.2 points instead of "
-                    "7.3 (`run_key_carryover.py`) and these numbers fall by "
+                    "7.3 (`validators/run_key_carryover.py`) and these numbers fall by "
                     "six. See `validators/run_size_screen.py`.", ""]
         va = sp.get("va_rows") or {}
         if va.get("pinned"):
@@ -399,14 +399,14 @@ def scenario_section(res: DisaggregationResult) -> str:
                           f"finding. Supply `input_profiles` to give them "
                           f"genuinely different purchasing patterns.",
                       "",
-                      "> **What a profile is worth, measured.** On 54 splits "
+                      "> **What a profile is worth, measured.** On 96 splits "
                       "where the office publishes both the parent and its "
                       "parts, giving the engine the parts' TRUE input profile "
-                      "moves the SEED's multiplier error from a median 9.0 % "
-                      "to 3.4 %. **The balancer then gives most of that "
-                      "back**: the delivered table is a median 10.6 % against "
-                      "10.0 % for using no profile at all, and it beats doing "
-                      "nothing in 21 of 35. Balancing adjusts the internal "
+                      "moves the SEED's multiplier error from a median 7.78 % "
+                      "to 3.48 %. **The balancer then gives all of that "
+                      "back**: the delivered table is a median 7.79 % against "
+                      "7.78 % for using no profile at all, and it beats doing "
+                      "nothing in 30 of 56. Balancing adjusts the internal "
                       "block only — correct when a split is proportional, "
                       "since nothing else moves — so a profiled column pushes "
                       "the whole adjustment into the least reliable part of "
@@ -420,7 +420,8 @@ def scenario_section(res: DisaggregationResult) -> str:
                       "badly anyway and hurts where it was fine (r = +0.42 "
                       "against the baseline error), which is only knowable "
                       "afterwards; the ex-ante screen does not predict it "
-                      "(r = +0.12). See "
+                      "(r = +0.17 for the parent multiplier, -0.22 for the "
+                      "number of parts). See "
                       "`validators/run_input_profiles_backtest.py`."]
         # "THE WEAKEST ASSUMPTION IN THE RESULT" WAS HALF RIGHT AND SAID
         # WRONG. Measured on 68 real splits where the office publishes both
@@ -629,7 +630,8 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "by 58.8 % — turned out to be the closest to the truth once "
                   "the INE's 110-product supply table settled it, while the "
                   "driving key was 9.8 points out. Least disagreement measures "
-                  "resemblance to your own inputs, not accuracy.",
+                  "resemblance to your own inputs, not accuracy. See "
+                  "`validators/run_key_bias.py`.",
                   ">",
                   "> **What a large disagreement is good for** is telling you "
                   "where to go looking. In that case a better source existed "
@@ -655,7 +657,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "agrees with itself in 7. Dropping the highest and lowest "
                   "proxy does not rescue it — coverage falls to 59.7 % while "
                   "the range is still 12 points wide. See "
-                  "`run_key_spread.py`.",
+                  "`validators/run_key_spread.py`.",
                   ">",
                   "> One thing the spread does NOT do is lean reliably one "
                   "way. Every available proxy sits on the same side of the "
@@ -664,7 +666,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "overstate accommodation and the range misses by 0.6 "
                   "points, is the unusual case and not the pattern — as it "
                   "also was for the size of the error. See "
-                  "`run_key_bias.py` and `run_real_key.py`.", ""]
+                  "`validators/run_key_bias.py` and `validators/run_real_key.py`.", ""]
 
     # If the multipliers do not differ across subsectors, say why, loudly. An
     # economist reading "range 0.0 %" could otherwise take the result as robust,
@@ -718,8 +720,8 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                          float(tbl.Z[:, pos].sum())))
     # HOW RISKY WAS THIS SPLIT, FROM TWO NUMBERS AVAILABLE BEFORE MAKING IT.
     #
-    # `run_split_backtest.py` scores 68 real splits against tables where the
-    # office publishes both the parent and its parts. `run_split_screen.py`
+    # `validators/run_split_backtest.py` scores 68 real splits against tables where the
+    # office publishes both the parent and its parts. `validators/run_split_screen.py`
     # then asks what in the COARSE table predicts the result, since the thing
     # that actually drives it — how unlike the parts are — cannot be known
     # without the answer. Seven candidates were tried; on 96 splits ONE
@@ -805,7 +807,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "country. A split\'s difficulty is a property of the table it "
                 "is in, not of the sector — which is why another COUNTRY\'s "
                 "number is the worst of the three, and why "
-                "`run_key_carryover.py` finds the same thing from the key\'s "
+                "`validators/run_key_carryover.py` finds the same thing from the key\'s "
                 "side.",
                 ">",
                 "> **Asking for more parts does not make each part worse.** "
@@ -843,7 +845,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             "very little: on the project's own fixture, DOUBLING one "
             "supplier's intensity moves the multiplier by 0.35 %. If you need "
             "subsectors that differ as buyers, that is the lever — and it is a "
-            "short one.", ""]
+            "short one. See `validators/run_key_sensitivity.py`.", ""]
 
     across = [row[ids[0]] for row in meta["comparison"]]
     if max(across) - min(across) < 1e-6 and not any(diff_flags.values()):
