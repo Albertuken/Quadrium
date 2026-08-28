@@ -450,12 +450,19 @@ class _Cube:
     """
 
     def __init__(self, doc: dict):
-        if not isinstance(doc, dict) or "id" not in doc or "size" not in doc:
+        # ALL THREE, because all three are read two lines below. The guard
+        # named `id` and `size` and then indexed `doc["dimension"]`, so a
+        # response carrying the first two and not the third came out as a raw
+        # KeyError -- a traceback where the user should have had this message.
+        # Found by mutating a real cached file (tests/test_engine.py); nothing
+        # in the suite had ever handed the loader a half-formed response.
+        need = ("id", "size", "dimension")
+        if not isinstance(doc, dict) or any(k not in doc for k in need):
             raise EurostatError(
                 f"this is not a JSON-stat response: it has "
                 f"{', '.join(sorted(doc)[:6]) if isinstance(doc, dict) else type(doc).__name__}"
-                f" where `id` and `size` were expected. A provenance sidecar or "
-                f"a hand-edited file will look like this.")
+                f" where {', '.join(f'`{k}`' for k in need)} were expected. A "
+                f"provenance sidecar or a hand-edited file will look like this.")
         self.doc = doc
         self.ids = doc["id"]
         self.size = doc["size"]

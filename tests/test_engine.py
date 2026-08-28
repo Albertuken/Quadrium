@@ -1624,6 +1624,191 @@ def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
 
 
 
+def test_the_refusals_about_a_FILE_FROM_AN_OFFICE():
+    """The largest unreached block, and the one the engine reaches on its own.
+
+    Forty-one of the engine's refusals judge what arrived from a statistical
+    office rather than what the user wrote: a response that is not JSON-stat, a
+    file without the dimension the loader needs, two halves of a pair that are
+    not the same country and year. They matter because **the engine downloads
+    those files itself** — someone asking for a new country meets these
+    messages, and nothing had ever read one aloud.
+
+    No network and no invented fixture: `data/eurostat/` already holds a hundred
+    real JSON-stat files. A JSON-stat is a dict, so one is loaded, one thing is
+    removed or emptied, and it is written to a temporary file. The base is real
+    and the mutation is one line.
+    """
+    import json
+    import tempfile
+    from quadrium.eurostat import EurostatError, load_iot, load_sut
+
+    DATA = ROOT / "data" / "eurostat"
+    base = DATA / "naio_10_cp1700_FR_2021.json"
+    if not base.exists():
+        check("there is a real JSON-stat file to mutate", False, str(base))
+        return
+    doc = json.loads(base.read_text())
+    check("the base file is real and loads, so each mutation is the only "
+          "difference", load_iot(base).n == 89, f"{base.name}, 89 products")
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        def mutated(edit, name="m.json"):
+            d = json.loads(json.dumps(doc))
+            edit(d)
+            path = tmp / name
+            path.write_text(json.dumps(d))
+            return path
+
+        def drop_dim(dim):
+            def edit(d):
+                if dim in d.get("id", []):
+                    k = d["id"].index(dim)
+                    d["id"].pop(k)
+                    d["size"].pop(k)
+                d.get("dimension", {}).pop(dim, None)
+            return edit
+
+        cases = [
+            ("a response that is not JSON-stat at all",
+             lambda: load_iot(mutated(lambda d: d.pop("dimension", None))),
+             "not a JSON-stat"),
+            ("a file with no `stk_flow` dimension, which it needs to pick a "
+             "valuation",
+             lambda: load_iot(mutated(drop_dim("stk_flow"))),
+             "stk_flow"),
+            ("a file with neither product axis a symmetric table must have",
+             lambda: load_iot(mutated(lambda d: (drop_dim("prd_use")(d),
+                                                 drop_dim("ind_use")(d)))),
+             "neither"),
+            ("a file that carries no values at all",
+             lambda: load_iot(mutated(lambda d: d.update(value={}))),
+             ""),
+        ]
+        for name, run, fragment in cases:
+            try:
+                run()
+            except EurostatError as exc:
+                check(f"the engine refuses {name}",
+                      fragment.lower() in str(exc).lower(),
+                      str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}", False,
+                      f"{type(exc).__name__} instead: {str(exc)[:66]}")
+            else:
+                check(f"the engine refuses {name}", False, "it built a table")
+
+        # A PAIR has to be the same country and year, and the message says so.
+        supply = DATA / "naio_10_cp15_ES_2022.json"
+        use = DATA / "naio_10_cp16_ES_2022.json"
+        other = DATA / "naio_10_cp1610_BE_2022.json"
+        if supply.exists() and use.exists() and other.exists():
+            try:
+                load_sut(supply, use, other)
+            except EurostatError as exc:
+                check("the engine refuses a pair whose halves are different "
+                      "countries", "pair" in str(exc).lower()
+                      or "belong" in str(exc).lower(),
+                      str(exc)[:86] + "…")
+            except Exception as exc:                   # noqa: BLE001
+                check("the engine refuses a pair whose halves are different "
+                      "countries", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("the engine refuses a pair whose halves are different "
+                      "countries", False, "it built the pair")
+
+
+
+def test_the_refusals_about_an_OFFICE_WORKBOOK():
+    """The other half of what arrives from an office: the spreadsheets.
+
+    The UK's analytical table and the INE's are workbooks with a fixed shape,
+    and the loaders refuse a great many departures from it — no `IOT` sheet, row
+    codes that are not the column codes, no primary-input row, a reference year
+    that cannot be read, product labels that are not numbered, duplicate codes,
+    supply and use sheets that disagree on their size.
+
+    The project holds the real files, so the baseline is not invented: one is
+    copied and one thing is changed, the same way `configs/ejemplo.xlsx` is
+    used for the config sheets.
+    """
+    import shutil
+    import tempfile
+
+    import openpyxl
+    from quadrium.io_loader import (LoaderError, load_ine_tio,
+                                    load_uk_analytical_iot)
+
+    uk = ROOT / "UK_IOAT_2023_domestic_ixi.xlsx"
+    ine = ROOT / "data" / "ine" / "cne_tio_22.xlsx"
+    have = [p for p in (uk, ine) if p.exists()]
+    check("the office workbooks this mutates are present",
+          len(have) == 2,
+          ", ".join(p.name for p in have))
+    if len(have) != 2:
+        return
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        def variant(src, edit, name="wb.xlsx"):
+            path = tmp / name
+            shutil.copy(src, path)
+            wb = openpyxl.load_workbook(path)
+            edit(wb)
+            wb.save(path)
+            return path
+
+        def refuses(name, run, fragment):
+            try:
+                run()
+            except LoaderError as exc:
+                check(f"the engine refuses {name}",
+                      fragment.lower() in str(exc).lower(),
+                      str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}", False,
+                      f"{type(exc).__name__} instead: {str(exc)[:64]}")
+            else:
+                check(f"the engine refuses {name}", False, "it built a table")
+
+        def drop_sheet(which):
+            return lambda wb: wb.remove(wb[which])
+
+        uk_sheets = openpyxl.load_workbook(uk, read_only=True).sheetnames
+        iot_sheet = next((n for n in uk_sheets if n.upper().startswith("IOT")),
+                         None)
+        if iot_sheet:
+            refuses("a UK workbook with its IOT sheet removed",
+                    lambda: load_uk_analytical_iot(
+                        variant(uk, drop_sheet(iot_sheet))),
+                    "no 'IOT' sheet")
+
+        refuses("an INE workbook asked for a valuation that does not exist",
+                lambda: load_ine_tio(ine, variant="neither"),
+                "variant must be")
+        refuses("an INE workbook asked for an unbalanced policy that is not one",
+                lambda: load_ine_tio(ine, unbalanced="improvise"),
+                "unbalanced must be")
+
+        # Aimed at the missing-sheet refusal and met an earlier one: the index
+        # sheet is where the reference year is read, and that happens first.
+        # Both are on the unreached list, so both are covered.
+        refuses("an INE workbook whose index sheet is gone, so the year cannot "
+                "be read",
+                lambda: load_ine_tio(
+                    variant(ine, drop_sheet("Lista_Tablas"), "ine.xlsx")),
+                "reference year")
+        refuses("an INE workbook missing one of the tables it must carry",
+                lambda: load_ine_tio(
+                    variant(ine, drop_sheet("Tabla2"), "ine2.xlsx")),
+                "is missing")
+
+
+
 def test_the_refusals_about_what_was_ASKED_FOR():
     """Eleven refusals judge the split itself, and none had a case.
 
@@ -2135,6 +2320,8 @@ def main() -> int:
                test_the_workbook_refusals_a_stranger_meets_first,
                test_the_config_refusals_a_stranger_meets_next,
                test_the_refusals_about_what_was_ASKED_FOR,
+               test_the_refusals_about_an_OFFICE_WORKBOOK,
+               test_the_refusals_about_a_FILE_FROM_AN_OFFICE,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,

@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     159 refusal sites of the engine's own types
-     72 reached by something in the suite
-     87 never reached
+     81 reached by something in the suite
+     78 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -50,14 +50,14 @@ nothing."*
 messages and recording what each one judges gives:
 
     what it judges                          total   unreached
-    a file or response from an office          52          41
-    the user's own spreadsheet                 56          19
+    a file or response from an office          52          35
+    the user's own spreadsheet                 56          16
     what they asked for in that spreadsheet    20           7
     the numbers themselves                     19           9
     an internal API contract (the CALLER)       7           6
     a failure elsewhere, re-raised               5           5
 
-**Six of the 87 are caller checks — 7 %, not "most".** The largest group is
+**Six of the 78 are caller checks — 8 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
@@ -90,12 +90,32 @@ them untested.
 Workbook coverage went 22 of 56 to 37 of 56, `scenario` 9 of 20 to 13 of 20;
 `config.py` 15 of 41 to 25 of 41, `io_loader.py` 7 of 39 to 12 of 39.
 
-Three times in these passes the engine gave an EARLIER and more specific refusal
+A fourth pass took what arrives FROM AN OFFICE, which is the largest class and
+the one the engine reaches on its own — someone asking for a new country meets
+these without anyone having read one aloud. No network and no invented fixture:
+`data/eurostat/` holds a hundred real JSON-stat files and a JSON-stat is a dict,
+so one is loaded, one thing is removed or emptied, and it goes to a temporary
+file. The office workbooks are mutated the same way.
+
+**That pass found a defect.** `_Cube.__init__` guarded on `id` and `size` and
+then indexed `doc["dimension"]` two lines below, so a response carrying the
+first two and not the third came out as a raw `KeyError` — a traceback where the
+user should have had *"this is not a JSON-stat response"*. Nothing in the suite
+had ever handed the loader a half-formed response. Fixed to require all three.
+
+Four times in these passes the engine gave an EARLIER and more specific refusal
 than the case was aiming at — a split's rows must agree on their key before the
 key is looked up; a new code that already exists is caught before the collision
 with the sector being split; an absent `keys` sheet reads as empty, so the
-split's own check fires first. Each time the test was rewritten, not the
-engine.
+split's own check fires first; and an INE workbook without its index sheet fails
+on the reference year before the missing-table check. Each time the test was
+rewritten, not the engine, and each earlier refusal was itself on the unreached
+list.
+
+*A caveat on the record.* The classification is keyed by `file:line`, so it goes
+stale whenever code moves — the check that it still covers every site is what
+catches that, and a re-take must re-read anything that shifted rather than
+carrying the old label across.
 
 The classification lives in `data/_refusal_coverage.json` so it is held rather
 than repeated, and it was made by reading each message rather than by matching
