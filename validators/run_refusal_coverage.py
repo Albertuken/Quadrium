@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     159 refusal sites of the engine's own types
-     52 reached by something in the suite
-    107 never reached
+     57 reached by something in the suite
+    102 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -34,20 +34,49 @@ WHAT IT SHOWS
     config.py                15      41
     disaggregation.py         8      20
     eurostat.py              10      27
-    io_loader.py              7      39
+    io_loader.py             12      39
     transformation.py         2      11
     sut_euro.py               1       4
     acquire.py                1       6
 
-AND THE NUMBER ALONE WOULD MISLEAD
-------------------------------------
-Most of the 110 are argument checks — `H is (3, 4) and the supply table is
-(4, 4)`, `model 'X' is not one of the four` — which judge what the CALLER passed,
-not what the office published. No table can reach them, and that they are
-unexercised costs nothing.
+A CORRECTION, BECAUSE THIS FILE GOT IT WRONG FIRST
+----------------------------------------------------
+The first version of this docstring said: *"Most of the remaining 107 judge what
+the CALLER passed — a shape mismatch, a model name that is not one of the four —
+and no published table can reach them, so their being unexercised costs
+nothing."*
 
-What matters is the subset that judges **data**, because that is what a user
-meets first and there is nothing behind it:
+**That was asserted without being checked, and it is wrong.** Reading all 159
+messages and recording what each one judges gives:
+
+    what it judges                          total   unreached
+    a file or response from an office          52          41
+    the user's own spreadsheet                 56          29
+    what they asked for in that spreadsheet    20          11
+    the numbers themselves                     19           9
+    an internal API contract (the CALLER)       7           7
+    a failure elsewhere, re-raised               5           5
+
+**Seven of the 102 are caller checks — 7 %, not "most".** The largest group is
+the user's own workbook, which is the route the guide opens with: *"No Python:
+you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
+'Output' or 'Total output'"* are the first thing a stranger with a slightly
+different sheet meets, and none of them had a case.
+
+Six now do (`tests/test_engine.py`): a minimal valid workbook is built and then
+broken one way at a time — no file, no `table` sheet, no `metadata` sheet,
+metadata without the price basis, no `Output` row, no final-demand column — and
+each refusal is checked by the message it gives rather than by something having
+failed. Workbook coverage went 22 of 56 to 27 of 56.
+
+The classification lives in `data/_refusal_coverage.json` so it is held rather
+than repeated, and it was made by reading each message rather than by matching
+words — which is the same mistake in a different costume.
+
+WHAT MATTERS MOST, AND WHAT NOW HAS A CASE
+--------------------------------------------
+The refusals that judge the numbers themselves, because a user meets those with
+a table that loads and is still wrong:
 
     transformation.py:122   a coefficient's denominator is zero
     transformation.py:239   model A cannot be computed on this table at all
@@ -103,6 +132,15 @@ DATA_JUDGEMENTS = {
 # Named so it stays a known gap rather than becoming a silent one.
 NO_CASE_YET = {"transformation.py:239"}
 
+LABELS = {
+    "source": "a file or response from an office",
+    "workbook": "the user's own spreadsheet",
+    "scenario": "what they asked for in that spreadsheet",
+    "data": "the numbers themselves",
+    "caller": "an internal API contract (the CALLER)",
+    "upstream": "a failure elsewhere, re-raised",
+}
+
 FAIL: list[str] = []
 
 
@@ -147,9 +185,28 @@ def main() -> int:
 
     check("a large share of the engine's refusals has never been reached",
           len(fired) < len(static) * 0.6,
-          f"{len(fired)} of {len(static)}. Most of the rest are argument "
-          f"checks no published table can reach, which costs nothing — the "
-          f"count is here to be read with the next check, not alone")
+          f"{len(fired)} of {len(static)}")
+
+    # WHAT EACH ONE JUDGES, read rather than guessed. The first version of this
+    # file asserted that most unreached sites were caller checks and no table
+    # could reach them. Seven of 107 are.
+    klass = rec.get("classified", {})
+    check("the classification covers every refusal in the code",
+          set(klass) == set(static),
+          f"{len(klass)} classified against {len(static)} in the code")
+    by_kind = collections.Counter(klass.values())
+    un_kind = collections.Counter(v for k, v in klass.items() if k not in fired)
+    print()
+    print(f"    {'what it judges':<40}{'total':>7}{'unreached':>11}")
+    for k in sorted(by_kind, key=lambda x: -un_kind[x]):
+        print(f"    {LABELS.get(k, k):<40}{by_kind[k]:>7}{un_kind[k]:>11}")
+    caller_share = un_kind["caller"] / max(sum(un_kind.values()), 1)
+    check("and the unreached are NOT mostly caller checks, as this file first said",
+          caller_share < 0.2,
+          f"{un_kind['caller']} of {sum(un_kind.values())} — "
+          f"{caller_share * 100:.0f} %. {un_kind['workbook']} judge the user's "
+          f"own spreadsheet, which is the route the guide opens with. The "
+          f"earlier claim was made without reading them")
 
     # the part that is not an argument check
     still_unfired = {k: v for k, v in DATA_JUDGEMENTS.items()

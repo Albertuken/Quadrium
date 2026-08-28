@@ -1624,6 +1624,100 @@ def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
 
 
 
+def test_the_workbook_refusals_a_stranger_meets_first():
+    """The front door, which had no case at all behind it.
+
+    `run_refusal_coverage.py` measured that 52 of the engine's 159 refusals had
+    ever been reached, and this file's first version claimed most of the rest
+    judged what the CALLER passed. Reading all 159 says **seven** do. Thirty-four
+    judge the user's OWN SPREADSHEET — the route `docs/GUIDE.md` opens with:
+    "No Python: you fill in a spreadsheet and run one command".
+
+    Those are the first thing a stranger with a slightly different sheet meets,
+    and not one of them had a case. This builds a minimal valid workbook and
+    breaks it one way at a time, so each refusal is checked by the message it
+    gives rather than by the fact that something failed.
+    """
+    import openpyxl
+    from quadrium.io_loader import LoaderError, load_io_table
+
+    META = [("country", "ES"), ("year", 2022), ("unit", "MIO_EUR"),
+            ("classification", "CPA_2.1"), ("source", "test")]
+    TABLE = [["", "A", "B", "HH"],
+             ["A", 10.0, 5.0, 35.0],
+             ["B", 4.0, 6.0, 40.0],
+             ["VA", 36.0, 39.0, None],
+             ["Output", 50.0, 50.0, None]]
+
+    def build(tmp, table=None, meta=None, sheets=("table", "metadata")):
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        if "table" in sheets:
+            ws = wb.create_sheet("table")
+            for row in (TABLE if table is None else table):
+                ws.append(row)
+        if "metadata" in sheets:
+            ws = wb.create_sheet("metadata")
+            for row in (META if meta is None else meta):
+                ws.append(list(row))
+        path = tmp / "wb.xlsx"
+        wb.save(path)
+        return path
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        # the workbook has to load before breaking it means anything
+        try:
+            t = load_io_table(build(tmp))
+            check("the minimal valid workbook loads, so the breakages are the "
+                  "only difference", t.n == 2,
+                  f"{t.n} sectors, {t.Y.shape[1]} final-demand column(s)")
+        except LoaderError as exc:
+            check("the minimal valid workbook loads, so the breakages are the "
+                  "only difference", False, str(exc)[:90])
+            return
+
+        cases = [
+            ("a missing file",
+             lambda: load_io_table(tmp / "absent.xlsx"), "no such file"),
+            ("a workbook with no `table` sheet",
+             lambda: load_io_table(build(tmp, sheets=("metadata",))),
+             "no sheet named"),
+            ("a workbook with no `metadata` sheet",
+             lambda: load_io_table(build(tmp, sheets=("table",))),
+             "no 'metadata' sheet"),
+            ("metadata missing the price basis",
+             lambda: load_io_table(
+                 build(tmp, meta=[m for m in META if m[0] != "unit"])),
+             "missing: unit"),
+            ("no row saying which line is output",
+             lambda: load_io_table(
+                 build(tmp, table=[r for r in TABLE
+                                   if str(r[0]).lower() != "output"])),
+             "no row labelled 'Output'"),
+            ("no final-demand column at all",
+             lambda: load_io_table(
+                 build(tmp, table=[r[:3] for r in TABLE])),
+             "final-demand column"),
+        ]
+        for name, run, fragment in cases:
+            try:
+                run()
+            except LoaderError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(),
+                      str(exc)[:88] + ("…" if len(str(exc)) > 88 else ""))
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead: {str(exc)[:70]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it accepted the workbook")
+
+
+
 def test_the_refusals_that_judge_DATA_actually_fire():
     """Four promises the engine makes to a user that nothing had ever tested.
 
@@ -1845,6 +1939,7 @@ def main() -> int:
                test_the_allocation_key_cannot_move_a_multiplier,
                test_a_margin_below_the_floor_is_not_a_sign,
                test_the_refusals_that_judge_DATA_actually_fire,
+               test_the_workbook_refusals_a_stranger_meets_first,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,
