@@ -1624,6 +1624,112 @@ def test_a_zero_row_is_zero_at_the_SOURCE_s_precision():
 
 
 
+def test_the_config_refusals_a_stranger_meets_next():
+    """The other half of the front door: the sheets that say what to split.
+
+    `io_loader` reads the TABLE; `config` reads the workbook that says what to
+    do with it — `splits`, `keys`, `scenarios`, `profiles`. It holds 41 refusals
+    and 15 had ever fired, the largest single block of unreached ones in the
+    engine, and every message in it names a sheet, a row and a field because it
+    is written for someone who filled the sheet in by hand.
+
+    The engine ships a working example, so the baseline is not invented: this
+    loads `configs/ejemplo.xlsx`, asserts it loads, then changes ONE cell at a
+    time. A refusal counts only if it names the thing that was broken.
+    """
+    import openpyxl
+    from quadrium.config import ConfigError, load_config
+
+    example = ROOT / "configs" / "ejemplo.xlsx"
+    if not example.exists():
+        check("the shipped example is where this expects it", False,
+              str(example))
+        return
+
+    import shutil
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        def variant(edit):
+            """Copy the example, apply one edit, return the path.
+
+            `table_path` is relative to the example's own folder, so the copy
+            gets it as an absolute path — otherwise every case would fail on a
+            missing table instead of on the thing being tested.
+            """
+            path = tmp / "cfg.xlsx"
+            shutil.copy(example, path)
+            wb = openpyxl.load_workbook(path)
+            for row in wb["project"].iter_rows(min_col=1, max_col=2):
+                if row[0].value == "table_path":
+                    row[1].value = str(
+                        (example.parent / str(row[1].value)).resolve())
+            edit(wb)
+            wb.save(path)
+            return path
+
+        try:
+            load_config(variant(lambda wb: None))
+            check("the shipped example loads, so each break is the only "
+                  "difference", True, example.name)
+        except ConfigError as exc:
+            check("the shipped example loads, so each break is the only "
+                  "difference", False, str(exc)[:90])
+            return
+
+        def set_project(key, value):
+            def edit(wb):
+                ws = wb["project"]
+                for row in ws.iter_rows(min_col=1, max_col=2):
+                    if row[0].value == key:
+                        row[1].value = value
+                        return
+                ws.append([key, value])
+            return edit
+
+        def set_cell(sheet, row, col, value):
+            return lambda wb: setattr(wb[sheet].cell(row=row, column=col),
+                                      "value", value)
+
+        cases = [
+            ("a table_kind that is not one of the kinds it reads",
+             set_project("table_kind", "nonsense"), "table_kind"),
+            # Changing ONE row of a split hits an earlier and different
+            # refusal -- the rows of one split must agree on their key -- which
+            # is the engine being right and the first version of this test being
+            # wrong. Both are worth covering, so both are here.
+            ("a split whose rows disagree about which key drives it",
+             set_cell("splits", 2, 4, "no_such_key"), "more than one"),
+            ("a split naming a key the keys sheet does not define",
+             lambda wb: [setattr(wb["splits"].cell(row=r, column=4), "value",
+                                 "no_such_key") for r in (2, 3, 4)],
+             "not in the"),
+            ("a key row whose strength is not strong/medium/weak",
+             set_cell("keys", 2, 6, "quite good"), "strength"),
+            ("a profile for a subsector the splits sheet never creates",
+             set_cell("profiles", 2, 2, "I999"), "not created"),
+            ("a profile intensity that is not a number",
+             set_cell("profiles", 2, 4, "a lot"), "intensity"),
+            ("a key row with an empty required field",
+             set_cell("keys", 2, 4, None), "empty"),
+        ]
+        for name, edit, fragment in cases:
+            try:
+                load_config(variant(edit))
+            except ConfigError as exc:
+                check(f"the engine refuses {name}, and says where",
+                      fragment.lower() in str(exc).lower(),
+                      str(exc).replace("\n", " ")[:86] + "…")
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says where", False,
+                      f"{type(exc).__name__} instead: {str(exc)[:66]}")
+            else:
+                check(f"the engine refuses {name}, and says where", False,
+                      "it accepted the workbook")
+
+
+
 def test_the_workbook_refusals_a_stranger_meets_first():
     """The front door, which had no case at all behind it.
 
@@ -1940,6 +2046,7 @@ def main() -> int:
                test_a_margin_below_the_floor_is_not_a_sign,
                test_the_refusals_that_judge_DATA_actually_fire,
                test_the_workbook_refusals_a_stranger_meets_first,
+               test_the_config_refusals_a_stranger_meets_next,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,
                test_the_spanish_supply_use_tables_load_and_balance,
                test_the_eurostat_connector_loads_and_refuses_correctly,

@@ -13,13 +13,19 @@
   "config.py:340",
   "config.py:354",
   "config.py:585",
+  "config.py:693",
   "config.py:701",
+  "config.py:767",
   "config.py:797",
   "config.py:815",
   "config.py:830",
   "config.py:862",
   "config.py:869",
+  "config.py:876",
+  "config.py:883",
+  "config.py:906",
   "config.py:912",
+  "config.py:917",
   "config.py:955",
   "disaggregation.py:255",
   "disaggregation.py:291",
@@ -72,7 +78,7 @@
   },
   "ConfigError": {
    "total": 41,
-   "fired": 15
+   "fired": 21
   },
   "DegenerateMarginError": {
    "total": 2,

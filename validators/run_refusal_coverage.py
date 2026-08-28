@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     159 refusal sites of the engine's own types
-     57 reached by something in the suite
-    102 never reached
+     63 reached by something in the suite
+     96 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -51,23 +51,38 @@ messages and recording what each one judges gives:
 
     what it judges                          total   unreached
     a file or response from an office          52          41
-    the user's own spreadsheet                 56          29
+    the user's own spreadsheet                 56          23
     what they asked for in that spreadsheet    20          11
     the numbers themselves                     19           9
     an internal API contract (the CALLER)       7           7
     a failure elsewhere, re-raised               5           5
 
-**Seven of the 102 are caller checks — 7 %, not "most".** The largest group is
+**Seven of the 96 are caller checks — 7 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
 different sheet meets, and none of them had a case.
 
-Six now do (`tests/test_engine.py`): a minimal valid workbook is built and then
-broken one way at a time — no file, no `table` sheet, no `metadata` sheet,
-metadata without the price basis, no `Output` row, no final-demand column — and
-each refusal is checked by the message it gives rather than by something having
-failed. Workbook coverage went 22 of 56 to 27 of 56.
+Thirteen now do (`tests/test_engine.py`), in two halves.
+
+`io_loader` reads the TABLE, so a minimal valid workbook is built and broken one
+way at a time: no file, no `table` sheet, no `metadata` sheet, metadata without
+the price basis, no `Output` row, no final-demand column.
+
+`config` reads the workbook that says what to DO with it — `splits`, `keys`,
+`scenarios`, `profiles` — and it holds 41 refusals, the largest single block in
+the engine. The engine ships a working example, so that baseline is not
+invented: `configs/ejemplo.xlsx` is loaded, asserted to load, and then one cell
+is changed at a time. A refusal counts only if it names the thing that was
+broken.
+
+The second half also corrected the test rather than the engine. Changing ONE row
+of a split's key gives *"names more than one allocation key"* — the rows of one
+split must agree before anything else is asked — which is an earlier and correct
+refusal, and the case was rewritten to cover both.
+
+Workbook coverage went 22 of 56 to 33 of 56; `config.py` 15 of 41 to 21 of 41,
+`io_loader.py` 7 of 39 to 12 of 39.
 
 The classification lives in `data/_refusal_coverage.json` so it is held rather
 than repeated, and it was made by reading each message rather than by matching
