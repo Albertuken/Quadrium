@@ -646,9 +646,17 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
     if clash:
         raise DisaggregationError(
             f"new subsector code(s) {sorted(clash)} already exist in the table")
-    if introduced & seen:
-        raise DisaggregationError(
-            "a new subsector code repeats the code of a sector being split")
+    # A SECOND CHECK USED TO SIT HERE and could never fire. It asked whether a
+    # new code repeats the code of a sector being split -- but `seen` is built
+    # only from codes `table.index_of` accepted, so `seen` is a subset of the
+    # table's own codes and `introduced & seen` is a subset of `clash` above.
+    # The line three above always caught it first.
+    #
+    # Removed rather than left looking like a guard: PROVENANCE.md states the
+    # rule for the public tree ("a validator that could not run was removed
+    # rather than left to pass vacuously") and it holds for a refusal too.
+    # Found by run_refusal_coverage.py, which could not reach it with any
+    # input -- the difference between untested and unreachable.
 
     current = table
     mapping = list(range(table.n))          # current index -> ORIGINAL index

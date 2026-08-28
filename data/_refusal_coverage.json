@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Taken 2026-08-27 by wrapping each quadrium exception class so that constructing one records the raise site, then running every validator and the unit tests as separate processes. Sites are file:line of the `raise`. See run_refusal_coverage.py.",
  "taken": "2026-08-28",
- "n_sites": 161,
+ "n_sites": 160,
  "fired": [
   "acquire.py:167",
   "balancing.py:181",
@@ -33,6 +33,8 @@
   "config.py:912",
   "config.py:917",
   "config.py:955",
+  "disaggregation.py:219",
+  "disaggregation.py:229",
   "disaggregation.py:255",
   "disaggregation.py:291",
   "disaggregation.py:299",
@@ -40,6 +42,7 @@
   "disaggregation.py:312",
   "disaggregation.py:333",
   "disaggregation.py:336",
+  "disaggregation.py:51",
   "disaggregation.py:55",
   "disaggregation.py:61",
   "disaggregation.py:621",
@@ -112,8 +115,8 @@
    "fired": 2
   },
   "DisaggregationError": {
-   "total": 20,
-   "fired": 13
+   "total": 19,
+   "fired": 16
   },
   "EurostatError": {
    "total": 29,
@@ -215,7 +218,6 @@
   "disaggregation.py:625": "scenario",
   "disaggregation.py:638": "scenario",
   "disaggregation.py:647": "scenario",
-  "disaggregation.py:650": "scenario",
   "eurostat.py:163": "source",
   "eurostat.py:168": "source",
   "eurostat.py:172": "source",

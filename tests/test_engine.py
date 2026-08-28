@@ -2049,6 +2049,53 @@ def test_the_refusals_about_what_was_ASKED_FOR():
     refuses("a key with the wrong number of weights for the split",
             lambda: split_sector(table, "ACC", NEW, LBL, sc, bad_len, spec),
             "weights for")
+    # The value-added rows can carry their own keys, and that opt-in has three
+    # refusals of its own -- a row that is not in the table, a key that is not
+    # loaded, a key of the wrong length. None had been exercised.
+    VA_ROW = "Compensation of employees"
+    def va_spec(row_keys, residual="Gross operating surplus"):
+        return SplitSpec("ACC", NEW, LBL,
+                         keys_by_block={"output": "key_turnover"},
+                         va_row_keys=row_keys, va_residual_row=residual)
+
+    refuses("value-added row keys naming a row this table does not have",
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, keys,
+                                 va_spec({"Wages": "key_turnover"})),
+            "is not in this table")
+    refuses("value-added row keys naming a key that was never loaded",
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, keys,
+                                 va_spec({VA_ROW: "absent"})),
+            "not among the loaded keys")
+    refuses("a value-added row key with the wrong number of weights",
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, bad_len,
+                                 va_spec({VA_ROW: "key_turnover"})),
+            "weights for")
+
+    # Two splits in one pass, the second introducing a code the first is still
+    # taking apart. Aimed at a second guard that used to sit below this one --
+    # "repeats the code of a sector being split" -- and reached the first
+    # instead, every time. It could not be otherwise: that guard tested
+    # `introduced & seen`, and `seen` holds only codes the table already has,
+    # so it was a subset of the collision checked three lines above. Unreachable
+    # rather than untested, and now removed.
+    refuses("a new code that collides with a sector being split, caught by the "
+            "check that can actually see it",
+            lambda: split_sectors(
+                table,
+                [SplitSpec("ACC", NEW, LBL,
+                           keys_by_block={"output": "key_turnover"}),
+                 SplitSpec("TRA", ["ACC", "X2"], ["a", "x"],
+                           keys_by_block={"output": "key_turnover"})],
+                sc, keys),
+            "already exist in the table")
+
+    refuses("a split with no key for a block and none to fall back on",
+            lambda: split_sector(
+                table, "ACC", NEW, LBL,
+                Scenario(scenario_id="s", label="s"), keys,
+                SplitSpec("ACC", NEW, LBL)),
+            "has no allocation key")
+
     refuses("a scenario naming a key that was never defined",
             lambda: split_sector(
                 table, "ACC", NEW, LBL,

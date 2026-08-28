@@ -22,9 +22,9 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    161 refusal sites of the engine's own types
-     90 reached by something in the suite
-     71 never reached
+    160 refusal sites of the engine's own types
+     93 reached by something in the suite
+     67 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -52,12 +52,12 @@ messages and recording what each one judges gives:
     what it judges                          total   unreached
     a file or response from an office          54          33
     the user's own spreadsheet                 56          16
-    what they asked for in that spreadsheet    20           7
+    what they asked for in that spreadsheet    19           3
     the numbers themselves                     19           4
     an internal API contract (the CALLER)       7           6
     a failure elsewhere, re-raised               5           5
 
-**Six of the 71 are caller checks — 8 %, not "most".** The largest group is
+**Six of the 67 are caller checks — 9 %, not "most".** The largest group is
 the user's own workbook, which is the route the guide opens with: *"No Python:
 you fill in a spreadsheet and run one command"*. Messages like *"no row labelled
 'Output' or 'Total output'"* are the first thing a stranger with a slightly
@@ -96,6 +96,18 @@ these without anyone having read one aloud. No network and no invented fixture:
 `data/eurostat/` holds a hundred real JSON-stat files and a JSON-stat is a dict,
 so one is loaded, one thing is removed or emptied, and it goes to a temporary
 file. The office workbooks are mutated the same way.
+
+**AND ONE REFUSAL COULD NOT FIRE AT ALL.** `split_sectors` asked, after
+checking that no new code collides with a sector already in the table, whether a
+new code "repeats the code of a sector being split". It could not: the set it
+tested against is built only from codes `table.index_of` accepted, so it was a
+subset of the collision checked three lines above, which always caught it first.
+
+That is the distinction this sweep exists to draw — **unreachable, not
+untested**. No input reaches it, so no case could be written for it, and a case
+aimed at it landed on the earlier check every time. Removed rather than left
+looking like a guard, on the rule `PROVENANCE.md` already states for validators:
+*a check that cannot run was removed rather than left to pass vacuously*.
 
 **A fifth pass took what the METHODS refuse** — a negative seed handed to RAS,
 interior cells pinned under a method that takes only margins, a
