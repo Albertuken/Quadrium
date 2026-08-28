@@ -239,7 +239,7 @@ rule now refuses rather than returning a table that says it converged.
 consistent with the totals you supplied and the base year is not: Spain's 2021
 value added is 10.8 % below 2022's, so if you need a table that adds up to 2022,
 the 2021 table is not an option however good it is. That consistency is what you
-are buying.
+are buying. See `validators/run_projection_backtest.py`.
 
 You are not buying a better estimate of the structure. Projecting eight
 countries forward, over horizons of one to twelve years, and scoring the result
@@ -286,7 +286,7 @@ base year alone in 60 of 61 tests. With only value added and final use it wins
 18 of 54, and `sut_euro` wins none — on that information a projection buys
 consistency with your totals rather than a better picture of the structure. The
 6.6 points between the two is what knowing next year's industry output is
-worth.
+worth. See `validators/run_projection_backtest.py`.
 
 **And SUT-EURO may simply refuse.** 29 of those 61 runs did not reach the Handbook's
 1 % rule in 5,000 iterations — some are only slow (Czechia converges at 18,423)
@@ -501,7 +501,9 @@ tool will tell you nothing can corroborate the result.
 Leave `internal_block_alpha` blank for the default of **1.0**, which is the
 sourced rule (CORE_031 eq. 14: the block is the outer product of the weights).
 It governs how much of the parent sector's trade with itself stays inside each
-subsector rather than crossing between them.
+subsector rather than crossing between them. Raising it to the 1.5 that real
+blocks show makes the answer worse on 53 of 96 splits, and no single value is
+right — see `validators/run_internal_block_backtest.py`.
 
 The default was 0.5 until v1.12, on the intuition that a subsector buys from
 itself *less* than proportionality implies. Measured on 1,403 sibling pairs in
@@ -597,15 +599,15 @@ table's own units. It is arithmetic, not a simulation.
 
 **Are input profiles worth the trouble?** A profile is how you tell the engine
 that your subsectors buy different things; without one they inherit the parent's
-purchasing pattern. Measured on 54 splits against the office's own answer, the
+purchasing pattern. Measured on 96 splits against the office's own answer, the
 answer is more awkward than it looks.
 
 Supplying the parts' **true** profile moves the multiplier error from a median
-9.0 % to **3.4 %** — in the seed. Then the balancer gives most of it back: the
-table you actually get is a median **10.6 %**, against 10.0 % for using no
-profile at all. It still edges out doing nothing in 21 of 35, by margins the
-medians do not show. And the engine **refuses the profiled scenario outright in
-19 of 54**.
+7.78 % to **3.48 %** — in the seed. Then the balancer gives all of it back: the
+table you actually get is a median **7.79 %**, against 7.78 % for using no
+profile at all. It still edges out doing nothing in 30 of 56, by margins the
+medians do not show, and balancing makes the answer worse in 42 of them. And the
+engine **refuses the profiled scenario outright in 40 of 96**.
 
 The reason is the engine's own design, and it is sound as far as it goes:
 balancing adjusts the internal block and nothing else, because a proportional
@@ -614,13 +616,16 @@ cells would break the reaggregation guarantee. Give it a profile and the moved
 column has to be absorbed somewhere, and that somewhere is the one block the
 measurements show is worst estimated.
 
-**Borrowing a profile from a country that publishes your split is a coin flip**:
-better in 78 of 162 borrowings and worse in 84. It helps where the split was
+**Borrowing a profile from another COUNTRY is a coin flip**: better in 214 of
+408 borrowings and worse in 194. From another **year of your own table** it is
+not — there it improves 144 of 168, because what travels badly is the country
+and not the year. It helps where the split was
 going badly anyway and hurts where it was already fine, and there is no test you
 can run beforehand to know which you are in — the risk screen above predicts the
 level of error, not whether borrowing will reduce it. So source a real profile if
-you can, and treat a borrowed one as a scenario to compare rather than an
-improvement.
+you can, and treat one borrowed from elsewhere as a scenario to compare rather
+than an
+improvement. See `validators/run_input_profiles_backtest.py`.
 
 **Which proxy should the key come from?** Measured on 66 splits over five
 country-years against the office's own answer, using the ten variables
@@ -629,7 +634,7 @@ best.** Value of output and turnover have the best medians (4.8 and 5.1 points
 of error in a subsector's share) but win a split outright 7 and 8 times out of
 66, and the most frequent winner — purchases, at 12 — is still under a third.
 The winner is scattered across all ten. Output value beats employment head to
-head in 37 of 64, a coin flip.
+head in 37 of 64, a coin flip. See `validators/run_real_key.py`.
 
 Expect **5 to 8 points** of error from a real key, with a long tail — p90 is 27
 points and the worst case here was 71. Pick for the conceptual match, register
@@ -689,11 +694,9 @@ the aggregation of the table you are splitting. The detail only exists in
 business statistics, which count enterprises where the table counts products —
 that mismatch is not a shortcut, it is the only road there is.
 
-**How risky is this split, before you make it?** Two numbers from the table you
-already have rank the difficulty: **the parent's own output multiplier** and
-**how many parts you are asking for**. They are independent of each other, and
-fitted on three countries it ranks a fourth it was never fitted on. Cut at the
-median of the 96 measured splits:
+**How risky is this split, before you make it?** One number from the table you
+already have ranks the difficulty: **how many parts you are asking for**. Cut at
+the median of the 96 measured splits:
 
 | parts | median error | worst |
 |---|---:|---:|
@@ -701,7 +704,8 @@ median of the 96 measured splits:
 | many (k > 2) | **10.6 %** | 49.2 % |
 
 Held out one country at a time it separates in the same direction in all four —
-BE 7.9 to 22.5 %, FR 8.2 to 11.2 %, HU 5.3 to 7.9 %, SK 4.4 to 19.7 %.
+BE 7.9 to 22.5 %, FR 8.2 to 11.2 %, HU 5.3 to 7.9 %, SK 4.4 to 19.7 %. See
+`validators/run_split_screen.py`.
 
 The report prints which band your split falls in. **It ranks; it does not
 predict your number** — the spread inside each band is wide, and the worst
@@ -711,21 +715,23 @@ Until the evidence base was widened this guide printed a **four-way** table on
 the parent's own output multiplier as well. On 96 splits that signal ranks at
 +0.24 and is negative in France, and at few parts its two bands come out at
 5.4 % and 5.3 % — no separation. It was one signal wearing two hats, and it is
-gone.
+gone. See `validators/run_split_screen.py`.
 
 **If another YEAR of your own table publishes the split, use it and ignore all
 of this.** The same parent a year earlier misses by **0.7 points**, against 2.8
 for the band and **5.7** for the same parent borrowed from another country. A
 split's difficulty is a property of the table it is in, not of the sector, which
-is why another country's number is the worst of the three.
+is why another country's number is the worst of the three. See
+`validators/run_split_screen.py` and `validators/run_key_carryover.py`.
 
 **And how wrong is it if your key is RIGHT?** That is a different question and
 it has been measured. Several countries publish a table where the office gives
 both a parent and its parts, so a split can be scored against the real answer.
 Across 96 such splits in 4 countries, **with the size key exactly right**, the
 subsectors' multipliers land a median of 7.3 % from the published truth, and 19
-of the 68 are out by more than 15 %. A perfect key does not buy a right answer:
+of the 96 are out by more than 15 %. A perfect key does not buy a right answer:
 the parts inherit the parent's average input structure and they do not have it.
+See `validators/run_split_backtest.py`.
 
 What that error tracks is how **unlike** the parts are — the worst error is
 about two thirds of the spread between their true multipliers, correlation
