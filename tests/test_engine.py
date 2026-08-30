@@ -1923,6 +1923,80 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
 
 
 
+def test_the_catalan_table_loads_and_says_whose_residue_it_carries():
+    """IDESCAT's symmetric table, and the two things it forced.
+
+    The file is the answer a regionalisation can be scored against: Catalonia
+    2021 at 63 branches, beside the INE's national table for the same year at
+    64. It also carries the same table four times over, split by where the
+    inputs came from, which is a two-region interregional table already
+    compiled.
+
+    Two things it forced on the engine, both measured rather than assumed:
+
+    Only the CATALAN sheet is an input-output table. Against output, the row
+    identity is 0.8 for `ts Cat` and 12,303 for `ts total` — what the others
+    record is supplied by imports, not by Catalan production. So the imported
+    intermediates come back inside `VA`, labelled as not being value added,
+    which is what makes the column identity close to 7e-12.
+
+    And the row identity does NOT close to zero, because IDESCAT's own books do
+    not: its `Total usos` column differs from its `Producció` row by up to 0.84
+    over 455,354. The cells are full precision, so the derived floor is zero and
+    nothing would have absorbed it. `_assert_balances` gained an `inherited`
+    argument for this — a residue the caller has MEASURED against the
+    publisher's own printed totals, not a number chosen to make a gate pass.
+    """
+    from quadrium.io_loader import LoaderError, load_idescat_mioc
+    from quadrium.precision import printed_decimals
+
+    path = ROOT / "data" / "idescat" / "mioc2021ts64.xlsx"
+    if not path.exists():
+        check("the Catalan table is on disk", False, str(path))
+        return
+
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        t = load_idescat_mioc(path)
+
+    check("it loads with the branches the sheet actually has",
+          t.n == 63 and t.year == 2021,
+          f"{t.n} branches, {t.year}, {t.X.sum():,.0f} M€ of output — 64 "
+          f"numbered rows, one of which is an of-which memo with no CPA code")
+
+    col = float(np.abs(t.Z.sum(axis=0) + t.VA.sum(axis=0) - t.X).max())
+    check("the column identity closes, with imports counted as inputs",
+          col < 1e-6,
+          f"{col:.2e}. Imported intermediates are the COLUMN sums of the other "
+          f"two sheets; the import ROWS are indexed by product and using those "
+          f"leaves it 6,588 out")
+
+    row = float(np.abs(t.Z.sum(axis=1) + t.Y.sum(axis=1) - t.X).max())
+    check("and the row residue is declared as the publisher's own",
+          abs(row - t.inherited_residue) < 1e-9 and 0 < row < 1.0,
+          f"{row:.4f}, matching `inherited_residue` exactly — IDESCAT's "
+          f"`Total usos` against IDESCAT's `Producció`")
+    check("which nothing else could have absorbed, because the file is unrounded",
+          printed_decimals(t.Z.ravel()) is None,
+          "full float precision, so `assertable_tolerance` gives zero")
+
+    labelled = [s for s in t.VA_labels if "NO és valor afegit" in s]
+    check("and the rows that are not value added say so in their own label",
+          len(labelled) == 3,
+          f"{len(labelled)} of {len(t.VA_labels)}: the two import blocks and "
+          f"net taxes on products, as the UK loader labels its own")
+
+    try:
+        load_idescat_mioc(ROOT / "data" / "ine" / "cne_tio_21.xlsx")
+        check("and another office's workbook is refused by name", False,
+              "it read the INE's file as if it were IDESCAT's")
+    except LoaderError as exc:
+        check("and another office's workbook is refused by name",
+              "missing the sheet" in str(exc), str(exc)[:80] + "…")
+
+
+
 def test_the_refusals_the_METHODS_make():
     """What the balancing, transformation and projection steps refuse.
 
@@ -2571,6 +2645,7 @@ def main() -> int:
                test_the_config_refusals_a_stranger_meets_next,
                test_the_refusals_about_what_was_ASKED_FOR,
                test_the_refusals_the_METHODS_make,
+               test_the_catalan_table_loads_and_says_whose_residue_it_carries,
                test_the_refusals_about_an_OFFICE_WORKBOOK,
                test_the_refusals_about_a_FILE_FROM_AN_OFFICE,
                test_a_zero_row_is_zero_at_the_SOURCE_s_precision,

@@ -313,7 +313,7 @@ def _infer_year(menu: list[str]) -> int:
                       "own fixture is named 2022 and is for 2023 (OQ-D-01).")
 
 
-def _assert_balances(table: IOTable, name: str) -> None:
+def _assert_balances(table: IOTable, name: str, inherited: float = 0.0) -> None:
     """Gate, not report (MVP_0.1 §5 step 2).
 
     The bound is the table's own precision, not a fraction of its largest
@@ -346,6 +346,14 @@ def _assert_balances(table: IOTable, name: str) -> None:
         (table.VA.ravel(), table.VA.shape[0]),
         (table.X.ravel(), 1)))
     tol = max(tol, col_tol)
+    # A PUBLISHER'S OWN UNCLOSED BOOKS ARE NOT THIS LOADER'S ERROR, and the
+    # caller has to have MEASURED the residue against the publisher's own
+    # printed totals to claim one -- not guessed a number that makes the gate
+    # pass. IDESCAT's 2021 table is the case that added this: its cells are
+    # full precision, so the derived floor is zero, and its own `Total usos`
+    # column differs from its own `Producció` row by up to 0.84. Two numbers
+    # IDESCAT printed, disagreeing with each other.
+    tol += max(0.0, float(inherited))
     parts = [f"{'unrounded' if printed_decimals(b) is None else str(printed_decimals(b)) + ' dp'} {lbl}"
              for lbl, b in (("interior", table.Z.ravel()),
                             ("final demand", table.Y.ravel()),
@@ -791,6 +799,239 @@ def load_ine_tio(path: Path | str, variant: str = "interior",
                  f"antes de descartarlo." + residual_note))
     _assert_balances(table, f"{path.name} ({variant})")
     return table
+
+
+# ---------------------------------------------------------------------------
+# The Catalan symmetric table (IDESCAT)
+# ---------------------------------------------------------------------------
+
+# `mioc20YYts64.xlsx` carries FOUR tables of the same shape, one per origin of
+# the inputs: all origins, Catalan, rest of Spain, rest of world. Only the
+# CATALAN one is an input-output table -- see the docstring -- but all four are
+# read, because the other three are where its imports come from and are the
+# reason this file is worth having at all.
+_MIOC_SHEETS = ("ts total", "ts Cat", "ts resta Esp", "ts resta món")
+
+# Rows below the product block, by the number IDESCAT prints in column 1, and
+# read by that number rather than by position: the block below the products is
+# where a vintage is most likely to gain or lose a line.
+_MIOC_TAXES, _MIOC_NONRES = 84, 87
+_MIOC_VA = (89, 90, 91)
+_MIOC_OUTPUT = 93
+
+
+def load_idescat_mioc(path: Path | str) -> IOTable:
+    """The Catalan symmetric table, at basic prices, domestic origin.
+
+    WHY THIS FILE, AND WHY THE CATALAN SHEET
+    ------------------------------------------
+    IDESCAT publishes the same symmetric table four times over, split by where
+    the inputs came from: `ts total`, `ts Cat`, `ts resta Esp`, `ts resta món`.
+    That is a two-region interregional table already compiled, and it is why
+    this is worth loading at all: a regionalisation of the Spanish national
+    table onto Catalonia can be SCORED against it, at the same year and the
+    same 63-branch classification, instead of being an opinion.
+
+    Only the Catalan sheet is an input-output table, and that was measured
+    rather than assumed. Against output at basic prices, the row identity comes
+    out at
+
+        ts Cat            0.8      <- rounding on 455,354
+        ts resta Esp   35,741
+        ts resta món   35,653
+        ts total       12,303
+
+    The other three cannot close because what they record is supplied by
+    imports, not by Catalan production. So `Z` here is Catalan-origin, which is
+    the domestic table, and the other two sheets come back inside `VA` as the
+    imported inputs each branch buys.
+
+    WHAT GOES IN THE VALUE-ADDED BLOCK, AND WHY IT IS NOT ALL VALUE ADDED
+    ----------------------------------------------------------------------
+    Column by column, `1·Z_catalan + VA = output` only closes when `VA` carries,
+    besides compensation, other production taxes and gross operating surplus:
+
+      * the intermediates bought from the rest of Spain and the rest of the
+        world -- the COLUMN sums of the other two sheets, not the import rows
+        94 and 95, which are indexed by product and belong to supply. Using
+        those instead leaves the identity 6,588 out;
+      * net taxes on products, a row of this sheet's intermediate block, as in
+        the UK analytical table;
+      * resident consumption abroad, zero in 2021 and carried anyway.
+
+    With those it closes to **0.0000**. Labelled honestly, as the UK loader
+    labels its own: these rows are not value added and the labels say so.
+
+    ROW 45 IS NOT A BRANCH
+    ------------------------
+    `dels quals: rendes immobiliàries imputades` is an OF-WHICH memo inside real
+    estate, with no CPA code, carrying zero. Sixty-four numbered rows, sixty-
+    three branches. Reading the numbering at face value adds a phantom sector;
+    that it is zero in 2021 is luck, not a reason. It is dropped for having no
+    code and the note says so. The INE publishes the same quantity as a branch
+    of its own, `44 bis`, so aligning the two means aggregating the INE's pair.
+
+    Nothing here is an offset. IDESCAT numbers its rows, prints the CPA code
+    beside each, and heads every block of columns, so both axes and every
+    boundary announce themselves — the rule `OQ-D-01` made after the INE and
+    ONS loaders each cost a defect for counting from a corner instead.
+    """
+    import re as _re
+
+    path = Path(path)
+    S = _open_workbook(path)
+    missing = [n for n in _MIOC_SHEETS if n not in S]
+    if missing:
+        raise LoaderError(
+            f"{path.name} is missing the sheet(s) {', '.join(missing)}; found: "
+            f"{', '.join(S)}. This loader expects IDESCAT's "
+            f"`mioc20YYts64.xlsx` layout, whose four sheets are one table per "
+            f"origin of the inputs.")
+    T, C = S["ts total"], S["ts Cat"]
+
+    def num(R, i, j):
+        row = R[i] if i < len(R) else ()
+        v = row[j] if j < len(row) else None
+        return 0.0 if v is None else float(v)
+
+    def clean(v):
+        return _re.sub(r"\s+", " ", str(v if v is not None else "")).strip()
+
+    # --- both axes, off the codes the sheet prints
+    hdr = next((i for i, r in enumerate(T)
+                if r and any(clean(c) == "Codi" for c in r if c is not None)), None)
+    if hdr is None:
+        raise LoaderError(
+            f"{path.name}: no row carries 'Codi', which is how the product "
+            f"columns announce themselves in this layout.")
+    col_of = {clean(c): j for j, c in enumerate(T[hdr])
+              if c is not None and j > 2}
+    prod_rows = [i for i in range(hdr + 1, len(T))
+                 if len(T[i]) > 1 and T[i][1] is not None
+                 and clean(T[i][1]) in col_of]
+    codes = [clean(T[i][1]) for i in prod_rows]
+    labels = [clean(T[i][2]) for i in prod_rows]
+    n = len(codes)
+    if n < 20 or list(col_of) != codes:
+        raise LoaderError(
+            f"{path.name}: the row codes are not the column codes ({n} rows "
+            f"against {len(col_of)} columns, in this order). A symmetric table "
+            f"has to be square and in one order.")
+    dropped = [f"{clean(T[i][0])} {clean(T[i][2])}" for i in range(hdr + 1, len(T))
+               if len(T[i]) > 2 and T[i][0] is not None
+               and clean(T[i][0]).isdigit() and i not in prod_rows
+               and clean(T[i][2]).lower().startswith("dels quals")]
+
+    # --- final demand: from the CONSUM FINAL head to Total demanda final,
+    #     dropping the subtotals printed among them, as the INE loader does.
+    heads = {}
+    for i in range(hdr):
+        for j, c in enumerate(T[i] if i < len(T) else ()):
+            if c is not None and clean(c):
+                heads.setdefault(clean(c).lower(), j)
+    fd_start = heads.get("consum final")
+    lab_row = hdr + 1
+    label_at = lambda j: clean(T[lab_row][j] if j < len(T[lab_row]) else None)
+    fd_end = next((j for j in range(fd_start or 0, len(T[lab_row]))
+                   if label_at(j).lower() == "total demanda final"), None)
+    if fd_start is None or fd_end is None:
+        raise LoaderError(
+            f"{path.name}: the final-demand block is not delimited by a "
+            f"'CONSUM FINAL' head and a 'Total demanda final' column, so where "
+            f"it begins and ends cannot be read off the sheet.")
+    fd_cols = [j for j in range(fd_start, fd_end)
+               if not label_at(j).lower().startswith("total")
+               and label_at(j).lower() != "formació bruta de capital"]
+    fd_dropped = [label_at(j) for j in range(fd_start, fd_end) if j not in fd_cols]
+
+    idx = [col_of[c] for c in codes]
+    Z = np.array([[num(C, i, j) for j in idx] for i in prod_rows])
+    Y = np.array([[num(C, i, j) for j in fd_cols] for i in prod_rows])
+    Y_labels = [label_at(j) for j in fd_cols]
+
+    num_of = {int(clean(T[i][0])): i for i in range(hdr, len(T))
+              if len(T[i]) and T[i][0] is not None and clean(T[i][0]).isdigit()}
+    want = (_MIOC_TAXES, _MIOC_NONRES, *_MIOC_VA, _MIOC_OUTPUT)
+    absent = [k for k in want if k not in num_of]
+    if absent:
+        raise LoaderError(
+            f"{path.name}: the rows numbered {', '.join(map(str, absent))} are "
+            f"not on the 'ts total' sheet, and they carry the column identity.")
+
+    # The imported inputs each BRANCH buys: the column sums of the other two
+    # sheets. Rows 94 and 95 are imports by PRODUCT and belong to supply --
+    # using them here leaves the identity 6,588 out.
+    va_rows, VA_labels = [], []
+    for sheet, lab in (("ts resta Esp", "Consums intermedis importats de la "
+                                        "resta d'Espanya (NO és valor afegit)"),
+                       ("ts resta món", "Consums intermedis importats de la "
+                                        "resta del món (NO és valor afegit)")):
+        M = S[sheet]
+        va_rows.append(np.array([[num(M, i, j) for j in idx]
+                                 for i in prod_rows]).sum(axis=0))
+        VA_labels.append(lab)
+    for k, extra in ((_MIOC_TAXES, " (NO és valor afegit)"), (_MIOC_NONRES, "")):
+        va_rows.append(np.array([num(T, num_of[k], j) for j in idx]))
+        VA_labels.append(clean(T[num_of[k]][2]) + extra)
+    for k in _MIOC_VA:
+        va_rows.append(np.array([num(T, num_of[k], j) for j in idx]))
+        VA_labels.append(clean(T[num_of[k]][2]))
+    VA = np.vstack(va_rows)
+    X = np.array([num(T, num_of[_MIOC_OUTPUT], j) for j in idx])
+
+    # The residue IDESCAT itself admits: its own `Total usos` column against
+    # its own `Producció` row, branch by branch. Measured here rather than
+    # assumed, and declared so the gate below judges this loader's work and not
+    # the publisher's arithmetic.
+    published_uses = np.array([num(C, i, fd_end + 1) for i in prod_rows])
+    residue = float(np.abs(published_uses - X).max())
+
+    year = _mioc_year(T, path)
+    table = IOTable(
+        table_id=f"CAT-MIOC-PXP-{year}", country="Catalunya", year=year,
+        unit="milions d'euros, preus corrents, preus bàsics",
+        classification="CPA 2008 (63 branques, numeració MIOC d'Idescat)",
+        sector_codes=codes, sector_labels=labels,
+        Z=Z, Y=Y, Y_labels=Y_labels, VA=VA, VA_labels=VA_labels, X=X,
+        source=(f"Idescat, Marc Input-Output de Catalunya {year}, taula "
+                f"simètrica a 63 branques ({path.name})"),
+        retrieved_at=datetime.now(timezone.utc),
+        inherited_residue=residue,
+        notes=(f"Product by product, basic prices, DOMESTIC origin: `Z` is the "
+               f"'ts Cat' sheet, the only one of the four whose row identity "
+               f"closes against output. The imported intermediates each branch "
+               f"buys are the column sums of 'ts resta Esp' and 'ts resta món' "
+               f"and are returned in `VA`, labelled as not being value added, "
+               f"together with net taxes on products — without them the column "
+               f"identity is 714 out. Dropped {len(dropped)} of-which memo "
+               f"row(s) ({', '.join(dropped) or 'none'}): 64 numbered rows, "
+               f"{n} branches. Dropped {len(fd_dropped)} final-demand subtotal "
+               f"column(s) ({', '.join(fd_dropped)}). Exports are split into "
+               f"rest of Spain and rest of world, which is what makes this a "
+               f"two-region table rather than a regional one. IDESCAT's own "
+               f"books are out by up to {residue:,.4f} between its `Total usos` "
+               f"column and its `Producció` row — measured, declared as "
+               f"inherited, and not this loader's to close."))
+    _assert_balances(table, path.name, inherited=residue)
+    return table
+
+
+def _mioc_year(R, path: Path) -> int:
+    """The reference year, from the sheet's own title rows.
+
+    Never from the filename. `mioc2021ts64.xlsx` happens to carry it and the
+    2014 and 2016 editions are named differently again, which is the trap
+    `OQ-D-01` records.
+    """
+    import re as _re
+    for i in range(min(6, len(R))):
+        for c in R[i]:
+            m = _re.search(r"\b(19|20)\d{2}\b", str(c or ""))
+            if m:
+                return int(m.group(0))
+    raise LoaderError(
+        f"{path.name}: could not read the reference year from the title rows. "
+        f"Refusing to take it from the filename (OQ-D-01).")
 
 
 # ---------------------------------------------------------------------------

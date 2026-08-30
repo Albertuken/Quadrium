@@ -22,9 +22,9 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    160 refusal sites of the engine's own types
-     93 reached by something in the suite
-     67 never reached
+    166 refusal sites of the engine's own types
+     94 reached by something in the suite
+     72 never reached
 
     module              reached   total
     scenarios.py              1       1
@@ -149,10 +149,16 @@ on the reference year before the missing-table check. Each time the test was
 rewritten, not the engine, and each earlier refusal was itself on the unreached
 list.
 
-*A caveat on the record.* The classification is keyed by `file:line`, so it goes
-stale whenever code moves — the check that it still covers every site is what
-catches that, and a re-take must re-read anything that shifted rather than
-carrying the old label across.
+*The record used to be keyed by `file:line`, and that was wrong.* Inserting the
+Catalan loader shifted every line below it and silently re-labelled **38 sites**
+by module default, moving 19 of them from `source` to `workbook`. The count
+check caught that something had moved; nothing would have caught the labels
+being wrong.
+
+It is now keyed by the FUNCTION the refusal sits in, which does not move, with a
+few identified by a distinctive fragment of their own message — because one
+function can judge both a caller's arguments and a table's contents, and
+`transform` judges both.
 
 The classification lives in `data/_refusal_coverage.json` so it is held rather
 than repeated, and it was made by reading each message rather than by matching
