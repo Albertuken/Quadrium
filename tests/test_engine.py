@@ -1950,9 +1950,21 @@ def test_the_catalan_table_loads_and_says_whose_residue_it_carries():
     from quadrium.io_loader import LoaderError, load_idescat_mioc
     from quadrium.precision import printed_decimals
 
+    # The Catalan data is PRIVATE: putting it in the public tree means
+    # redistributing a new publisher under a licence nobody here has read, and
+    # `run_idescat_catalonia.py` is in sync_public's PRIVATE_ONLY for the same
+    # reason. A test file cannot be split, so this one says which tree it is in
+    # rather than failing in one of them -- or, worse, passing in silence. The
+    # discriminator is the methodological library, which never leaves.
     path = ROOT / "data" / "idescat" / "mioc2021ts64.xlsx"
+    private_tree = (ROOT / "library" / "extracted").is_dir()
     if not path.exists():
-        check("the Catalan table is on disk", False, str(path))
+        check("the Catalan table is absent only where it is meant to be",
+              not private_tree,
+              "this is the public tree, which does not ship IDESCAT's data, so "
+              "there is nothing to load and nothing to check"
+              if not private_tree else
+              f"missing from the PRIVATE tree, where it should be: {path}")
         return
 
     import warnings
