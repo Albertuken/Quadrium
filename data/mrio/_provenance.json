@@ -1,0 +1,22 @@
+{
+ "MRIO.zip": {
+  "url": "https://zenodo.org/records/7875024/files/MRIO.zip?download=1",
+  "record": "https://zenodo.org/records/7875024",
+  "method": "curl -sL --retry 3",
+  "bytes": 317055869,
+  "sha256": "9db930f2438f27179b0f4d99a7f54b6d45b134b964a98234326c6c4925201e27",
+  "retrieved_at": "2026-09-01T09:14:00.497967+00:00",
+  "licence": "Data CC BY 4.0 (Zenodo record); code MIT (LICENSE inside the archive)",
+  "citation": "Huang, S. et al., European multi regional input output data for 2008-2018, Scientific Data 10 (2023)",
+  "why": "the technical-validation set carries NINE survey-based Austrian NUTS-2 tables (Rokicki et al. 2021) with both sides of interregional trade by sector, plus Finnish and Scottish regional tables. OQ-R-02 closed on ONE region; these are the cases that say whether delta = 0.20 generalises. The 272-region MRIO files are estimates, not ground truth, and are used for structure rather than for scoring.",
+  "extracted": [
+   "Data/MRIO_2018_272regions.xlsx",
+   "Code/NUTS2_list.xlsx",
+   "Code/Metadata.xlsx",
+   "ReadMe.md",
+   "LICENSE",
+   "Code/Technical validation/** -> truth/"
+  ],
+  "note": "the archive and every workbook extracted from it are gitignored: 317 MB against a 33 MB data/ and a 74 MB .git. What is tracked is this file, so the payload is re-obtainable from the URL and checkable against the hash."
+ }
+}
