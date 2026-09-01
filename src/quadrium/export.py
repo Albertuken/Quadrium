@@ -251,18 +251,6 @@ def write_xlsx(res: DisaggregationResult, path: Path) -> Path | None:
         ws.cell(row=2 + i, column=3, value=float(t.X[i])).number_format = "#,##0.00"
     ws.column_dimensions["B"].width = 45
 
-    ws = wb.create_sheet("Provenance")
-    ws.cell(row=1, column=1, value="code").font = bold
-    for j, code in enumerate(t.sector_codes):
-        ws.cell(row=1, column=2 + j, value=code).font = bold
-    for i, code in enumerate(t.sector_codes):
-        ws.cell(row=2 + i, column=1, value=code).font = bold
-        for j in range(len(t.sector_codes)):
-            lab = prov[i, j]
-            lab = lab if isinstance(lab, str) else lab.value
-            c = ws.cell(row=2 + i, column=2 + j, value=DATA_STATUS[CellLabel(lab)])
-            c.alignment = Alignment(horizontal="center")
-    ws.freeze_panes = "B2"
 
     divided = "; ".join(f"{sp['sector_code']} into {', '.join(sp['new_codes'])}"
                         for sp in res.splits)
@@ -313,6 +301,32 @@ def _write_interchange_sheets(wb, t, *, table_id: str,
     for m, lab in enumerate(t.VA_labels):
         ws.append([str(lab)] + [float(v) for v in t.VA[m]])
     ws.append(["Output"] + [float(v) for v in t.X])
+    ws.freeze_panes = "B2"
+
+    # THE PROVENANCE SHEET IS PART OF THIS FORMAT, not of the human-readable
+    # one. The loader reads it back, and without it a table this engine
+    # produced comes back with every estimate wearing the status of a
+    # measurement -- which is what happened to `--regionalise`'s output on
+    # 2026-09-01: written ESTIMATED on 4,096 cells, read back OBSERVED on all
+    # of them. It lived in write_xlsx() until then, so only a disaggregation
+    # got one.
+    from openpyxl.styles import Alignment
+
+    prov = t.provenance
+    if prov is None:
+        prov = np.empty((t.n, t.n), dtype=object)
+        prov[:] = CellLabel.OBSERVED
+    ws = wb.create_sheet("Provenance")
+    ws.cell(row=1, column=1, value="code").font = bold
+    for j, code in enumerate(t.sector_codes):
+        ws.cell(row=1, column=2 + j, value=code).font = bold
+    for i, code in enumerate(t.sector_codes):
+        ws.cell(row=2 + i, column=1, value=code).font = bold
+        for j in range(len(t.sector_codes)):
+            lab = prov[i, j]
+            lab = lab if isinstance(lab, str) else lab.value
+            c = ws.cell(row=2 + i, column=2 + j, value=DATA_STATUS[CellLabel(lab)])
+            c.alignment = Alignment(horizontal="center")
     ws.freeze_panes = "B2"
 
     ws = wb.create_sheet("metadata")

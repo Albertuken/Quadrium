@@ -82,7 +82,7 @@ class Regionalisation:
         would imply a detail the method does not have, so it returns one and
         names it for what it is.
         """
-        from .models import IOTable
+        from .models import CellLabel, IOTable
 
         n = len(sector_codes)
         if n != len(self.X):
@@ -107,6 +107,18 @@ class Regionalisation:
             VA=VA, VA_labels=["value added and imports (residual)"],
             X=self.X.copy(), source=source or f"Quadrium {self.method}",
             notes=note,
+            # EVERY CELL IS AN ESTIMATE, and the table has to say so itself.
+            # `provenance=None` means "a publisher's table, every cell an
+            # observation as far as this system can tell" -- which is what the
+            # first version of this method returned, and it is exactly the
+            # failure the field exists to prevent: read back, a regionalised
+            # table would have handed a later split a matrix of estimates
+            # wearing the status of measurements, and the audit trail would
+            # have reset to zero at the file boundary.
+            # np.full() infers a fixed-width string dtype from the enum and
+            # silently truncates it to 'CellLabel.PROXY'; build the object
+            # array first and fill it.
+            provenance=_estimated(n),
             lineage=[f"regionalised from a national table with {self.method}"
                      + (f", delta = {self.delta:g}" if self.delta is not None
                         else "")]
@@ -115,6 +127,15 @@ class Regionalisation:
     def report(self) -> str:
         """The costs, as a block a caller can print beside the numbers."""
         return "\n".join(self.caveats)
+
+
+def _estimated(n: int) -> np.ndarray:
+    """An n x n provenance array in which every cell is a proxy estimate."""
+    from .models import CellLabel
+
+    out = np.empty((n, n), dtype=object)
+    out[:] = CellLabel.PROXY_ESTIMATED
+    return out
 
 
 def _quotients(slq: np.ndarray, method: str, lam: float) -> np.ndarray:
