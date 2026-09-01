@@ -2289,10 +2289,18 @@ def test_the_config_refusals_a_stranger_meets_next():
             ("a table_unbalanced that is not one of the two policies",
              set_project("table_unbalanced", "shrug"), "table_unbalanced"),
             # `keys` absent is read as empty, not missing, so the split's own
-            # key check fires first -- which is a better message anyway. The
-            # required-sheet refusal needs one of the sheets that must exist.
-            ("a workbook with one of the required sheets deleted",
-             lambda wb: wb.remove(wb["splits"]), "missing the sheet"),
+            # key check fires first -- which is a better message anyway.
+            #
+            # `project` is the only unconditionally required sheet. `splits` was
+            # too until v1.86, when `regionalise` became the other job a
+            # workbook can describe; deleting `splits` now gets the refusal for
+            # a workbook that names a table and nothing to do with it, which is
+            # the more useful of the two messages because it says what the two
+            # options ARE.
+            ("a workbook with the one required sheet deleted",
+             lambda wb: wb.remove(wb["project"]), "missing the sheet"),
+            ("a workbook that names a table and no job",
+             lambda wb: wb.remove(wb["splits"]), "describes no job"),
             ("a split whose subsectors and whose key disagree",
              set_cell("keys", 2, 2, "I999"), "but key"),
             # The Eurostat route: the engine downloads the table itself, so

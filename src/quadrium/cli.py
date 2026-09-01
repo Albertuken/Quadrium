@@ -27,6 +27,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import numpy as np
+
 # Relative imports would do here, but the absolute ones keep this file
 # runnable as a script from a checkout as well as importable from an
 # install; `run_quadrium.py` at the repository root puts `src/` on the
@@ -526,10 +528,44 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 1
 
+    # A workbook can describe a regionalisation instead of a split, and then
+    # everything below -- _describe, the substance warnings, splits, keys,
+    # scenarios -- has nothing to act on. Dispatched BEFORE them, because
+    # _describe reads cfg["splits"] and a regionalisation has none.
+    if cfg.get("kind") == "regionalise":
+        from . import diagnostics
+        from .regionalise import regionalise
+        A_nat = np.nan_to_num(
+            diagnostics.technical_coefficients(cfg["table"].Z, cfg["table"].X))
+        try:
+            res = regionalise(A_nat, cfg["Q_region"], cfg["Q_national"],
+                              method=cfg["method"], delta=cfg["delta"],
+                              X_region=cfg["Q_region"]
+                              if cfg["national_activity_from"] == "table output"
+                              else None)
+        except ValueError as exc:
+            print(f"The method refused:\n\n  {exc}\n", file=sys.stderr)
+            return 2
+        if args.check:
+            print(f"Table   : {cfg['table'].table_id} — {cfg['table'].n} sectors")
+            print(f"Method  : {res.method}"
+                  + (f", delta = {res.delta:g}" if res.delta is not None else ""))
+            print(f"Region  : {cfg['Q_region'].sum() / cfg['Q_national'].sum() * 100:.2f} %"
+                  f" of the national total\n")
+            print(res.report())
+            return 0
+        print(f"Table   : {cfg['table'].table_id} — {cfg['table'].n} sectors")
+        return _write_regionalisation(
+            res, cfg["table"], args.outputs, cfg["project_id"],
+            Path(cfg["source_file"]).name, Path(cfg["activity_file"]).name,
+            cfg["national_activity_from"] == "file",
+            cfg["Q_region"], cfg["Q_national"])
+
     _describe(cfg)
     # Printed on BOTH paths. Warning only under --check would mean the run that
     # actually produces numbers is the quieter of the two.
     _warn_about_substance(cfg)
+
     if args.check:
         print("\nConfiguration and table are valid. Nothing was run "
               "(--check).")
@@ -575,6 +611,98 @@ if __name__ == "__main__":
     sys.exit(main())
 
 
+def _write_regionalisation(res, table, out_root, name, national_name,
+                           activity_name, has_nat, q_reg, q_nat) -> int:
+    """Write a regionalisation, whichever door asked for it.
+
+    Both the flags and the `regionalise` sheet arrive here, so a result cannot
+    depend on how it was requested and the measured cost cannot be printed by
+    one route and not the other.
+    """
+    import numpy as np
+
+    from .export import write_json
+
+    out = Path(out_root) / (name or f"regionalised_{res.method.lower()}")
+    out.mkdir(parents=True, exist_ok=True)
+    np.savetxt(out / "coefficients.csv", res.A, delimiter=",",
+               header=",".join(table.sector_codes), comments="# A^rr, ")
+    # The region as a TABLE, in the format --national-kind interchange reads.
+    # Without this the command produced a matrix and stopped: nothing
+    # downstream could diagnose the region, split a sector of it, or export it.
+    from .export import write_interchange_xlsx
+    regional = res.to_table(
+        sector_codes=table.sector_codes, sector_labels=table.sector_labels,
+        country=f"{table.country} — region", year=table.year, unit=table.unit,
+        classification=table.classification,
+        source=f"regionalised from {national_name} with "
+               f"{res.method}" + (f", delta={res.delta:g}"
+                                  if res.delta is not None else ""))
+    wrote_table = write_interchange_xlsx(
+        regional, out / "regional_table.xlsx",
+        derived_from=f"Quadrium regionalisation with {res.method}"
+                     + (f", delta = {res.delta:g}" if res.delta is not None
+                        else "") + ". Estimated, not observed:")
+
+    with (out / "implicit_imports.csv").open("w") as fh:
+        fh.write("# interregional imports the scaling implies, CORE_039 p. 292\n")
+        fh.write("sector_code,implicit_imports\n")
+        for c, v in zip(table.sector_codes, res.implicit_imports):
+            fh.write(f"{c},{v:.6f}\n")
+
+    lines = [
+        f"# Regionalised with {res.method}"
+        + (f", delta = {res.delta:g}" if res.delta is not None else ""),
+        "",
+        f"From `{national_name}` ({table.country} {table.year}, "
+        f"{table.n} sectors, {table.unit}).",
+        f"Regional activity from `{activity_name}`"
+        + ("" if has_nat else ", against the table's own output")
+        + f", a {q_reg.sum() / q_nat.sum() * 100:.2f} % share of the national "
+          f"total.",
+        "",
+        "## What this is known to get wrong",
+        "",
+        "*Printed because the method has measured limitations and a number "
+        "without them invites more confidence than it has earned. "
+        "`CORE_036` p. 35.*",
+        "",
+    ] + [f"- {c.lstrip('- ')}" if c.startswith("  - ") else c
+         for c in res.caveats] + [
+        "",
+        "## What was written",
+        "",
+        "- `coefficients.csv` — the regional domestic coefficients.",
+        "- `implicit_imports.csv` — the interregional imports the scaling "
+        "implies, by product. This is the quantity that makes the method's "
+        "trade assumption inspectable rather than implicit.",
+        ("- `regional_table.xlsx` — the region as a table, in the format this "
+         "engine reads back. Run it through `--check`, split a sector of it, "
+         "or point `--national` at it. Its final demand is one column and its "
+         "value added one row, because a location quotient says nothing about "
+         "how either divides."
+         if wrote_table else
+         "- (no `regional_table.xlsx`: openpyxl is not installed)"),
+        "",
+        f"Scaling touched {int((res.q < 1.0).sum()):,} of "
+        f"{res.q.size:,} cells; {int((res.slq >= 1.0).sum())} sectors were "
+        f"at or above a location quotient of 1 and were left alone.",
+    ]
+    (out / "report.md").write_text("\n".join(lines) + "\n")
+    write_json({"method": res.method, "delta": res.delta, "lambda": res.lam,
+                "national_table": str(national_name),
+                "activity_file": str(activity_name),
+                "national_activity_from": "file" if has_nat else "table output",
+                "regional_share_pct": float(q_reg.sum() / q_nat.sum() * 100),
+                "caveats": res.caveats},
+               out / "assumption_ledger.json")
+
+    print("\n".join(lines))
+    print("\n".join(lines))
+    print(f"\nWritten to {out}")
+    return 0
+
+
 def _regionalise(args) -> int:
     """Regionalise a national table, and print what it costs to have done so.
 
@@ -588,8 +716,6 @@ def _regionalise(args) -> int:
     analyst's and there is no refuge in mechanically produced figures — turned
     into something the engine does rather than something a document says.
     """
-    import csv as _csv
-
     import numpy as np
 
     from . import diagnostics
@@ -630,35 +756,16 @@ def _regionalise(args) -> int:
               file=sys.stderr)
         return 2
 
-    rows = list(_csv.reader(Path(args.regionalise).open()))
-    if not rows or [c.strip().lower() for c in rows[0][:2]] != ["sector_code",
-                                                               "regional"]:
-        print(f"{args.regionalise} must start with a header row reading "
-              f"`sector_code,regional` and optionally `,national`. Regional "
-              f"activity is output or employment; if the third column is "
-              f"absent the table's own output is used, which is only right "
-              f"when the second column is output too.", file=sys.stderr)
+    # The SAME reader the workbook route uses, so one mistake cannot get two
+    # different refusals depending on which door the analyst came through.
+    from .config import ConfigError as _CfgError
+    from .config import read_activity
+    try:
+        q_reg, q_nat, national_from = read_activity(args.regionalise, table)
+    except _CfgError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    has_nat = len(rows[0]) > 2 and rows[0][2].strip().lower() == "national"
-
-    seen = {r[0].strip(): r for r in rows[1:] if r and r[0].strip()}
-    missing = [c for c in table.sector_codes if c not in seen]
-    extra = [c for c in seen if c not in table.sector_codes]
-    if missing or extra:
-        print(f"The activity file and the table do not describe the same "
-              f"sectors.\n"
-              f"  in the table but not the file: "
-              f"{', '.join(missing[:8]) or 'none'}"
-              f"{' …' if len(missing) > 8 else ''}\n"
-              f"  in the file but not the table: "
-              f"{', '.join(extra[:8]) or 'none'}"
-              f"{' …' if len(extra) > 8 else ''}\n\n"
-              f"Align the classifications; do not pad.", file=sys.stderr)
-        return 2
-
-    q_reg = np.array([float(seen[c][1]) for c in table.sector_codes])
-    q_nat = (np.array([float(seen[c][2]) for c in table.sector_codes])
-             if has_nat else table.X.copy())
+    has_nat = national_from == "file"
 
     A_nat = diagnostics.technical_coefficients(table.Z, table.X)
     A_nat = np.nan_to_num(A_nat)
@@ -669,80 +776,7 @@ def _regionalise(args) -> int:
         print(f"The method refused:\n\n  {exc}\n", file=sys.stderr)
         return 2
 
-    out = Path(args.outputs) / (args.name or f"regionalised_{args.method.lower()}")
-    out.mkdir(parents=True, exist_ok=True)
-    np.savetxt(out / "coefficients.csv", res.A, delimiter=",",
-               header=",".join(table.sector_codes), comments="# A^rr, ")
-    # The region as a TABLE, in the format --national-kind interchange reads.
-    # Without this the command produced a matrix and stopped: nothing
-    # downstream could diagnose the region, split a sector of it, or export it.
-    from .export import write_interchange_xlsx
-    regional = res.to_table(
-        sector_codes=table.sector_codes, sector_labels=table.sector_labels,
-        country=f"{table.country} — region", year=table.year, unit=table.unit,
-        classification=table.classification,
-        source=f"regionalised from {Path(args.national).name} with "
-               f"{res.method}" + (f", delta={res.delta:g}"
-                                  if res.delta is not None else ""))
-    wrote_table = write_interchange_xlsx(
-        regional, out / "regional_table.xlsx",
-        derived_from=f"Quadrium regionalisation with {res.method}"
-                     + (f", delta = {res.delta:g}" if res.delta is not None
-                        else "") + ". Estimated, not observed:")
+    return _write_regionalisation(
+        res, table, args.outputs, args.name, Path(args.national).name,
+        Path(args.regionalise).name, has_nat, q_reg, q_nat)
 
-    with (out / "implicit_imports.csv").open("w") as fh:
-        fh.write("# interregional imports the scaling implies, CORE_039 p. 292\n")
-        fh.write("sector_code,implicit_imports\n")
-        for c, v in zip(table.sector_codes, res.implicit_imports):
-            fh.write(f"{c},{v:.6f}\n")
-
-    lines = [
-        f"# Regionalised with {res.method}"
-        + (f", delta = {res.delta:g}" if res.delta is not None else ""),
-        "",
-        f"From `{Path(args.national).name}` ({table.country} {table.year}, "
-        f"{table.n} sectors, {table.unit}).",
-        f"Regional activity from `{Path(args.regionalise).name}`"
-        + ("" if has_nat else ", against the table's own output")
-        + f", a {q_reg.sum() / q_nat.sum() * 100:.2f} % share of the national "
-          f"total.",
-        "",
-        "## What this is known to get wrong",
-        "",
-        "*Printed because the method has measured limitations and a number "
-        "without them invites more confidence than it has earned. "
-        "`CORE_036` p. 35.*",
-        "",
-    ] + [f"- {c.lstrip('- ')}" if c.startswith("  - ") else c
-         for c in res.caveats] + [
-        "",
-        "## What was written",
-        "",
-        "- `coefficients.csv` — the regional domestic coefficients.",
-        "- `implicit_imports.csv` — the interregional imports the scaling "
-        "implies, by product. This is the quantity that makes the method's "
-        "trade assumption inspectable rather than implicit.",
-        ("- `regional_table.xlsx` — the region as a table, in the format this "
-         "engine reads back. Run it through `--check`, split a sector of it, "
-         "or point `--national` at it. Its final demand is one column and its "
-         "value added one row, because a location quotient says nothing about "
-         "how either divides."
-         if wrote_table else
-         "- (no `regional_table.xlsx`: openpyxl is not installed)"),
-        "",
-        f"Scaling touched {int((res.q < 1.0).sum()):,} of "
-        f"{res.q.size:,} cells; {int((res.slq >= 1.0).sum())} sectors were "
-        f"at or above a location quotient of 1 and were left alone.",
-    ]
-    (out / "report.md").write_text("\n".join(lines) + "\n")
-    write_json({"method": res.method, "delta": res.delta, "lambda": res.lam,
-                "national_table": str(args.national),
-                "activity_file": str(args.regionalise),
-                "national_activity_from": "file" if has_nat else "table output",
-                "regional_share_pct": float(q_reg.sum() / q_nat.sum() * 100),
-                "caveats": res.caveats},
-               out / "assumption_ledger.json")
-
-    print("\n".join(lines))
-    print(f"\nWritten to {out}")
-    return 0

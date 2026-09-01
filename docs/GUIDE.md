@@ -459,9 +459,14 @@ producing a result. See §7.
 quadrium --template my_config.xlsx
 ```
 
-That writes a blank workbook with five sheets. Every sheet carries its own
+That writes a blank workbook with six sheets. Every sheet carries its own
 instructions at the bottom, in grey. What follows is the same thing with more
 room to explain.
+
+**A workbook describes one job, not two.** Fill in `splits` to divide a sector,
+or `regionalise` to estimate a region from the table — never both. The five
+sheets below are the split; `regionalise` is [§9](#9-estimate-a-regions-table),
+and a workbook with neither filled in is refused rather than run empty.
 
 ### Sheet `project`
 
@@ -931,10 +936,26 @@ Everything above divides a table's **sectors**. This divides its **territory**:
 given a national table and one thing about a region — its output or employment
 by sector — it estimates the region's own table.
 
+**From the workbook, like everything else.** Add a `regionalise` sheet with
+three keys — `method`, `delta` and `activity_path` — and leave `splits` empty.
+The `project` sheet already says which table to use and how to load it, so this
+route also accepts `table_kind: eurostat`, which the flags below cannot express.
+`--template` writes the sheet with its instructions in it.
+
+```bash
+quadrium my_region.xlsx
+```
+
+**Or from the command line**, if you would rather not open a spreadsheet:
+
 ```bash
 quadrium --regionalise activity.csv --national table.xlsx \
          --national-kind ine --method FLQ --delta 0.25
 ```
+
+Both doors call the same code and refuse the same mistakes in the same words;
+`validators/run_regionalise_config.py` checks that they do, and that they
+produce identical coefficients.
 
 `activity.csv` is two columns, `sector_code,regional`, one row per sector of the
 national table, and a third column `national` if your activity measure is not

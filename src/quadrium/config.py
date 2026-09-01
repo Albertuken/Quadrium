@@ -92,12 +92,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from .io_loader import LoaderError, _open_workbook, load_ine_tio, \
     load_io_table, load_uk_analytical_iot
 from .models import (AllocationKey, Assumption, AssumptionLedger,
                      ProxyStrength, Scenario, SplitSpec)
 
-REQUIRED_SHEETS = ("project", "splits")
+REQUIRED_SHEETS = ("project",)
+# A workbook describes ONE of two jobs: dividing a sector or estimating a
+# region. It needs `splits` for the first and `regionalise` for the second, and
+# `splits` was unconditionally required until v1.86 -- which is why
+# regionalisation only existed as command-line flags, in a tool whose guide
+# opens by promising you will not need Python.
+# THREE jobs, not two: `targets` with `table_kind: eurostat_sut` describes a
+# projection, which has no splits either. The first version of this check
+# listed only the first two and refused every projection workbook.
+ONE_OF_SHEETS = ("splits", "regionalise", "targets")
 TABLE_KINDS = ("uk_analytical", "interchange",
                "ine_interior", "ine_total", "eurostat", "eurostat_sut")
 
@@ -720,6 +731,12 @@ def load_config(path: Path | str, *, offline: bool = False,
             f"{path.name} is missing the sheet(s) {', '.join(missing)}. "
             f"Run `python3 run_quadrium.py --template my_config.xlsx` to get a "
             f"workbook with the right shape and comments in it.")
+    if not any(s in sheets and _rows(sheets, s) for s in ONE_OF_SHEETS):
+        raise ConfigError(
+            f"{path.name} says which table to use and then nothing to do with "
+            f"it. Fill in `splits` to divide a sector, `regionalise` to "
+            f"estimate a region from it, or `targets` to project a supply-use "
+            f"pair. A workbook with none of the three describes no job.")
     meta = {}
     for r in sheets["project"]:
         if r and r[0] is not None and str(r[0]).strip():
@@ -730,38 +747,36 @@ def load_config(path: Path | str, *, offline: bool = False,
     tables = {name: _rows(sheets, name)
               for name in ("splits", "keys", "scenarios", "profiles",
                            "targets")}
+
+    # `regionalise` is key/value like `project`, not a table of rows: the job
+    # has one set of parameters, not one per sector.
+    reg = {}
+    for r in sheets.get("regionalise", []):
+        if r and r[0] is not None and str(r[0]).strip():
+            k = str(r[0]).strip()
+            # `#` is a comment; `key` is the template's own header row, which
+            # the first version read as a setting called "key" and so treated
+            # an untouched template as a regionalisation with nothing in it.
+            if k.startswith("#") or k.lower() in ("key", "sector_code"):
+                continue
+            reg[k.lower()] = r[1] if len(r) > 1 else None
+    if reg:
+        return build_regionalisation(meta, reg, base_dir=path.parent,
+                                     label=path.name, offline=offline,
+                                     refresh=refresh)
     return build_config(meta, tables, base_dir=path.parent, label=path.name,
                         offline=offline, refresh=refresh)
 
 
-def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
-                 label: str = "<configuration>", *, offline: bool = False,
-                 refresh: bool = False) -> dict:
-    """Build a run from plain Python data, with no spreadsheet involved.
+def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
+                         refresh: bool, defaults_taken: list):
+    """The table the `project` sheet names, however it names it.
 
-    `meta` is the `project` sheet as a dict; `tables` maps 'splits', 'keys',
-    'scenarios' and 'profiles' to lists of row-dicts with the same column names
-    the workbook uses.
-
-    WHY THIS EXISTS SEPARATELY FROM THE WORKBOOK.
-    A configuration is a declarative description of a run: which table, which
-    sectors, which proxies with which sources, which scenarios. A human writes
-    that in a spreadsheet. A program — a connector to a statistical institute,
-    a script, or a model asked to set up a run — writes the same thing as data.
-    Keeping the two entry points on one code path means both get identical
-    validation and identical error messages, so a machine-written configuration
-    cannot take a shortcut a human-written one could not.
-
-    Every check below is deliberately the same for both. In particular a
-    generated configuration still has to name a real source and a real strength
-    for every proxy: there is no path into this engine that produces a number
-    without saying where it came from.
+    Extracted at v1.86 so a regionalisation reads its national table exactly
+    the way a split reads the table it divides -- including `table_kind:
+    eurostat`, which the command-line route cannot do at all. Two ways of
+    naming the same table would have been two places to fix a loader.
     """
-    meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
-    # Declared here rather than beside the scenarios below, because the loaders
-    # take defaults too and the analyst must hear about those as well.
-    defaults_taken: list[str] = []
-    project_id = str(_need(meta, "project_id", "project", 0)).strip()
     kind = str(meta.get("table_kind") or "uk_analytical").strip().lower()
     if kind not in TABLE_KINDS:
         raise ConfigError(f"table_kind {kind!r} must be one of {TABLE_KINDS}")
@@ -813,6 +828,39 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
         table = loaders[kind](table_path)
     except LoaderError as exc:
         raise ConfigError(f"the table could not be loaded:\n{exc}") from None
+    return table, table_path, kind
+
+
+def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
+                 label: str = "<configuration>", *, offline: bool = False,
+                 refresh: bool = False) -> dict:
+    """Build a run from plain Python data, with no spreadsheet involved.
+
+    `meta` is the `project` sheet as a dict; `tables` maps 'splits', 'keys',
+    'scenarios' and 'profiles' to lists of row-dicts with the same column names
+    the workbook uses.
+
+    WHY THIS EXISTS SEPARATELY FROM THE WORKBOOK.
+    A configuration is a declarative description of a run: which table, which
+    sectors, which proxies with which sources, which scenarios. A human writes
+    that in a spreadsheet. A program — a connector to a statistical institute,
+    a script, or a model asked to set up a run — writes the same thing as data.
+    Keeping the two entry points on one code path means both get identical
+    validation and identical error messages, so a machine-written configuration
+    cannot take a shortcut a human-written one could not.
+
+    Every check below is deliberately the same for both. In particular a
+    generated configuration still has to name a real source and a real strength
+    for every proxy: there is no path into this engine that produces a number
+    without saying where it came from.
+    """
+    meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
+    # Declared here rather than beside the scenarios below, because the loaders
+    # take defaults too and the analyst must hear about those as well.
+    defaults_taken: list[str] = []
+    project_id = str(_need(meta, "project_id", "project", 0)).strip()
+    table, table_path, kind = _load_declared_table(
+        meta, base_dir, tables, offline, refresh, defaults_taken)
 
     # ---- keys ---------------------------------------------------------
     grouped: dict[str, list[dict]] = {}
@@ -1147,5 +1195,136 @@ def write_template(path: Path | str) -> Path:
            "headroom, and an impossible set is rejected with an explanation."])
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    # The other job this workbook can describe. Left EMPTY of values on
+    # purpose: a workbook with both `splits` and `regionalise` filled in
+    # describes two jobs, and the loader takes the regionalisation. The
+    # comments say what to put here when that is what you want.
+    sheet("regionalise", ["key", "value"], [], [
+        '',
+        "LEAVE THIS SHEET EMPTY unless you want to estimate a REGION's",
+        'table from a national one, instead of dividing a sector.',
+        '',
+        'Fill in three keys in column A, their values in column B:',
+        'method          SLQ | CILQ | RLQ | FLQ   (default FLQ)',
+        "delta           the FLQ's convexity parameter, 0 <= d < 1.",
+        'REQUIRED for FLQ and there is no default:',
+        'measured across ten regions in two countries',
+        'it runs from 0.14 to 0.60, median 0.26, so a',
+        'default would be a guess wearing a number.',
+        'activity_path   a CSV, `sector_code,regional` and optionally',
+        '`,national`, one row per sector of the table',
+        'named on the `project` sheet. Output or',
+        'employment; without the third column the',
+        "table's own output is used, which is right",
+        'only when the second column is output too.',
+        '',
+        'The table comes from the `project` sheet, as it does for a split,',
+        'so `table_kind: eurostat` works here too. It must be the DOMESTIC',
+        "table: a total-flow one regionalises the country's imports as",
+        'though they were local supply, and nothing downstream catches it.',
+        '',
+        'Every run prints what the method is known to get wrong -- the',
+        'family overstates local multipliers, and cross-hauling is not',
+        'reproduced in any amount anyone chose. There is no way to',
+        'suppress that, and the absence of one is deliberate.',
+    ])
+
     wb.save(path)
     return path
+
+
+def read_activity(path: Path | str, table) -> tuple:
+    """The region's activity by sector, against the table it will be scaled from.
+
+    Shared by the workbook route and the command-line one, so the two cannot
+    drift into different refusals for the same mistake. Returns
+    `(Q_region, Q_national, national_from)`.
+    """
+    import csv as _csv
+
+    path = Path(path)
+    if not path.exists():
+        raise ConfigError(f"activity_path points at {path}, which does not "
+                          f"exist. Paths may be absolute or relative to the "
+                          f"config file.")
+    rows = list(_csv.reader(path.open()))
+    head = [str(c).strip().lower() for c in (rows[0] if rows else [])]
+    if head[:2] != ["sector_code", "regional"]:
+        raise ConfigError(
+            f"{path.name} must start with a header row reading "
+            f"`sector_code,regional` and optionally `,national`. Regional "
+            f"activity is output or employment; without the third column the "
+            f"table's own output is used, which is only right when the second "
+            f"column is output too.")
+    has_national = len(head) > 2 and head[2] == "national"
+
+    seen = {str(r[0]).strip(): r for r in rows[1:] if r and str(r[0]).strip()}
+    missing = [c for c in table.sector_codes if c not in seen]
+    extra = [c for c in seen if c not in table.sector_codes]
+    if missing or extra:
+        raise ConfigError(
+            f"{path.name} and the table do not describe the same sectors.\n"
+            f"  in the table but not the file: "
+            f"{', '.join(missing[:8]) or 'none'}{' …' if len(missing) > 8 else ''}\n"
+            f"  in the file but not the table: "
+            f"{', '.join(extra[:8]) or 'none'}{' …' if len(extra) > 8 else ''}\n"
+            f"Align the classifications; do not pad.")
+    try:
+        q_reg = np.array([float(seen[c][1]) for c in table.sector_codes])
+        q_nat = (np.array([float(seen[c][2]) for c in table.sector_codes])
+                 if has_national else table.X.copy())
+    except (ValueError, IndexError) as exc:
+        raise ConfigError(f"{path.name} has a value that is not a number: "
+                          f"{exc}") from None
+    return q_reg, q_nat, ("file" if has_national else "table output")
+
+
+def build_regionalisation(meta: dict, reg: dict, base_dir: Path = Path("."),
+                          label: str = "<configuration>", *,
+                          offline: bool = False,
+                          refresh: bool = False) -> dict:
+    """A regionalisation described by a workbook rather than by flags.
+
+    The `project` sheet already says which table to use and how to load it, so
+    this sheet only says what to do with it -- which is why `table_kind:
+    eurostat` works here and does not on the command line.
+    """
+    meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
+    defaults_taken: list[str] = []
+    project_id = str(_need(meta, "project_id", "project", 0)).strip()
+    table, table_path, kind = _load_declared_table(
+        meta, base_dir, {}, offline, refresh, defaults_taken)
+
+    method = str(reg.get("method") or "FLQ").strip().upper()
+    if method not in ("SLQ", "CILQ", "RLQ", "FLQ"):
+        raise ConfigError(f"method {method!r} on the `regionalise` sheet must "
+                          f"be SLQ, CILQ, RLQ or FLQ")
+    delta = reg.get("delta")
+    if delta is not None and str(delta).strip() != "":
+        try:
+            delta = float(delta)
+        except (TypeError, ValueError):
+            raise ConfigError(f"delta {delta!r} is not a number") from None
+    else:
+        delta = None
+
+    ap = reg.get("activity_path")
+    if not ap or not str(ap).strip():
+        raise ConfigError(
+            "the `regionalise` sheet needs `activity_path`: a CSV of the "
+            "region's activity by sector. There is nothing to scale the "
+            "national table by without it.")
+    ap = Path(str(ap).strip())
+    if not ap.is_absolute():
+        ap = (Path(base_dir) / ap).resolve()
+    q_reg, q_nat, national_from = read_activity(ap, table)
+
+    return {"kind": "regionalise", "project_id": project_id,
+            "title": str(meta.get("title") or f"{project_id} — regionalisation"),
+            "table": table, "source_file": table_path, "table_kind": kind,
+            "method": method, "delta": delta,
+            "Q_region": q_reg, "Q_national": q_nat,
+            "national_activity_from": national_from,
+            "activity_file": ap,
+            "notes": str(meta.get("notes") or ""),
+            "defaults_taken": defaults_taken}
