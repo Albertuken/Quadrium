@@ -187,6 +187,17 @@ def main() -> int:
               (f"{phrase!r} is not claimed as a limitation" if does()
                else f"the engine does not have it, so the claim stands"))
 
+    # ---- the four worked examples, which the guide never mentioned until
+    # v1.84: the README listed them and the tutorial did not, so the route a
+    # reader is actually walked down never met them.
+    ex_dir = readme.parent / "examples"
+    scripts = sorted(p.name for p in ex_dir.glob("*.py")) if ex_dir.exists() else []
+    unmentioned = [n for n in scripts if n not in gt]
+    check("the guide names every worked example, not just the README",
+          scripts and not unmentioned,
+          f"{len(scripts)} in examples/, all named in the guide" if not unmentioned
+          else f"missing from the guide: {', '.join(unmentioned)}")
+
     # ---- and there is something to look at without installing anything
     print()
     # Beside the README, not beside this file: the question is what the PUBLIC

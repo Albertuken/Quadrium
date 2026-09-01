@@ -175,6 +175,27 @@ illustrative, and the report says so at the top and in the assumption ledger.
 It exists so you can see the shape of a result before you commit real data to
 it.
 
+**And if you would rather read a result than run one**, one finished run is
+published in this repository: `outputs/uk_food_beverage/report.md`, verbatim
+output, no installation needed.
+
+**Four more, in `examples/`.** They are Python rather than a workbook, which
+makes them worth reading for a different reason: each one says in its docstring
+what is real in it and what is illustrative.
+
+| | |
+|---|---|
+| `examples/synthetic_accommodation.py` | a made-up economy, self-contained, needs no data |
+| `examples/uk_hospitality.py` | the real UK table, invented proxies and profiles |
+| `examples/uk_food_beverage.py` | real table AND a real split, from ONS business survey turnover — this is the one published above |
+| `examples/es_hosteleria.py` | the Spanish table, split from the source table's own finer detail rather than a proxy |
+
+```bash
+python3 examples/synthetic_accommodation.py
+```
+
+They run from a checkout without installing anything.
+
 ---
 
 ## 3. Use your own table
