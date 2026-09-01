@@ -438,7 +438,44 @@ def main(argv=None) -> int:
                     help="re-download a cached table even though it is "
                          "already here. Statistical offices revise, so this "
                          "can change your results — it says so when it does")
+    ap.add_argument("--regionalise", type=Path, metavar="ACTIVITY.csv",
+                    help="estimate a region's table from a national one, given "
+                         "the region's activity by sector. Needs --national. "
+                         "Every run prints what the method is known to get "
+                         "wrong, because it is known and the number would "
+                         "otherwise look unqualified")
+    ap.add_argument("--national", type=Path, metavar="TABLE.xlsx",
+                    help="the national table --regionalise starts from, in "
+                         "this engine's interchange format. It must be the "
+                         "DOMESTIC table")
+    ap.add_argument("--national-kind", default="interchange",
+                    choices=["interchange", "ine", "idescat", "uk", "eurostat"],
+                    help="where --national came from, so the DOMESTIC variant "
+                         "is the one loaded (default: interchange, this "
+                         "engine's own format)")
+    ap.add_argument("--method", default="FLQ", choices=["SLQ", "CILQ", "RLQ",
+                                                        "FLQ"],
+                    help="which location quotient (default: FLQ)")
+    ap.add_argument("--delta", type=float, metavar="D",
+                    help="the FLQ's convexity parameter. There is no default: "
+                         "measured across ten regions in two countries it runs "
+                         "from 0.14 to 0.60, median 0.26, so any default would "
+                         "be a guess wearing a number")
+    ap.add_argument("--name", metavar="NAME",
+                    help="the output folder's name (default: regionalised_<method>)")
     args = ap.parse_args(argv)
+
+    if args.regionalise:
+        if not args.national:
+            print("--regionalise needs --national: a location quotient scales "
+                  "a national table down, so there has to be one.",
+                  file=sys.stderr)
+            return 2
+        return _regionalise(args)
+    if args.national:
+        print("--national only means something with --regionalise.",
+              file=sys.stderr)
+        return 2
 
     if args.template:
         p = write_template(args.template)
@@ -517,3 +554,152 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _regionalise(args) -> int:
+    """Regionalise a national table, and print what it costs to have done so.
+
+    `OQ-R-01` asked whether to implement the location quotient family knowing
+    that it does not reproduce cross-hauling, or to wait for a source that
+    handles it. The owner chose to implement it with the cost stated beside the
+    result, on 2026-09-01. This is that: the method runs, and every run says in
+    its own output what is known to be wrong with it.
+
+    That is `CORE_036` p. 35's position — the responsibility for a table is the
+    analyst's and there is no refuge in mechanically produced figures — turned
+    into something the engine does rather than something a document says.
+    """
+    import csv as _csv
+
+    import numpy as np
+
+    from . import diagnostics
+    from .export import write_json
+    from .io_loader import LoaderError, load_io_table
+    from .regionalise import regionalise
+
+    # Each loader is named with the variant that gives the DOMESTIC table,
+    # because that is what the method needs and no file announces which of its
+    # blocks that is. M-070's DOMESTIC_IMPORT_TREATMENT is the failure that
+    # produces a plausible wrong answer instead of an error.
+    def _load_national(kind, path):
+        if kind == "interchange":
+            return load_io_table(path)
+        if kind == "ine":
+            from .io_loader import load_ine_tio
+            return load_ine_tio(path, variant="interior")
+        if kind == "idescat":
+            from .io_loader import load_idescat_mioc
+            return load_idescat_mioc(path)
+        if kind == "uk":
+            from .io_loader import load_uk_analytical_iot
+            return load_uk_analytical_iot(path)
+        from .eurostat import load_iot
+        return load_iot(path, variant="domestic")
+
+    try:
+        table = _load_national(args.national_kind, args.national)
+    except (LoaderError, FileNotFoundError, ValueError, KeyError) as exc:
+        print(f"Could not read {args.national} as a "
+              f"{args.national_kind} national table:\n\n  "
+              f"{str(exc).splitlines()[0]}\n\n"
+              f"The table must be the DOMESTIC one — a location quotient scales "
+              f"local sourcing down, so handing it a total-flow table "
+              f"regionalises the country's imports as though they were "
+              f"domestic supply, and nothing downstream catches that. Use "
+              f"--national-kind to say where the file came from.",
+              file=sys.stderr)
+        return 2
+
+    rows = list(_csv.reader(Path(args.regionalise).open()))
+    if not rows or [c.strip().lower() for c in rows[0][:2]] != ["sector_code",
+                                                               "regional"]:
+        print(f"{args.regionalise} must start with a header row reading "
+              f"`sector_code,regional` and optionally `,national`. Regional "
+              f"activity is output or employment; if the third column is "
+              f"absent the table's own output is used, which is only right "
+              f"when the second column is output too.", file=sys.stderr)
+        return 2
+    has_nat = len(rows[0]) > 2 and rows[0][2].strip().lower() == "national"
+
+    seen = {r[0].strip(): r for r in rows[1:] if r and r[0].strip()}
+    missing = [c for c in table.sector_codes if c not in seen]
+    extra = [c for c in seen if c not in table.sector_codes]
+    if missing or extra:
+        print(f"The activity file and the table do not describe the same "
+              f"sectors.\n"
+              f"  in the table but not the file: "
+              f"{', '.join(missing[:8]) or 'none'}"
+              f"{' …' if len(missing) > 8 else ''}\n"
+              f"  in the file but not the table: "
+              f"{', '.join(extra[:8]) or 'none'}"
+              f"{' …' if len(extra) > 8 else ''}\n\n"
+              f"Align the classifications; do not pad.", file=sys.stderr)
+        return 2
+
+    q_reg = np.array([float(seen[c][1]) for c in table.sector_codes])
+    q_nat = (np.array([float(seen[c][2]) for c in table.sector_codes])
+             if has_nat else table.X.copy())
+
+    A_nat = diagnostics.technical_coefficients(table.Z, table.X)
+    A_nat = np.nan_to_num(A_nat)
+    try:
+        res = regionalise(A_nat, q_reg, q_nat, method=args.method,
+                          delta=args.delta, X_region=q_reg if not has_nat else None)
+    except ValueError as exc:
+        print(f"The method refused:\n\n  {exc}\n", file=sys.stderr)
+        return 2
+
+    out = Path(args.outputs) / (args.name or f"regionalised_{args.method.lower()}")
+    out.mkdir(parents=True, exist_ok=True)
+    np.savetxt(out / "coefficients.csv", res.A, delimiter=",",
+               header=",".join(table.sector_codes), comments="# A^rr, ")
+    with (out / "implicit_imports.csv").open("w") as fh:
+        fh.write("# interregional imports the scaling implies, CORE_039 p. 292\n")
+        fh.write("sector_code,implicit_imports\n")
+        for c, v in zip(table.sector_codes, res.implicit_imports):
+            fh.write(f"{c},{v:.6f}\n")
+
+    lines = [
+        f"# Regionalised with {res.method}"
+        + (f", delta = {res.delta:g}" if res.delta is not None else ""),
+        "",
+        f"From `{Path(args.national).name}` ({table.country} {table.year}, "
+        f"{table.n} sectors, {table.unit}).",
+        f"Regional activity from `{Path(args.regionalise).name}`"
+        + ("" if has_nat else ", against the table's own output")
+        + f", a {q_reg.sum() / q_nat.sum() * 100:.2f} % share of the national "
+          f"total.",
+        "",
+        "## What this is known to get wrong",
+        "",
+        "*Printed because the method has measured limitations and a number "
+        "without them invites more confidence than it has earned. "
+        "`CORE_036` p. 35.*",
+        "",
+    ] + [f"- {c.lstrip('- ')}" if c.startswith("  - ") else c
+         for c in res.caveats] + [
+        "",
+        "## What was written",
+        "",
+        "- `coefficients.csv` — the regional domestic coefficients.",
+        "- `implicit_imports.csv` — the interregional imports the scaling "
+        "implies, by product. This is the quantity that makes the method's "
+        "trade assumption inspectable rather than implicit.",
+        "",
+        f"Scaling touched {int((res.q < 1.0).sum()):,} of "
+        f"{res.q.size:,} cells; {int((res.slq >= 1.0).sum())} sectors were "
+        f"at or above a location quotient of 1 and were left alone.",
+    ]
+    (out / "report.md").write_text("\n".join(lines) + "\n")
+    write_json({"method": res.method, "delta": res.delta, "lambda": res.lam,
+                "national_table": str(args.national),
+                "activity_file": str(args.regionalise),
+                "national_activity_from": "file" if has_nat else "table output",
+                "regional_share_pct": float(q_reg.sum() / q_nat.sum() * 100),
+                "caveats": res.caveats},
+               out / "assumption_ledger.json")
+
+    print("\n".join(lines))
+    print(f"\nWritten to {out}")
+    return 0
