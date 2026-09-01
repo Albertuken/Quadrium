@@ -48,6 +48,21 @@ class ScenarioInfeasible(RuntimeError):
         self.detail = detail
 
 
+def _profile_exceeds_headroom(split: dict, diag: dict) -> bool:
+    """The one infeasibility this engine can name before it happens.
+
+    `OQ-B-17` option 4, implemented 2026-09-01 on the owner's decision. A
+    profiled split whose internal headroom is already negative is refused with
+    certainty -- measured, 37 of 37 in `run_input_profiles_backtest.py` -- so
+    dying downstream as a generic "impossible economy" tells the analyst less
+    than the engine knows. Naming it changes nothing for the splits that
+    survive, which is where OQ-B-17's real finding lives; this is a better
+    diagnosis of the same refusal, not a fix for it.
+    """
+    hp = diag.get("headroom_pct")
+    return bool(split.get("profiled")) and hp is not None and hp == hp and hp < 0
+
+
 def _explain_infeasible(table: IOTable, split: dict, diag: dict) -> list[str]:
     """Say which subsector does not fit, and against which of its own budgets."""
     p = split["original_index"]
@@ -80,6 +95,15 @@ def _explain_infeasible(table: IOTable, split: dict, diag: dict) -> list[str]:
         f"{100*Y_p/X_p:.1f} % goes to final demand, {100*VA_p/X_p:.1f} % is "
         f"value added, and only {100*diag['z_pp']/X_p:.2f} % is trade within "
         f"the sector itself.")
+    if _profile_exceeds_headroom(split, diag):
+        lines.insert(0, (
+            f"- **This profile asks `{split['sector_code']}`'s internal block "
+            f"for more than it has.** Its headroom is "
+            f"{diag['headroom_pct']:.2f} % — already negative before the "
+            f"profiles are applied — so no weighting of them can fit. Soften "
+            f"the input profiles for this split, or drop them and accept that "
+            f"the subsectors inherit the parent's purchasing pattern, which "
+            f"the report will say outright."))
     return lines
 
 
@@ -103,8 +127,13 @@ def check_feasible(table: IOTable, seed: dict, tr, tc,
             problems += _explain_infeasible(table, split, diag)
 
     if problems:
+        profiled_cause = any(
+            _profile_exceeds_headroom(sp, per_split[sp["sector_code"]])
+            for sp in seed["splits"])
         raise ScenarioInfeasible(
             scenario.scenario_id,
+            "an input profile asks for more internal trade than the sector has"
+            if profiled_cause else
             "the allocation keys imply an impossible economy",
             "\n".join(problems)
             + "\n\nThis is not a solver tolerance issue and no tolerance will "

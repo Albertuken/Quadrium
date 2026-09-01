@@ -1,0 +1,53 @@
+{
+  "project_id": "uk_food_beverage",
+  "assumptions": [
+    {
+      "assumption_id": "A-01",
+      "description": "Every subsector inherits the parent's input structure. That is the method's limit, not a choice: with one allocation key the weight cancels in a_ij = Z_ij / X_j, so all three subsectors necessarily share the parent's multiplier. Differentiating them would need purchasing profiles that no published source provides.",
+      "applies_to": "the multipliers of every subsector",
+      "source": "Sizes: ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level. || Structures: NOT ESTIMATED. CORE_013 par. B12.14, p. 422 holds that for restaurants and bars specifically the separate input structures cannot be distinguished from the accounts.",
+      "validated_by": "sizes: ABS, corroborated against ABS aGVA and purchases (largest gap 9.9 %). structures: NOT ATTEMPTED",
+      "confidence": "strong",
+      "impact_on_results": "the subsector multipliers are the parent's, and should be quoted as such",
+      "discarded_alternative": null,
+      "discard_reason": null,
+      "created_at": "2026-09-01T11:02:14.829864+00:00"
+    },
+    {
+      "assumption_id": "A-03",
+      "description": "One key splits every block, so each subsector inherits the parent's composition. ABS measured the true composition separately and it differs: value added by up to 8.9 % and purchases by up to 9.9 %, both on event catering. The sizes are right; the composition is approximate.",
+      "applies_to": "all blocks of S1_abs and S2_employment",
+      "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+      "validated_by": "MEASURED, not assumed — see corroborate() in this file",
+      "confidence": "medium",
+      "impact_on_results": "up to 10 % on a subsector's value added and intermediate purchases; none on its size",
+      "discarded_alternative": null,
+      "discard_reason": null,
+      "created_at": "2026-09-01T11:02:14.829872+00:00"
+    },
+    {
+      "assumption_id": "A-04",
+      "description": "Splitting output, value added and purchases by three separate ABS variables at once is INFEASIBLE and was refused by the engine, not chosen against. Catering earns 16.4 % of the sector's value added on 15.0 % of its output, and only 1.39 % of output is traded inside the sector, so nothing can absorb the difference.",
+      "applies_to": "the choice of a single driving key",
+      "source": "engine feasibility check, src/quadrium/scenarios.py",
+      "validated_by": "the run stops rather than returning a number",
+      "confidence": "strong",
+      "impact_on_results": "decides the configuration; see A-03 for what it costs",
+      "discarded_alternative": null,
+      "discard_reason": null,
+      "created_at": "2026-09-01T11:02:14.829874+00:00"
+    },
+    {
+      "assumption_id": "A-02",
+      "description": "Balancing uses GRAS. The table carries 129 legitimate negative entries, so RAS is undefined on it.",
+      "applies_to": "balancing",
+      "source": "CORE_012 Box 11.3, p. 345; UNH_18 par. 18.35, p. 558",
+      "validated_by": "verified against the UN Handbook's own worked example",
+      "confidence": "strong",
+      "impact_on_results": "decisive",
+      "discarded_alternative": null,
+      "discard_reason": null,
+      "created_at": "2026-09-01T11:02:14.829875+00:00"
+    }
+  ]
+}

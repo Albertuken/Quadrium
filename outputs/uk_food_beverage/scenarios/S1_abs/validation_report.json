@@ -1,0 +1,123 @@
+{
+  "table_id": "UK-IOT-IXI-2023",
+  "scenario_id": "S1_abs",
+  "checks": [
+    {
+      "name": "check_proxy_coverage",
+      "passed": true,
+      "detail": "every subsector of every split has a positive proxy in every block (1 split(s))",
+      "severity": "error",
+      "citation": null
+    },
+    {
+      "name": "check_key_vintage",
+      "passed": true,
+      "detail": "all 5 key(s) and profile(s) are measured in 2023, the table's own reference year",
+      "severity": "warning",
+      "citation": null
+    },
+    {
+      "name": "check_solver_convergence",
+      "passed": true,
+      "detail": "GRAS converged in 1 iterations (step 6.88e-15, tolerance 1e-09, PROJECT CHOICE)",
+      "severity": "warning",
+      "citation": "CORE_006 ¶9.51, p. 288 — convergence is necessary, not sufficient"
+    },
+    {
+      "name": "check_margins_attained",
+      "passed": true,
+      "detail": "max deviation from target row/column totals 1.46e-10 against a tolerance of 0.000238; margin imbalance sum(rows)-sum(cols) = 0. 1.16e-10 of the tolerance is the source's own unclosed identities, which the targets inherit",
+      "severity": "error",
+      "citation": "OQ-B-02 v1.57; quadrium.precision.infeasibility_floor"
+    },
+    {
+      "name": "check_reaggregation_untouched",
+      "passed": true,
+      "detail": "cells involving no split sector reproduce the original to 0 (must be ~0: they were copied, not estimated)",
+      "severity": "error",
+      "citation": null
+    },
+    {
+      "name": "check_reaggregation",
+      "passed": true,
+      "detail": "max reaggregation error 3.44e-13 % against a tolerance of 1e-06 % (PROJECT CHOICE); grand total off by 0",
+      "severity": "error",
+      "citation": null
+    },
+    {
+      "name": "check_leontief_productive",
+      "passed": true,
+      "detail": "spectral radius of A = 0.582408 (must be < 1), largest column sum 0.8007. Below 1 the Neumann series converges, the inverse is non-negative and a multiplier means what it says; at or above it the economy consumes at least as much as it makes and the multipliers are not large but undefined",
+      "severity": "error",
+      "citation": "ID-12, CORE_005 ¶36.36–36.39, pp. 1015–1016"
+    },
+    {
+      "name": "check_leontief_identity",
+      "passed": true,
+      "detail": "max |Ax + y − x| = 1.16e-10 against 1e-06; the same statement through the inverse, max |Ly − x| = 8.73e-11 against 7.9e-06, which is that bound amplified by ‖L‖∞ = 7.9. Both are accounting, bounded by this source's own printed precision and by how far its books were already out",
+      "severity": "error",
+      "citation": "ID-12, CORE_005 ¶36.36, p. 1015"
+    },
+    {
+      "name": "check_leontief_nonnegative",
+      "passed": false,
+      "detail": "21 of 11236 cells of the Leontief inverse are negative, and they sit in the column(s) for L68A; the deepest is -0.07917. A negative L[i,j] says that MORE final demand for j lowers output of i. It follows from negative cells in A, which are legitimate — the ONS's own published table has 19 — but a multiplier drawn from such a column is a sum with cancellation in it, and should be quoted knowing that",
+      "severity": "warning",
+      "citation": "ID-12; A_core_accounting_spec.md §A.8.1"
+    },
+    {
+      "name": "check_leontief_inverse",
+      "passed": true,
+      "detail": "‖(I−A)L − I‖ = 1.33e-15 against 2.49e-12 for a matrix with condition number 3. This one is arithmetic and nothing else: it asks whether the inverse was computed, not whether the table adds up. An ill-conditioned system loses digits no source precision can restore",
+      "severity": "error",
+      "citation": "ID-12, CORE_005 ¶36.37, p. 1015"
+    },
+    {
+      "name": "check_sign_preserved",
+      "passed": true,
+      "detail": "0 cell(s) changed sign during balancing; 1 negative(s) in the result against 1 in the seed",
+      "severity": "error",
+      "citation": "UNH_18 ¶18.35, p. 558 — GRAS is sign preserving"
+    },
+    {
+      "name": "check_extreme_coefficients",
+      "passed": true,
+      "detail": "0 technical coefficient(s) above 1 (PROJECT CHOICE); max = 0.439, min = -0.0799",
+      "severity": "warning",
+      "citation": null
+    },
+    {
+      "name": "check_internal_block_share",
+      "passed": true,
+      "detail": "estimated internal block(s) as a share of the absolute value of the whole intermediate matrix: I56 0.07 %. This is the least certain part of the result and is labelled PROXY_ESTIMATED throughout",
+      "severity": "info",
+      "citation": "MVP_0.1 §6.3 — double-proportionality hypothesis"
+    },
+    {
+      "name": "check_zero_row_col",
+      "passed": true,
+      "detail": "0 zero row/column(s) created by balancing. Zero means below 2.948e-07, which is what this source's own precision can distinguish from it. 3 were already zero in the seed and are not attributable to the solver: row L68A, row T97, col T97",
+      "severity": "warning",
+      "citation": null
+    },
+    {
+      "name": "check_user_constraints_held",
+      "passed": true,
+      "detail": "every analyst-pinned cell still holds the value it was given",
+      "severity": "info",
+      "citation": "UNH_18 ¶18.81, p. 569 — GRAS accepts row and column totals only"
+    },
+    {
+      "name": "check_provenance_complete",
+      "passed": true,
+      "detail": "10609 observed, 627 proxy-estimated, 0 balanced-adjustment, 0 user-constrained, of 11236 cells",
+      "severity": "error",
+      "citation": "MVP_0.1 §2.6; A_core_accounting_spec.md §A.1"
+    }
+  ],
+  "reaggregation_error_pct": 3.438856372939043e-13,
+  "solver_converged": true,
+  "solver_iterations": 1,
+  "method_used": "GRAS",
+  "method_reason": "1 negative cell(s) in the expanded table; RAS is undefined there (CORE_012 Box 11.3, p. 345)"
+}

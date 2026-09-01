@@ -1,0 +1,177 @@
+{
+  "project_id": "uk_food_beverage",
+  "generated_at": "2026-09-01T11:02:17.405588+00:00",
+  "scenario_ids": [
+    "S1_abs",
+    "S2_employment"
+  ],
+  "scenarios_removed_as_stale": [],
+  "quadrium_version": "0.1.0",
+  "environment": {
+    "python": "3.10.9",
+    "numpy": "1.23.5",
+    "platform": "macOS-26.5.1-arm64-arm-64bit"
+  },
+  "input": {
+    "path": "/Users/albertrock/Projects/Quadrium/UK_IOAT_2023_domestic_ixi.xlsx",
+    "sha256": "b44d26b447ccb1028ac0ac8f427749dbbca4e32ebabafa7b7afb632111063015",
+    "note": "The hash exists so that a silently revised input vintage is detectable. A reproducibility record that names a file without fixing its contents is not one."
+  },
+  "table": {
+    "table_id": "UK-IOT-IXI-2023",
+    "country": "United Kingdom",
+    "year": 2023,
+    "unit": "GBP million, current prices, basic prices",
+    "classification": "SIC 2007 (104 industries)",
+    "source": "ONS, (consistent with UK National Accounts Blue Book 2025 & UK Balance of Payments Pink Book 2025)",
+    "n_sectors": 104,
+    "notes": "Industry-by-industry, domestic use, basic prices, 104 x 104. The first two VA rows are imports and taxes on products, not value added — see the loader docstring. Reference year read from the Menu sheet, never from the filename (OQ-D-01); the size and both axes read from the sheet's own `_T` totals, never from a fixed offset — the ONS changed both between editions. Dropped 1 final-demand subtotal column(s) (P3 S1) to avoid double counting.",
+    "negatives": {
+      "Z": 1,
+      "Y": 85,
+      "VA": 43
+    }
+  },
+  "splits": [
+    {
+      "sector_code": "I56",
+      "sector_label": "Food And Beverage Service Activities  ",
+      "into": {
+        "I561": "Restaurants and mobile food service",
+        "I562": "Event catering and other food service",
+        "I563": "Beverage serving activities"
+      },
+      "keys_by_block": {},
+      "input_profiles": {}
+    }
+  ],
+  "allocation_keys": {
+    "key_turnover_abs_2023": {
+      "applies_to": "output",
+      "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+      "source_year": 2023,
+      "strength": "strong",
+      "new_sector_codes": [
+        "I561",
+        "I562",
+        "I563"
+      ],
+      "raw_values": [
+        53853.0,
+        14084.0,
+        26144.0
+      ],
+      "weights": [
+        0.5724110075360593,
+        0.14970078974500697,
+        0.27788820271893366
+      ],
+      "notes": null
+    },
+    "key_agva_abs_2023": {
+      "applies_to": "value_added",
+      "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+      "source_year": 2023,
+      "strength": "strong",
+      "new_sector_codes": [
+        "I561",
+        "I562",
+        "I563"
+      ],
+      "raw_values": [
+        25656.0,
+        7460.0,
+        12283.0
+      ],
+      "weights": [
+        0.5651225797925065,
+        0.16432080001762153,
+        0.27055662018987203
+      ],
+      "notes": null
+    },
+    "key_purchases_abs_2023": {
+      "applies_to": "intermediate_cols",
+      "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+      "source_year": 2023,
+      "strength": "strong",
+      "new_sector_codes": [
+        "I561",
+        "I562",
+        "I563"
+      ],
+      "raw_values": [
+        28496.0,
+        6658.0,
+        13723.0
+      ],
+      "weights": [
+        0.5830145058002741,
+        0.1362194897395503,
+        0.2807660044601755
+      ],
+      "notes": null
+    },
+    "key_employment_bres_2023": {
+      "applies_to": "output",
+      "source": "ONS Business Register and Employment Survey (BRES), employment including working proprietors, Great Britain, via NOMIS dataset NM_189_1, retrieved 2026-08-09. GREAT BRITAIN, not UK: Northern Ireland is surveyed separately by NISRA and is excluded from these shares.",
+      "source_year": 2023,
+      "strength": "medium",
+      "new_sector_codes": [
+        "I561",
+        "I562",
+        "I563"
+      ],
+      "raw_values": [
+        1226000,
+        286000,
+        542000
+      ],
+      "weights": [
+        0.5968841285296982,
+        0.13924050632911392,
+        0.2638753651411879
+      ],
+      "notes": null
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "S1_abs",
+      "label": "ABS turnover + aGVA (real)",
+      "description": "Output, final demand and the intermediate blocks split by ABS turnover; value added split by ABS approximate GVA at basic prices. Each block takes the published variable that matches it.",
+      "keys_by_block": {
+        "output": "key_turnover_abs_2023"
+      },
+      "balancing_method": "GRAS",
+      "balancing_tolerance": 1e-09,
+      "reaggregation_tolerance_pct": 1e-06,
+      "internal_block_alpha": 1.0,
+      "locked_cells": [],
+      "user_constraints": {}
+    },
+    {
+      "scenario_id": "S2_employment",
+      "label": "BRES employment (real)",
+      "description": "The same split driven by employment instead. Kept to measure what the equal-productivity assumption costs: restaurants turn over GBP 43.9k per worker against 49.2k in catering and 48.2k in bars.",
+      "keys_by_block": {
+        "output": "key_employment_bres_2023"
+      },
+      "balancing_method": "GRAS",
+      "balancing_tolerance": 1e-09,
+      "reaggregation_tolerance_pct": 1e-06,
+      "internal_block_alpha": 1.0,
+      "locked_cells": [],
+      "user_constraints": {}
+    }
+  ],
+  "outcome": {
+    "scenarios_run": [
+      "S1_abs",
+      "S2_employment"
+    ],
+    "scenarios_rejected": [],
+    "all_passed": true
+  },
+  "tolerances": "No published source states a numerical tolerance for an accounting identity, and six were searched: what a balance can be tested against is a property of the table, not of the method. The floor applied here is derived from the table's own stated precision — an identity summing n cells published to d decimals cannot be checked more tightly than 0.5*10^-d*n. Tolerances that remain a genuine choice are labelled PROJECT CHOICE where they are used."
+}

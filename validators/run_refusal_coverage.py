@@ -282,9 +282,19 @@ def main() -> int:
     # file asserted that most unreached sites were caller checks and no table
     # could reach them. Seven of 107 are.
     klass = rec.get("classified", {})
+    # Naming the difference, not just counting it. The counts can agree while
+    # the sets do not -- editing a module shifts every line below the edit, so
+    # one site leaves the classification and another joins it. A failure that
+    # says "166 against 166" sends the reader to diff two lists by hand.
+    unclassified = sorted(set(static) - set(klass))
+    orphaned = sorted(set(klass) - set(static))
     check("the classification covers every refusal in the code",
-          set(klass) == set(static),
-          f"{len(klass)} classified against {len(static)} in the code")
+          not unclassified and not orphaned,
+          f"{len(klass)} classified against {len(static)} in the code"
+          + (f"; UNCLASSIFIED: {', '.join(unclassified[:8])}"
+             + (" …" if len(unclassified) > 8 else "") if unclassified else "")
+          + (f"; CLASSIFIED BUT GONE: {', '.join(orphaned[:8])}"
+             + (" …" if len(orphaned) > 8 else "") if orphaned else ""))
     by_kind = collections.Counter(klass.values())
     un_kind = collections.Counter(v for k, v in klass.items() if k not in fired)
     print()

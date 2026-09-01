@@ -1,0 +1,326 @@
+{
+  "multipliers": [
+    2.0568951097085395,
+    1.8148428395634206,
+    1.7840831417324228,
+    2.0064749333921075,
+    1.4172654124229813,
+    1.9570002592013052,
+    1.7052882474150424,
+    2.5246584552879736,
+    2.25221046404509,
+    1.8467154594777295,
+    2.5992986649150045,
+    1.8617972103656797,
+    2.2250785292308586,
+    2.051304420674387,
+    2.453294351883881,
+    1.8322275223452436,
+    2.166481231359332,
+    1.5471112075207274,
+    1.6236061690329588,
+    1.6840071120397404,
+    1.5453002501604152,
+    1.8491954846537635,
+    1.6358814599345455,
+    1.2439140745660837,
+    1.6022309839073396,
+    1.5944287852859391,
+    1.5062680205530345,
+    1.807575618295934,
+    1.6810612693665894,
+    1.7151480203405185,
+    1.5809618302660768,
+    1.5393739063620777,
+    1.8049287912368683,
+    1.834471898255185,
+    1.694983360100464,
+    1.5247926013938644,
+    1.585384830634609,
+    1.4354519173754738,
+    1.6684648172827112,
+    1.624585250503821,
+    1.7768167368449495,
+    1.9732112929682981,
+    1.5634151564897751,
+    1.7758276843610805,
+    1.7259595684578457,
+    1.8060486217694751,
+    1.4918481992851726,
+    1.2670832084635208,
+    1.7086291818872257,
+    2.9805224567000708,
+    2.9000508260198083,
+    1.6373937964050924,
+    1.331769087077308,
+    1.826884751693704,
+    1.9044016832360913,
+    2.1212440947368725,
+    1.7177589420723771,
+    1.6221498612911998,
+    1.639662614803257,
+    2.3661265190214364,
+    1.7732011833777526,
+    1.8546175398192841,
+    1.64293831067337,
+    1.7617675862515842,
+    1.6577731668532905,
+    1.7755017061979306,
+    1.847997920530196,
+    1.8479979205301955,
+    1.8479979205301953,
+    1.5923739295681612,
+    1.8182580650833111,
+    1.5466315512763817,
+    1.502442559434692,
+    1.569505629709076,
+    1.482354807729247,
+    1.5010976037738728,
+    1.4459488403419827,
+    1.6621679865252872,
+    1.0828220107093707,
+    1.579180648442798,
+    1.344618786080363,
+    1.2136976983026133,
+    1.507610223932155,
+    1.6933483660362947,
+    1.5573153011220924,
+    1.371617260602685,
+    1.873224671402402,
+    1.3488749520439063,
+    1.5229712280444865,
+    1.720725563414862,
+    1.8985057839059836,
+    1.71877824279589,
+    1.8866444101945579,
+    1.459745018631084,
+    1.5482521061572168,
+    1.4002756813172634,
+    1.4712841440470166,
+    1.5678932695362577,
+    1.589959686919651,
+    1.7070700134004946,
+    1.8035063594630418,
+    1.6713808195263415,
+    1.7095528546153567,
+    1.55711759123152,
+    1.3345526931937857,
+    1.0
+  ],
+  "condition_number": 3.3085247716783424,
+  "n_negative_coefficients": 1,
+  "max_column_sum": 0.8006751798033175,
+  "spectral_radius": 0.5824080550069604,
+  "balance_info": {
+    "method": "GRAS",
+    "reason": "1 negative cell(s) in the expanded table; RAS is undefined there (CORE_012 Box 11.3, p. 345)",
+    "converged": true,
+    "iterations": 1,
+    "solver_step": 1.021405182655144e-14,
+    "tolerance": 1e-09,
+    "scope": "internal block of each of 1 split(s)",
+    "iterations_per_split": {
+      "I56": 1
+    },
+    "margin_imbalance": 0.0,
+    "margin_tolerance": 0.000238263,
+    "n_negative_seed": 1,
+    "n_negative_result": 1,
+    "sign_changes": 0,
+    "max_row_dev": 1.0186340659856796e-10,
+    "max_col_dev": 1.4551915228366852e-10
+  },
+  "reaggregation": {
+    "max_abs_error": 2.7284841053187847e-12,
+    "max_pct_error": 2.063313823763426e-13,
+    "total_original": 1835964.0000000002,
+    "total_reaggregated": 1835964.0000000002,
+    "total_abs_error": 0.0,
+    "untouched_max_abs_error": 0.0,
+    "split_row_abs_error": 2.7284841053187847e-12,
+    "split_col_abs_error": 2.7284841053187847e-12
+  },
+  "user_constraints_overridden": [],
+  "splits": [
+    {
+      "sector_code": "I56",
+      "sector_label": "Food And Beverage Service Activities  ",
+      "new_codes": [
+        "I561",
+        "I562",
+        "I563"
+      ],
+      "positions": [
+        66,
+        67,
+        68
+      ],
+      "keys_used": {
+        "output": "key_employment_bres_2023",
+        "final_demand": "key_employment_bres_2023",
+        "value_added": "key_employment_bres_2023",
+        "intermediate_rows": "key_employment_bres_2023",
+        "intermediate_cols": "key_employment_bres_2023"
+      },
+      "keys_inherited": {
+        "output": false,
+        "final_demand": true,
+        "value_added": true,
+        "intermediate_rows": true,
+        "intermediate_cols": true
+      },
+      "va_rows": {
+        "pinned": {},
+        "residual_row": null,
+        "residual_shares": null
+      },
+      "profile_shift": null,
+      "profile_provenance": null,
+      "key_meta": {
+        "key_employment_bres_2023": {
+          "strength": "medium",
+          "source": "ONS Business Register and Employment Survey (BRES), employment including working proprietors, Great Britain, via NOMIS dataset NM_189_1, retrieved 2026-08-09. GREAT BRITAIN, not UK: Northern Ireland is surveyed separately by NISRA and is excluded from these shares.",
+          "source_year": 2023
+        }
+      },
+      "weights": {
+        "output": [
+          0.5968841285296982,
+          0.13924050632911392,
+          0.2638753651411879
+        ],
+        "final_demand": [
+          0.5968841285296982,
+          0.13924050632911392,
+          0.2638753651411879
+        ],
+        "value_added": [
+          0.5968841285296982,
+          0.13924050632911392,
+          0.2638753651411879
+        ],
+        "intermediate_rows": [
+          0.5968841285296982,
+          0.13924050632911392,
+          0.2638753651411879
+        ],
+        "intermediate_cols": [
+          0.5968841285296982,
+          0.13924050632911392,
+          0.2638753651411879
+        ]
+      },
+      "original_diagonal": 1322.379598243619,
+      "internal_block_share_pct": 0.07043277710149393,
+      "input_structure": {
+        "max_abs_difference": 9.71445146547012e-17,
+        "mean_cosine_distance": -7.401486830834377e-17,
+        "differentiated": false,
+        "profiled": false,
+        "n_subsectors": 3,
+        "by_subsector": {
+          "I561": 0.4353232781352178,
+          "I562": 0.4353232781352177,
+          "I563": 0.43532327813521765
+        }
+      },
+      "code_check": "I56 (division) -> I561, I562, I563; hierarchy OK, coverage not checked: whether these children exhaust the parent needs the classification's own list of positions, which this project does not hold (OQ-S-01)",
+      "code_check_ok": true,
+      "code_check_unchecked": [
+        "coverage not checked: whether these children exhaust the parent needs the classification's own list of positions, which this project does not hold (OQ-S-01)"
+      ],
+      "headroom_pct": 13.924050632911312,
+      "tightest_internal_total": 184.1288048187307,
+      "parent_diagonal": 1322.379598243619,
+      "iterations": 1,
+      "corroboration": [
+        {
+          "key_id": "key_agva_abs_2023",
+          "compared_against_block": "value_added",
+          "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+          "source_year": 2023,
+          "strength": "strong",
+          "rows": [
+            {
+              "code": "I561",
+              "implied": 0.5968841285296982,
+              "measured": 0.5651225797925065,
+              "gap": 0.05620293697847548
+            },
+            {
+              "code": "I562",
+              "implied": 0.13924050632911392,
+              "measured": 0.16432080001762153,
+              "gap": -0.1526300607459192
+            },
+            {
+              "code": "I563",
+              "implied": 0.2638753651411879,
+              "measured": 0.27055662018987203,
+              "gap": -0.02469448000937962
+            }
+          ],
+          "max_abs_gap": 0.1526300607459192
+        },
+        {
+          "key_id": "key_purchases_abs_2023",
+          "compared_against_block": "intermediate_cols",
+          "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+          "source_year": 2023,
+          "strength": "strong",
+          "rows": [
+            {
+              "code": "I561",
+              "implied": 0.5968841285296982,
+              "measured": 0.5830145058002741,
+              "gap": 0.02378949853123453
+            },
+            {
+              "code": "I562",
+              "implied": 0.13924050632911392,
+              "measured": 0.1362194897395503,
+              "gap": 0.022177565011730314
+            },
+            {
+              "code": "I563",
+              "implied": 0.2638753651411879,
+              "measured": 0.2807660044601755,
+              "gap": -0.06015913269650637
+            }
+          ],
+          "max_abs_gap": 0.06015913269650637
+        },
+        {
+          "key_id": "key_turnover_abs_2023",
+          "compared_against_block": "output",
+          "source": "ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level.",
+          "source_year": 2023,
+          "strength": "strong",
+          "rows": [
+            {
+              "code": "I561",
+              "implied": 0.5968841285296982,
+              "measured": 0.5724110075360593,
+              "gap": 0.04275445557726658
+            },
+            {
+              "code": "I562",
+              "implied": 0.13924050632911392,
+              "measured": 0.14970078974500697,
+              "gap": -0.06987460409334242
+            },
+            {
+              "code": "I563",
+              "implied": 0.2638753651411879,
+              "measured": 0.27788820271893366,
+              "gap": -0.05042616937545506
+            }
+          ],
+          "max_abs_gap": 0.06987460409334242
+        }
+      ],
+      "corroboration_skipped": [],
+      "corroboration_covers": "subsector shares, which is everything this split varies"
+    }
+  ]
+}

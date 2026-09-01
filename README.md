@@ -10,6 +10,26 @@ pip install -e .
 quadrium --help
 ```
 
+## See what it produces before installing anything
+
+**[`outputs/uk_food_beverage/report.md`](outputs/uk_food_beverage/report.md)** is
+a finished run, published on purpose: the ONS 2023 analytical table with its
+hospitality sector divided into three, using real ABS turnover for the sizes.
+Verbatim output — the whole folder is there, including the disaggregated table,
+the provenance of every cell and the assumption ledger. Regenerate it with
+`python3 examples/uk_food_beverage.py`.
+
+Read it before deciding whether this is worth installing. That is what it is
+there for.
+
+*One thing you will notice in it.* The report cites its sources by paragraph and
+page — `CORE_012 ¶11.66, pp. 333–334` and the like — and those are published
+manuals. It also carries pointers like `MVP_0.1 §6.3` and `OQ-S-05` into this
+project's own research record, which is **not** in this repository and is not
+meant to be readable by you. `PROVENANCE.md` says why. They are left in rather
+than stripped, because the run is verbatim and editing it would make it
+something other than what the engine produced.
+
 For an EU country you do not even need a table: name the country and the year
 in the configuration and the engine fetches it from Eurostat, caches it with
 its SHA-256, and never downloads it again.
@@ -39,7 +59,7 @@ natively. No Python: you fill in a spreadsheet and run one command.
 ## What makes this different from a matrix library
 
 **Every claim in here is checked against a number somebody else published.**
-Sixty-seven validators run on official data from six statistical offices, and
+Ninety-six validators run on official data from seven statistical offices, and
 they are the documentation: each one states what it is testing, cites the
 paragraph and page it comes from, and prints the deviation it measured.
 
@@ -89,11 +109,13 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/       67 runnable checks against published tables
+validators/       96 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
+outputs/          one finished run, published so it can be read without
+                  installing anything
 examples/         four worked pilots
-tests/            40 unit tests
+tests/            55 unit tests
 ```
 
 ## What is not here

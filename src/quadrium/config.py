@@ -1033,6 +1033,10 @@ def write_template(path: Path | str) -> Path:
     ws.title = "project"
     for i, (k, v) in enumerate([
             ("project_id", "my_first_split"),
+            # Relative to THIS workbook, and it resolves only if the
+            # workbook was written inside a checkout. Someone who installed the
+            # package does not have that file; the note beside the field says
+            # so and sends them to --sources, which lists what they do have.
             ("table_path", "../UK_IOAT_2023_domestic_ixi.xlsx"),
             ("table_kind", "uk_analytical"),
             ("title", "My sector split"),
@@ -1044,6 +1048,12 @@ def write_template(path: Path | str) -> Path:
     for i, line in enumerate([
             "#",
             "# table_path may be absolute, or relative to THIS file.",
+            "# The seeded value points at a table that ships with the SOURCE",
+            "# CHECKOUT. If you installed the package you do not have it: run",
+            "#     quadrium --sources",
+            "# to list every table this engine can load on your machine, and",
+            "#     quadrium --find <CODE> --geo <XX>",
+            "# if you know the sector but not the table.",
             "# table_kind: uk_analytical  the ONS workbook (industry x industry)",
             "#             ine_interior  the INE workbook, domestic output",
             "#             ine_total     the INE workbook, total flows",

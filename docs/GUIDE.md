@@ -20,7 +20,8 @@ command.
 6. [Read the report](#6-read-the-report)
 7. [Split a second sector, later](#7-split-a-second-sector-later)
 8. [When it refuses](#8-when-it-refuses)
-9. [What it will not do](#9-what-it-will-not-do)
+9. [Estimate a region's table](#9-estimate-a-regions-table)
+10. [What it will not do](#10-what-it-will-not-do)
 
 ---
 
@@ -33,6 +34,9 @@ it separately for your country.
 ```bash
 quadrium --find I55 --geo ES
 ```
+
+Both `--find` and `--sources` look in the current directory by default. Point
+them elsewhere with `--data PATH` if your tables live somewhere else.
 
 ```
   I55 — split
@@ -128,15 +132,17 @@ Python 3.10 or later. Two dependencies, both ordinary: `numpy` 1.24 or later
 and `openpyxl` 3.1 or later. Those floors are tested, not asserted — CI installs
 exactly them on one leg, and the latest on two more.
 
-```bash
-pip install quadrium
-```
-
-From a checkout instead:
+From a checkout:
 
 ```bash
 pip install -e .
 ```
+
+There is **no `pip install quadrium`** yet: the name is not on PyPI. This guide
+used to say there was, which is the kind of instruction that costs a stranger
+ten minutes and some goodwill before they conclude the project is abandoned. If
+you would rather not install at all, `python3 run_quadrium.py` from the checkout
+puts `src/` on the path and works exactly the same.
 
 Check it worked:
 
@@ -898,10 +904,69 @@ zero and nothing is relaxed.
 
 ---
 
-## 9. What it will not do
+## 9. Estimate a region's table
 
-- **Multi-region tables.** Single-region only.
-- **Regional disaggregation.** Sectors, not territories.
+Everything above divides a table's **sectors**. This divides its **territory**:
+given a national table and one thing about a region — its output or employment
+by sector — it estimates the region's own table.
+
+```bash
+quadrium --regionalise activity.csv --national table.xlsx \
+         --national-kind ine --method FLQ --delta 0.25
+```
+
+`activity.csv` is two columns, `sector_code,regional`, one row per sector of the
+national table, and a third column `national` if your activity measure is not
+the table's own output. `--national-kind` says where the national table came
+from — `interchange`, `ine`, `idescat`, `uk` or `eurostat` — because the method
+needs the **domestic** table and no file announces which of its blocks that is.
+
+`--method` picks the location quotient: `SLQ`, `CILQ`, `RLQ` or `FLQ`. The FLQ
+takes `--delta` and **refuses to guess one**. Measured across ten regions in two
+countries it runs from 0.14 to 0.60 with a median of 0.26, so a default would be
+a guess wearing a number.
+
+You get the regional coefficients, the interregional imports the scaling
+implies, a report and an assumption ledger, written to a folder under
+`--outputs` named after the method — or after `--name`, if you would rather
+choose it. And you get, printed whether you
+asked or not, what the method is known to get wrong:
+
+```
+## What this is known to get wrong
+
+- delta = 0.25 was supplied, not derived. A blind 0.25 costs a mean 2.2
+  points of multiplier bias, worst 6.8
+- the quotient family overstates local output multipliers; SLQ by
+  6.9 % to 20.0 %
+- cross-hauling is not reproduced in any amount anyone chose; it is
+  28.3 % of Catalonia's interregional trade
+```
+
+There is no flag to turn that off. The whole family is known to overstate how
+much a region sources at home, and a number printed without that is a number
+that will be believed too readily.
+
+Those figures are not rhetoric. The multiplier bias and the price of an unfitted
+delta are measured on nine survey-based Austrian regions in
+`validators/run_delta_across_regions.py`; that the tool actually prints them,
+every time and into every record, is checked in
+`validators/run_regionalise_cli.py`. The cross-hauling share is measured on the
+Catalan table, which is **not** redistributed here — `PROVENANCE.md` says why —
+so what this repository can verify about it is that the engine states it, not
+that it is true. That distinction is the reason it is phrased this way.
+
+**This is not a multi-region table.** It estimates one region at a time from a
+national table. The engine can hold an interregional table — sectors are
+(region, sector) pairs and the blocks slice out — but it does not build the
+trade between regions, and nothing here estimates it.
+
+---
+
+## 10. What it will not do
+
+- **Estimate trade between regions.** Section 9 gives you one region against
+  its country; the origin-destination flows between regions are not modelled.
 - **Environmental or employment extensions.** Monetary flows only.
 - **Invent your proxy.** The split is only as good as the key you bring, and
   the tool's main contribution is refusing to let you forget that.

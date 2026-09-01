@@ -2773,3 +2773,65 @@ def test_an_interregional_table_is_an_IOTable_and_says_how_to_cut_it():
     assert plain.regions == [] and plain.n_regions == 0
     refuses("no regional axis", lambda: plain.block("R1", "R1"))
     refuses("no regional axis", lambda: plain.regional_output("R1"))
+
+
+def test_a_profile_that_cannot_fit_is_turned_away_by_name():
+    """`OQ-B-17` option 4: say which of the two things went wrong.
+
+    A scenario can be infeasible because the allocation keys describe an
+    impossible economy, or because an input profile asks the parent's internal
+    block for more trade than it has. Until now both died with the same
+    sentence, and the second is the one the engine can see coming: a profiled
+    split whose headroom is already negative is refused with certainty, 37 of
+    37 in `run_input_profiles_backtest.py`.
+
+    The owner chose this option on 2026-09-01 precisely because it forecloses
+    nothing — it is a better diagnosis of the same refusal, and changes nothing
+    for the splits that survive, which is where OQ-B-17's finding lives.
+
+    So this test is a CONTRAST, not an assertion that a refusal happens. The
+    same impossible keys, with and without a profile, have to produce different
+    explanations; if they did not, the new message would be decoration.
+    """
+    import re as _re
+
+    from quadrium.models import AllocationKey, ProxyStrength, Scenario, SplitSpec
+    from quadrium.project import IOProject
+
+    codes = ["HOT", "CAM", "RES", "FBS"]
+    keys = build_keys()
+    # An output key that gives one subsector essentially nothing while final
+    # demand and value added are shared normally: impossible on its own.
+    keys["skew"] = AllocationKey(
+        key_id="skew", applies_to="output", new_sector_codes=codes,
+        raw_values=[1, 3300, 3300, 3300], source="test fixture",
+        source_year=2022, strength=ProxyStrength.WEAK)
+    blocks = {"output": "skew", "final_demand": "key_employment",
+              "value_added": "key_gva"}
+    profiles = {"HOT": {"AGR": 2.0, "MAN": 0.4},
+                "RES": {"AGR": 0.5, "MAN": 1.6}}
+
+    def explain(profiled):
+        sc = Scenario(scenario_id="P", label="x", keys_by_block=blocks,
+                      input_profiles=profiles if profiled else {})
+        try:
+            IOProject(project_id="t", table=build_table(), keys=keys,
+                      splits=[SplitSpec("ACC", codes, ["a", "b", "c", "d"])],
+                      scenarios=[sc]).run()
+        except ValueError as exc:
+            return str(exc)
+        raise AssertionError("expected the scenario to be infeasible")
+
+    plain, profiled = explain(False), explain(True)
+
+    assert "the allocation keys imply an impossible economy" in plain
+    assert "input profile asks for more internal trade" not in plain
+
+    assert "an input profile asks for more internal trade than the sector has" \
+        in profiled
+    assert "asks `ACC`'s internal block for more than it has" in profiled
+    # The figure, not just the sentence: a diagnosis that does not say how far
+    # out it is leaves the analyst guessing how much to soften.
+    assert _re.search(r"headroom is -\d+\.\d+ %", profiled)
+    # And it still says what to do about it.
+    assert "Soften the input profiles" in profiled

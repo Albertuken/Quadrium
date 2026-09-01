@@ -34,6 +34,13 @@ here explicitly rather than quietly:
    assumption, so using it here does not smuggle in anything the method under
    test does not already suppose.
 
+WHAT IT MEASURES, IN ONE LINE
+-------------------------------
+Across the nine regions the FLQ at a fitted delta keeps mu1 under 0.5 %, against
+**6.9 % to 20.0 %** for SLQ, and using Finland's modal 0.25 blind costs a mean
+**2.2 points** of multiplier bias, 6.8 at worst. Those are the figures
+`docs/GUIDE.md` §9 quotes and `src/quadrium/regionalise.py` prints.
+
 Assumption 3 is varied at the end and moves delta by 0.02, against a spread of
 0.46 between regions. Assumption 2 **cannot** be varied the obvious way: giving
 every sector the same intermediate share of its interregional sales is

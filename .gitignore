@@ -1,7 +1,16 @@
 .DS_Store
 __pycache__/
 *.pyc
-outputs/
+# The CONTENTS of outputs/, not the directory: git cannot re-include anything
+# inside an excluded directory, so `outputs/` followed by a negation silently
+# does nothing. Working runs stay out; one finished run is published on purpose.
+#
+# The owner asked to see what a user would see before installing anything, and
+# until 2026-09-01 nothing here answered that -- outputs/ was empty AND ignored.
+# This one is verbatim output, regenerable with
+# `python3 examples/uk_food_beverage.py`.
+outputs/*
+!outputs/uk_food_beverage/
 build/
 dist/
 *.egg-info/
