@@ -2700,3 +2700,76 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_an_interregional_table_is_an_IOTable_and_says_how_to_cut_it():
+    """A multi-region table needs no new type, and the axis refuses a bad layout.
+
+    `CORE_039` p. 286 describes an IRIO as an ordinary table whose intermediate
+    matrix is (S*R) x (S*R). Both of `IOTable`'s balance identities hold on it
+    unchanged, so the right move is an additive axis rather than a second class
+    — every existing validator keeps working because the object it checks has
+    not changed.
+
+    What the axis has to earn is the SLICING. Arranged region-major, each
+    region's own table is a contiguous diagonal block; arranged any other way
+    the same slice returns a plausible matrix of the wrong thing. So the layout
+    is enforced, not assumed, and this test is mostly the refusals.
+    """
+    from quadrium.models import IOTable
+
+    S, R = 3, 2
+    n = S * R
+
+    def build(region_codes, sector_codes=None):
+        Z = np.arange(n * n, dtype=float).reshape(n, n)
+        Y = np.full((n, 1), 2.0)
+        VA = np.full((1, n), 2.0)
+        X = Z.sum(1) + Y.sum(1)
+        VA = (X - Z.sum(0)).reshape(1, n)
+        return IOTable(
+            table_id="irio", country="XX", year=2021, unit="M",
+            classification="NACE", sector_codes=sector_codes or ["a", "b", "c"] * R,
+            sector_labels=["a", "b", "c"] * R, Z=Z, Y=Y, Y_labels=["fd"],
+            VA=VA, VA_labels=["va"], X=X, source="test",
+            region_codes=region_codes)
+
+    t = build(["R1"] * S + ["R2"] * S)
+    assert t.regions == ["R1", "R2"]
+    assert t.n_regions == 2 and t.sectors_per_region == S
+
+    # The diagonal block is the region's own table, and it is a VIEW: these
+    # matrices are (S*R)^2 and slicing must not copy them.
+    assert t.intraregional("R2").shape == (S, S)
+    # shares_memory rather than `.base is`, because numpy collapses the base
+    # of a view-of-a-view to the ultimate owner, which reshape makes not-Z.
+    assert np.shares_memory(t.block("R1", "R2"), t.Z)
+    assert np.array_equal(t.intraregional("R1"), t.Z[:S, :S])
+    assert np.array_equal(t.block("R1", "R2"), t.Z[:S, S:])
+    assert np.array_equal(t.regional_output("R2"), t.X[S:])
+
+    def refuses(fragment, fn):
+        try:
+            fn()
+        except ValueError as exc:
+            assert fragment in str(exc), f"expected {fragment!r}, got {exc}"
+            return
+        raise AssertionError(f"no refusal mentioning {fragment!r}")
+
+    # Interleaved regions would give silently wrong blocks.
+    refuses("contiguous block", lambda: build(["R1", "R2"] * S))
+
+    # A region carrying different sectors, or the same ones in a different
+    # order, breaks the correspondence between one block and the next.
+    refuses("same sectors",
+            lambda: build(["R1"] * S + ["R2"] * S,
+                          sector_codes=["a", "b", "c", "a", "c", "b"]))
+
+    # Length is checked against the axis it sits parallel to.
+    refuses("length 6", lambda: build(["R1"] * S))
+
+    # And a single-region table says so instead of returning something.
+    plain = build(None)
+    assert plain.regions == [] and plain.n_regions == 0
+    refuses("no regional axis", lambda: plain.block("R1", "R1"))
+    refuses("no regional axis", lambda: plain.regional_output("R1"))

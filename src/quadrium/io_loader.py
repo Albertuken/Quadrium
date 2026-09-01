@@ -1740,3 +1740,204 @@ def load_ons_sut(path: Path | str, year: int) -> OnsSupplyUse:
         output_by_industry=va["output"],
         source=f"ONS, Input-output supply and use tables, Blue Book 2025 "
                f"({path.name}), {year}")
+
+
+# ---------------------------------------------------------------------------
+# Austria's nine NUTS-2 regions, survey-based
+# ---------------------------------------------------------------------------
+
+_AT_REGIONS = ("AT11", "AT12", "AT13", "AT21", "AT22",
+               "AT31", "AT32", "AT33", "AT34")
+_AT_SECTORS = 56
+_AT_FINAL = ("57 HOU", "58 INV", "59 GOV", "60 EXPROW", "61 EXPROC", "62 Stocks")
+_AT_IMPORT_ROWS = {"70 ROWimp": "rest of world", "71 ROCimp": "rest of country"}
+
+
+def load_rokicki_austria(path: Path | str, region: str) -> IOTable:
+    """One Austrian NUTS-2 region, from the survey-based tables of Rokicki et al.
+
+    WHY THIS SOURCE
+    -----------------
+    Everything this project has measured about regionalisation so far rests on
+    ONE region, Catalonia. `OQ-R-02` says so when it closes: "one region, one
+    year, one country". These nine tables are the second case, and they are
+    survey-based rather than estimated -- Rokicki, Bartlomiej, et al.,
+    "Survey-based versus algorithm-based multi-regional input-output tables
+    within the CGE framework - the case of Austria", Economic Systems Research
+    33(4): 470-491, distributed as the technical-validation set of the European
+    MRIO dataset on Zenodo (record 7875024, CC BY 4.0).
+
+    They have the shape Catalonia has and almost nothing else does: **both
+    sides of interregional trade**, by sector. Column `61 EXPROC` is what the
+    region sells to the rest of Austria; row `71 ROCimp` is what it buys.
+
+    THE LAYOUT, AND THE TRAP IN IT
+    --------------------------------
+    56 sectors square, then six final-demand columns and, below the sectors,
+    labour and capital rows, production taxes, and two import rows.
+
+    The import rows run across the WHOLE width -- intermediate columns and
+    final-demand columns alike. Reading them across the intermediate block only
+    is a different quantity, and here it is not a subtle difference: the nine
+    regions' interregional exports total 180,079 and their interregional
+    imports read that way total 75,338, **58 % short**. Read across the full
+    width they come to 180,079 as well, to one part in a million, because a
+    closed national MRIO cannot do otherwise. `run_austria_regional.py` asserts
+    exactly that, since it is the check that catches the mistake.
+
+    WHAT IS RETURNED
+    ------------------
+    The region's own domestic table: `Z` is the 56x56 block of intraregional
+    flows, imports from the rest of the country and the rest of the world are
+    `VA` rows labelled as not being value added, and both export columns are in
+    `Y`. That matches `load_idescat_mioc`, so the two regions can be compared
+    without a translation step.
+    """
+    import csv as _csv
+
+    path = Path(path)
+    region = region.upper()
+    if region not in _AT_REGIONS:
+        raise ValueError(f"unknown Austrian region {region!r}; expected one of "
+                         f"{', '.join(_AT_REGIONS)}")
+    f = path / f"{region}.csv" if path.is_dir() else path
+    if not f.exists():
+        raise FileNotFoundError(f"{f} not found")
+
+    rows = list(_csv.reader(f.open()))
+    if not rows or rows[0][0] != "IOMAT":
+        raise ValueError(f"{f.name} does not look like a Rokicki table: "
+                         f"expected 'IOMAT' in the first cell")
+    header = rows[0][1:]
+    labels = [r[0] for r in rows[1:]]
+    M = np.array([[float(c or 0.0) for c in r[1:]] for r in rows[1:]], float)
+
+    col = {h: j for j, h in enumerate(header)}
+    row = {l: i for i, l in enumerate(labels)}
+    for need in (*_AT_FINAL, "Total"):
+        if need not in col:
+            raise ValueError(f"{f.name} has no column {need!r}")
+    for need in _AT_IMPORT_ROWS:
+        if need not in row:
+            raise ValueError(f"{f.name} has no row {need!r}")
+
+    S = _AT_SECTORS
+    codes = [labels[i].split(" ", 1)[0] for i in range(S)]
+    names = [labels[i].split(" ", 1)[1] if " " in labels[i] else labels[i]
+             for i in range(S)]
+
+    Z = M[:S, :S]
+    Y = np.column_stack([M[:S, col[c]] for c in _AT_FINAL])
+    X = M[:S, col["Total"]]
+
+    # Imports run the full width of the table; taking the intermediate part
+    # alone is the 58 % error the docstring records.
+    va_labels, va_rows = [], []
+    for key, what in _AT_IMPORT_ROWS.items():
+        va_labels.append(f"Intermediate imports from the {what} "
+                         f"(NOT value added)")
+        va_rows.append(M[row[key], :S])
+    # Everything between the last sector and the import rows is genuine primary
+    # input: labour by occupation, capital, land, taxes.
+    for i in range(S, len(labels)):
+        key = labels[i]
+        if key in _AT_IMPORT_ROWS or key == "Total":
+            continue
+        va_labels.append(key.split(" ", 1)[1] if " " in key else key)
+        va_rows.append(M[i, :S])
+
+    # ROW OUTPUT IS NOT COLUMN OUTPUT IN THESE TABLES, and an IOTable requires
+    # that it be. Both identities hold against their OWN total -- rows to 2.1
+    # and columns to 4.9 on AT13, against a file floor of 0.028 -- but the two
+    # totals differ by up to 6,730 for a single sector. The differences sum to
+    # 3.3 across all 56, so it is a redistribution and not a hole: Trade sells
+    # 11,156 and buys 17,886, which is the signature of a margin treatment or a
+    # product/industry distinction rather than an error.
+    #
+    # Whatever its cause, `Z.sum(1) + Y.sum(1) == X` and
+    # `Z.sum(0) + VA.sum(0) == X` cannot both hold for one X, so this cannot be
+    # returned as a balanced symmetric table. It is refused rather than loaded
+    # with a residue quietly attached, because the residue is structural and
+    # 5 % of a sector, not rounding.
+    X_col = M[row["Total"], :S] if "Total" in row else None
+    if X_col is not None:
+        gap = float(np.abs(X - X_col).max())
+        floor = float(np.abs(X).max()) * 1e-6
+        if gap > floor:
+            raise ValueError(
+                f"{f.name}: row output and column output differ by up to "
+                f"{gap:,.1f} for a single sector (largest: "
+                f"{names[int(np.argmax(np.abs(X - X_col)))]}), against a "
+                f"grand-total difference of {abs(X.sum() - X_col.sum()):,.1f}. "
+                f"Both of IOTable's balance identities cannot hold for one "
+                f"output vector, so this is not a symmetric table in the sense "
+                f"the engine means. Read its parts with "
+                f"read_rokicki_components() and say which total you are using.")
+
+    return IOTable(
+        table_id=f"AT_{region}_rokicki",
+        country=f"AT-{region}",
+        year=2010,
+        unit="million EUR",
+        classification="56 sectors, Rokicki et al. (2021)",
+        sector_codes=codes,
+        sector_labels=names,
+        Z=Z, Y=Y, Y_labels=list(_AT_FINAL),
+        VA=np.array(va_rows, float), VA_labels=va_labels, X=X,
+        source=f"Rokicki et al. (2021), Economic Systems Research 33(4), via "
+               f"Zenodo record 7875024 ({f.name})")
+
+
+def read_rokicki_components(path: Path | str, region: str) -> dict:
+    """The parts of a Rokicki Austrian table, without pretending it balances.
+
+    `load_rokicki_austria` refuses these tables because row output and column
+    output disagree by up to 5 % for a single sector, and an `IOTable` needs one
+    output vector that satisfies both identities. The components are still
+    sound and internally consistent, so this returns them and leaves the choice
+    of denominator to the caller -- which is the honest place for it:
+
+        Z            56 x 56 intraregional flows
+        Y, Y_labels  the six final-demand columns, EXPROC being interregional
+        imports      by source ('rest of country', 'rest of world'), each read
+                     across the FULL width of the table, intermediate columns
+                     and final-demand columns alike
+        X_row        total sales by sector, which the file prints as a column
+        X_col        total purchases by sector, which it prints as a row
+        primary      the labour, capital, land and tax rows
+
+    Use `X_col` for technical coefficients, since a coefficient is input per
+    unit of the purchasing sector's output; use `X_row` for anything about the
+    supply of a commodity. Saying which is the point.
+    """
+    import csv as _csv
+
+    path = Path(path)
+    region = region.upper()
+    f = path / f"{region}.csv" if path.is_dir() else path
+    rows = list(_csv.reader(f.open()))
+    header = rows[0][1:]
+    labels = [r[0] for r in rows[1:]]
+    M = np.array([[float(c or 0.0) for c in r[1:]] for r in rows[1:]], float)
+    col = {h: j for j, h in enumerate(header)}
+    row = {l: i for i, l in enumerate(labels)}
+    S = _AT_SECTORS
+    fd_lo, fd_hi = col[_AT_FINAL[0]], col[_AT_FINAL[-1]]
+    return {
+        "region": region,
+        "sector_codes": [labels[i].split(" ", 1)[0] for i in range(S)],
+        "sector_labels": [labels[i].split(" ", 1)[1] if " " in labels[i]
+                          else labels[i] for i in range(S)],
+        "Z": M[:S, :S],
+        "Y": np.column_stack([M[:S, col[c]] for c in _AT_FINAL]),
+        "Y_labels": list(_AT_FINAL),
+        "imports": {what: M[row[key]][:S].copy() for key, what in
+                    _AT_IMPORT_ROWS.items()},
+        "imports_total": {what: float(M[row[key]][:S].sum()
+                                      + M[row[key]][fd_lo:fd_hi + 1].sum())
+                          for key, what in _AT_IMPORT_ROWS.items()},
+        "X_row": M[:S, col["Total"]],
+        "X_col": M[row["Total"], :S],
+        "primary": {labels[i]: M[i, :S] for i in range(S, len(labels))
+                    if labels[i] not in _AT_IMPORT_ROWS and labels[i] != "Total"},
+    }

@@ -181,6 +181,24 @@ class IOTable:
     # admitted and the table carries the number forward.
     inherited_residue: float = 0.0
 
+    # WHICH REGION EACH ROW AND COLUMN BELONGS TO, when the table covers more
+    # than one. Length n, parallel to `sector_codes`.
+    #
+    # An interregional table is not a different kind of object: `CORE_039`
+    # p. 286 describes an IRIO as an ordinary table whose intermediate matrix
+    # is (S * R) x (S * R), and both balance identities above hold on it
+    # unchanged. So a multi-region table IS an IOTable whose "sectors" are
+    # (region, sector) pairs, and this field is the axis that says how to slice
+    # it back apart. Every existing validator keeps working, because nothing
+    # about the object it checks has changed.
+    #
+    # The layout is the one CORE_039 p. 286 calls Chenery-Moses notation:
+    # region is the SLOW index and sector the FAST one, so each region's own
+    # table is a contiguous diagonal block. `__post_init__` enforces that
+    # rather than trusting it -- a table whose regions interleave would give
+    # silently wrong blocks.
+    region_codes: Optional[list[str]] = None
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)
@@ -207,6 +225,36 @@ class IOTable:
                 raise ValueError(
                     f"provenance must be {n}x{n} to sit parallel to Z, got "
                     f"{self.provenance.shape}")
+        if self.region_codes is not None:
+            if len(self.region_codes) != n:
+                raise ValueError(
+                    f"region_codes must have length {n} to sit parallel to "
+                    f"sector_codes, got {len(self.region_codes)}")
+            seen: list[str] = []
+            for code in self.region_codes:
+                if not seen or seen[-1] != code:
+                    if code in seen:
+                        raise ValueError(
+                            f"region {code!r} appears in more than one run of "
+                            f"region_codes; the layout must be region-major "
+                            f"(Chenery-Moses), one contiguous block per region")
+                    seen.append(code)
+            size = n // len(seen)
+            if size * len(seen) != n:
+                raise ValueError(
+                    f"{n} rows do not divide into {len(seen)} equal regional "
+                    f"blocks; an IRIO carries the same sectors in every region")
+            for k, code in enumerate(seen):
+                block = self.region_codes[k * size:(k + 1) * size]
+                if any(c != code for c in block):
+                    raise ValueError(
+                        f"region {code!r} does not occupy a contiguous block "
+                        f"of {size} rows")
+                if self.sector_codes[k * size:(k + 1) * size] != \
+                        self.sector_codes[:size]:
+                    raise ValueError(
+                        f"region {code!r} does not carry the same sectors, in "
+                        f"the same order, as the first region")
 
     @property
     def derived(self) -> bool:
@@ -247,6 +295,68 @@ class IOTable:
     def intermediate_col_totals(self) -> np.ndarray:
         """Total intermediate purchases by sector = X - value added."""
         return self.X - self.VA.sum(axis=0)
+
+    # ---- the regional axis. Absent on a single-region table, and every method
+    # below says so rather than returning something plausible.
+
+    @property
+    def regions(self) -> list[str]:
+        """The regions, in the order they occupy the axis. Empty if none."""
+        if self.region_codes is None:
+            return []
+        out: list[str] = []
+        for code in self.region_codes:
+            if not out or out[-1] != code:
+                out.append(code)
+        return out
+
+    @property
+    def n_regions(self) -> int:
+        return len(self.regions)
+
+    @property
+    def sectors_per_region(self) -> int:
+        """S, where the table is (S x R) square. Equals n when single-region."""
+        return self.n // self.n_regions if self.region_codes is not None else self.n
+
+    def _region_slice(self, region: str) -> slice:
+        try:
+            k = self.regions.index(region)
+        except ValueError:
+            have = ", ".join(self.regions) if self.regions else \
+                "none - this table has no regional axis"
+            raise KeyError(f"region {region!r} not in table "
+                           f"{self.table_id!r}; available: {have}") from None
+        s = self.sectors_per_region
+        return slice(k * s, (k + 1) * s)
+
+    def block(self, origin: str, destination: str) -> np.ndarray:
+        """The S x S flows from `origin`'s sectors into `destination`'s.
+
+        A VIEW, not a copy: these matrices are (S*R)^2 and the point of the
+        axis is to read parts of them without materialising more.
+        """
+        if self.region_codes is None:
+            raise ValueError(
+                f"table {self.table_id!r} has no regional axis; block() needs "
+                f"region_codes")
+        return self.Z[self._region_slice(origin), self._region_slice(destination)]
+
+    def intraregional(self, region: str) -> np.ndarray:
+        """The region's own diagonal block — its RIO intermediate matrix.
+
+        CORE_039 p. 286: arranged this way, the intermediate matrices of the
+        single-region tables ARE the diagonal blocks of the interregional one.
+        """
+        return self.block(region, region)
+
+    def regional_output(self, region: str) -> np.ndarray:
+        """X restricted to one region, length S."""
+        if self.region_codes is None:
+            raise ValueError(
+                f"table {self.table_id!r} has no regional axis; "
+                f"regional_output() needs region_codes")
+        return self.X[self._region_slice(region)]
 
 
 # ---------------------------------------------------------------------------
