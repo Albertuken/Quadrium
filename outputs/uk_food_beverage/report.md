@@ -1,5 +1,5 @@
 # UK I56 — Food And Beverage Service Activities   — sector split
-Generated 2026-09-01 11:02 UTC · Quadrium 0.1.0 (MVP 0.1)
+Generated 2026-09-01 19:44 UTC · Quadrium 0.1.0 (MVP 0.1)
 
 > **Sizes are real; structures are the parent's.** The table is the ONS 2023 analytical IOT and the size split uses real ABS turnover for SIC 56.1/56.2/56.3. Deliberately, no attempt is made to differentiate the subsectors' input structures, so all three carry the parent's multiplier. See the assumption ledger, and `INFORME_PILOTO.md` §4 for why.
 
@@ -401,3 +401,8 @@ Quoting these multipliers as evidence that hotels and restaurants have similar e
 | `A-03` | One key splits every block, so each subsector inherits the parent's composition. ABS measured the true composition separately and it differs: value added by up to 8.9 % and purchases by up to 9.9 %, both on event catering. The sizes are right; the composition is approximate. | ONS Annual Business Survey, 'Non-financial business economy, UK: Sections A to S', Table 13 Section I, released 2026-05-26, retrieved 2026-08-09. United Kingdom, SIC 56.1/56.2/56.3 published directly at 3-digit level. | medium | up to 10 % on a subsector's value added and intermediate purchases; none on its size |
 | `A-04` | Splitting output, value added and purchases by three separate ABS variables at once is INFEASIBLE and was refused by the engine, not chosen against. Catering earns 16.4 % of the sector's value added on 15.0 % of its output, and only 1.39 % of output is traded inside the sector, so nothing can absorb the difference. | engine feasibility check, src/quadrium/scenarios.py | strong | decides the configuration; see A-03 for what it costs |
 | `A-02` | Balancing uses GRAS. The table carries 129 legitimate negative entries, so RAS is undefined on it. | CORE_012 Box 11.3, p. 345; UNH_18 par. 18.35, p. 558 | strong | decisive |
+
+
+---
+
+*Not every reference here is one you can follow.* `INFORME_PILOTO.md`, `OQ-D-01`, `A_core_accounting_spec.md`, `D_open_questions.md`, `OQ-B-02`, `OQ-S-01`, `MVP_0.1`, `OQ-S-05` and 1 more point into this project's own research record — its open questions, its accounting specification and its method cards. That record is **not** distributed with the software, because it quotes copyrighted manuals at length; `PROVENANCE.md` says so and why. Everything cited as `CORE_nnn`, `UNH_nn` or `SNA_25` is a published source, given by paragraph and page, and every one of those page citations is verified against the source's own text before it ships. The identities `ID-nn` are defined in the public specification.

@@ -56,7 +56,61 @@ class Regionalisation:
     lam: Optional[float]                # FLQ's lambda, None for the others
     slq: np.ndarray
     implicit_imports: np.ndarray        # by product, CORE_039 p. 292
+    X: np.ndarray                       # the regional output the scaling used
     caveats: list[str] = field(default_factory=list)
+
+    def to_table(self, *, sector_codes, sector_labels=None, country="XX-region",
+                 year=0, unit="", classification="", source="") -> "object":
+        """The estimated region as an `IOTable`, so the rest of the engine can
+        take it.
+
+        Until v1.85 `--regionalise` produced a coefficient matrix and stopped:
+        nothing downstream could diagnose it, split a sector of it, or export
+        it. No new data is needed to go further --
+
+            Z = A * diag(X)
+            final demand and exports = X - Z.sum(1)     (row residual)
+            value added and imports  = X - Z.sum(0)     (column residual)
+
+        -- and both of IOTable's balance identities then hold BY CONSTRUCTION.
+        That is arithmetic already implicit in what the method computes, not a
+        new assumption.
+
+        **One column and one row, deliberately.** The quotient says nothing
+        about how a region's final demand splits between households and exports,
+        or its value added between labour and capital. Returning several columns
+        would imply a detail the method does not have, so it returns one and
+        names it for what it is.
+        """
+        from .models import IOTable
+
+        n = len(sector_codes)
+        if n != len(self.X):
+            raise ValueError(f"{n} sector codes for {len(self.X)} sectors")
+        Z = self.A * self.X
+        Y = (self.X - Z.sum(axis=1)).reshape(n, 1)
+        VA = (self.X - Z.sum(axis=0)).reshape(1, n)
+        note = None
+        if float(Y.min()) < 0:
+            k = int(np.argmin(Y))
+            note = (f"the row residual is negative for {sector_codes[k]} "
+                    f"({float(Y[k, 0]):,.4f}): its estimated intermediate sales "
+                    f"exceed its output, which a row of A summing above 1 can "
+                    f"do. Carried rather than clipped")
+        return IOTable(
+            table_id=f"regionalised_{self.method.lower()}",
+            country=country, year=year, unit=unit,
+            classification=classification,
+            sector_codes=list(sector_codes),
+            sector_labels=list(sector_labels or sector_codes),
+            Z=Z, Y=Y, Y_labels=["final demand and exports (residual)"],
+            VA=VA, VA_labels=["value added and imports (residual)"],
+            X=self.X.copy(), source=source or f"Quadrium {self.method}",
+            notes=note,
+            lineage=[f"regionalised from a national table with {self.method}"
+                     + (f", delta = {self.delta:g}" if self.delta is not None
+                        else "")]
+            + [c.strip() for c in self.caveats if c.strip().startswith("-")])
 
     def report(self) -> str:
         """The costs, as a block a caller can print beside the numbers."""
@@ -173,4 +227,5 @@ def regionalise(A_national: np.ndarray,
                           f"fitted delta is roughly an order of magnitude closer")
     return Regionalisation(A=A, q=q, method=method, delta=delta,
                            lam=lam if method == "FLQ" else None,
-                           slq=slq, implicit_imports=implicit, caveats=caveats)
+                           slq=slq, implicit_imports=implicit, X=x.copy(),
+                           caveats=caveats)

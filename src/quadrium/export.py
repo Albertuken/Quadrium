@@ -264,13 +264,19 @@ def write_xlsx(res: DisaggregationResult, path: Path) -> Path | None:
             c.alignment = Alignment(horizontal="center")
     ws.freeze_panes = "B2"
 
-    _write_interchange_sheets(wb, res)
+    divided = "; ".join(f"{sp['sector_code']} into {', '.join(sp['new_codes'])}"
+                        for sp in res.splits)
+    _write_interchange_sheets(
+        wb, res.table, table_id=f"{res.table.table_id}::{res.scenario_id}",
+        derived_from=f"Quadrium disaggregation, scenario {res.scenario_id}: "
+                     f"{divided}.")
 
     wb.save(path)
     return path
 
 
-def _write_interchange_sheets(wb, res) -> None:
+def _write_interchange_sheets(wb, t, *, table_id: str,
+                              derived_from: str) -> None:
     """Add the `table` and `metadata` sheets that make this file re-readable.
 
     WHY THE SAME WORKBOOK CARRIES THE NUMBERS TWICE
@@ -285,7 +291,7 @@ def _write_interchange_sheets(wb, res) -> None:
     table you had already split meant redoing the first split in the same run
     or retyping the output by hand, and the guide had no answer for it.
 
-    Both layouts are written here, in one function, from `res.table` -- so they
+    Both layouts are written here, in one function, from ONE table -- so they
     cannot disagree with each other. Duplication that is generated once from a
     single source is bookkeeping; duplication that is maintained is a defect.
 
@@ -295,7 +301,6 @@ def _write_interchange_sheets(wb, res) -> None:
     """
     from openpyxl.styles import Font
 
-    t = res.table
     bold = Font(bold=True)
 
     ws = wb.create_sheet("table")
@@ -311,22 +316,19 @@ def _write_interchange_sheets(wb, res) -> None:
     ws.freeze_panes = "B2"
 
     ws = wb.create_sheet("metadata")
-    meta = [("table_id", f"{t.table_id}::{res.scenario_id}"),
+    meta = [("table_id", table_id),
             ("country", t.country), ("year", t.year), ("unit", t.unit),
             ("classification", t.classification), ("source", t.source)]
     meta += [(f"label_{c}", lab)
              for c, lab in zip(t.sector_codes, t.sector_labels)]
 
-    divided = "; ".join(f"{s['sector_code']} into {', '.join(s['new_codes'])}"
-                        for s in res.splits)
     counts = t.provenance_counts() if t.provenance is not None else {}
     estimated = sum(v for k, v in counts.items() if k != "OBSERVED")
     total = max(t.n * t.n, 1)
     meta.append((
         "derived_from",
-        f"Quadrium disaggregation, scenario {res.scenario_id}: {divided}. "
-        f"{estimated} of {total} intermediate cells ({100 * estimated / total:.1f} %) "
-        f"are not observations."))
+        f"{derived_from} {estimated} of {total} intermediate cells "
+        f"({100 * estimated / total:.1f} %) are not observations."))
     for i, line in enumerate(t.lineage, start=1):
         meta.append((f"lineage_{i}", line))
     meta.append((
@@ -343,3 +345,30 @@ def _write_interchange_sheets(wb, res) -> None:
     ws.column_dimensions["B"].width = 70
     for row in ws.iter_rows(min_col=1, max_col=1):
         row[0].font = bold
+
+
+def write_interchange_xlsx(table: IOTable, path: Path, *,
+                           derived_from: str) -> Path | None:
+    """A plain table in the format `load_io_table` reads, and nothing else.
+
+    `write_xlsx` writes a disaggregation result: one sheet per block, shaded by
+    provenance, plus the interchange sheets. A table that did not come from a
+    split has no scenario and no provenance to shade, and until now there was
+    no way to hand one back to the engine at all -- which is why
+    `--regionalise` produced a matrix nobody could do anything further with.
+
+    Same two sheets, same writer, so this file and a disaggregation's cannot
+    drift apart.
+    """
+    try:
+        import openpyxl
+    except ImportError:
+        return None
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    _write_interchange_sheets(wb, table, table_id=table.table_id,
+                              derived_from=derived_from)
+    wb.save(path)
+    return path

@@ -160,6 +160,15 @@ few identified by a distinctive fragment of their own message — because one
 function can judge both a caller's arguments and a table's contents, and
 `transform` judges both.
 
+*And that sentence was written before it was true.* This file said it from the
+version that recorded the Catalan loader's damage, and went on keying by line
+anyway — which broke the check again on 2026-09-01, when an edit to
+`scenarios.py` moved one refusal from line 106 to 133. The keys are built from
+the syntax tree as of v1.85; inserting twelve lines at the top of a module
+leaves every one of the 166 unchanged, which was checked rather than assumed. A
+document describing a fix its code does not have is worse than no document, and
+this one lasted several versions.
+
 The classification lives in `data/_refusal_coverage.json` so it is held rather
 than repeated, and it was made by reading each message rather than by matching
 words — which is the same mistake in a different costume.
@@ -194,6 +203,7 @@ Run:
 """
 from __future__ import annotations
 
+import ast
 import collections
 import json
 import re
@@ -212,16 +222,18 @@ TYPES = ("BalancingError", "AcquisitionRefused", "ConfigError",
 
 # The refusals that judge the DATA rather than the caller's arguments, and that
 # nothing has reached. Named here so the list is a claim, not a shrug.
+_MODEL_A = ("transformation.py::hybrid_matrix_avoiding_negatives::"
+            "model A (H all ones) cannot even be computed on this")
 DATA_JUDGEMENTS = {
-    "transformation.py:122": "a coefficient's denominator is zero",
-    "transformation.py:239": "model A cannot be computed on this table at all",
-    "sut_ras.py:126": "a product row whose margin is non-positive",
-    "sut_ras.py:172": "the same for an import row",
+    "transformation.py::_diag_inv": "a coefficient's denominator is zero",
+    _MODEL_A: "model A cannot be computed on this table at all",
+    "sut_ras.py::_product_factors": "a product row whose margin is non-positive",
+    "sut_ras.py::_import_factors": "the same for an import row",
 }
 # The one still without a case, and why: reaching it needs a table on which
 # model A cannot be computed at all, and nothing built here does that honestly.
 # Named so it stays a known gap rather than becoming a silent one.
-NO_CASE_YET = {"transformation.py:239"}
+NO_CASE_YET = {_MODEL_A}
 
 LABELS = {
     "source": "a file or response from an office",
@@ -252,13 +264,53 @@ def main() -> int:
         return 1
     rec = json.loads(RECORD.read_text())
 
+    # KEYED BY FUNCTION, NOT BY LINE. This file's own docstring has claimed
+    # that since the Catalan loader silently re-labelled 38 sites -- and the
+    # code went on keying by line anyway, which broke the check again on
+    # 2026-09-01 when scenarios.py:106 became :133. A document that describes a
+    # fix the code does not have is worse than no document.
+    #
+    # A function that raises once is named by itself. One that raises more than
+    # once carries a fragment of each message, because `transform` judges both
+    # its caller's arguments and the table's contents and those are different
+    # classifications.
     pat = re.compile(r"raise\s+(" + "|".join(TYPES) + r")\b")
-    static = {}
+
+    def _fragment(node) -> str:
+        exc = node.exc
+        if isinstance(exc, ast.Call) and exc.args:
+            parts = [n.value for n in ast.walk(exc.args[0])
+                     if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+            return " ".join(" ".join(parts).split())[:52]
+        return ""
+
+    raw, static = [], {}
     for f in sorted(SRC.glob("*.py")):
-        for i, line in enumerate(f.read_text().splitlines(), 1):
-            m = pat.search(line)
-            if m:
-                static[f"{f.name}:{i}"] = m.group(1)
+        src_text = f.read_text()
+        lines = src_text.splitlines()
+        tree = ast.parse(src_text)
+        parent = {}
+        for n in ast.walk(tree):
+            for c in ast.iter_child_nodes(n):
+                parent[c] = n
+        for n in ast.walk(tree):
+            if not isinstance(n, ast.Raise) or n.exc is None:
+                continue
+            m = pat.search(lines[n.lineno - 1])
+            if not m:
+                continue
+            up, fn = parent.get(n), "<module>"
+            while up is not None:
+                if isinstance(up, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    fn = up.name
+                    break
+                up = parent.get(up)
+            raw.append((f.name, fn, n.lineno, m.group(1), _fragment(n)))
+    per_fn = collections.Counter((r[0], r[1]) for r in raw)
+    for fname, fn, _ln, typ, frag in raw:
+        key = (f"{fname}::{fn}" if per_fn[(fname, fn)] == 1
+               else f"{fname}::{fn}::{frag}")
+        static[key] = typ
 
     check("the code still has the number of refusals the sweep counted",
           len(static) == rec["n_sites"],

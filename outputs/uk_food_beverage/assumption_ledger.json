@@ -11,7 +11,7 @@
       "impact_on_results": "the subsector multipliers are the parent's, and should be quoted as such",
       "discarded_alternative": null,
       "discard_reason": null,
-      "created_at": "2026-09-01T11:02:14.829864+00:00"
+      "created_at": "2026-09-01T19:44:32.517951+00:00"
     },
     {
       "assumption_id": "A-03",
@@ -23,7 +23,7 @@
       "impact_on_results": "up to 10 % on a subsector's value added and intermediate purchases; none on its size",
       "discarded_alternative": null,
       "discard_reason": null,
-      "created_at": "2026-09-01T11:02:14.829872+00:00"
+      "created_at": "2026-09-01T19:44:32.517954+00:00"
     },
     {
       "assumption_id": "A-04",
@@ -35,7 +35,7 @@
       "impact_on_results": "decides the configuration; see A-03 for what it costs",
       "discarded_alternative": null,
       "discard_reason": null,
-      "created_at": "2026-09-01T11:02:14.829874+00:00"
+      "created_at": "2026-09-01T19:44:32.517955+00:00"
     },
     {
       "assumption_id": "A-02",
@@ -47,7 +47,7 @@
       "impact_on_results": "decisive",
       "discarded_alternative": null,
       "discard_reason": null,
-      "created_at": "2026-09-01T11:02:14.829875+00:00"
+      "created_at": "2026-09-01T19:44:32.517956+00:00"
     }
   ]
 }

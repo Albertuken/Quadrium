@@ -491,6 +491,25 @@ def main(argv=None) -> int:
         return _catalogue(args)
 
     if not args.config:
+        # Fifteen options with no hierarchy was the whole of the first contact.
+        # Someone who has just installed this needs one sentence about what to
+        # do, not a list of flags to rank for themselves.
+        print("Quadrium divides a sector of an input-output table, or "
+              "estimates a region's\ntable from a national one, and says what "
+              "it assumed either way.\n")
+        print("Start here:\n")
+        print("    quadrium --template my_split.xlsx    a workbook that "
+              "explains itself,")
+        print("                                         then: quadrium "
+              "my_split.xlsx")
+        print("    quadrium --sources                   every table this "
+              "engine can load, here")
+        print("    quadrium --find I55 --geo ES         which table separates "
+              "a sector\n")
+        print("The guide is docs/GUIDE.md, and outputs/uk_food_beverage/"
+              "report.md is a\nfinished run you can read without running "
+              "anything.\n")
+        print("Every option:\n")
         ap.print_help()
         return 2
 
@@ -654,6 +673,23 @@ def _regionalise(args) -> int:
     out.mkdir(parents=True, exist_ok=True)
     np.savetxt(out / "coefficients.csv", res.A, delimiter=",",
                header=",".join(table.sector_codes), comments="# A^rr, ")
+    # The region as a TABLE, in the format --national-kind interchange reads.
+    # Without this the command produced a matrix and stopped: nothing
+    # downstream could diagnose the region, split a sector of it, or export it.
+    from .export import write_interchange_xlsx
+    regional = res.to_table(
+        sector_codes=table.sector_codes, sector_labels=table.sector_labels,
+        country=f"{table.country} — region", year=table.year, unit=table.unit,
+        classification=table.classification,
+        source=f"regionalised from {Path(args.national).name} with "
+               f"{res.method}" + (f", delta={res.delta:g}"
+                                  if res.delta is not None else ""))
+    wrote_table = write_interchange_xlsx(
+        regional, out / "regional_table.xlsx",
+        derived_from=f"Quadrium regionalisation with {res.method}"
+                     + (f", delta = {res.delta:g}" if res.delta is not None
+                        else "") + ". Estimated, not observed:")
+
     with (out / "implicit_imports.csv").open("w") as fh:
         fh.write("# interregional imports the scaling implies, CORE_039 p. 292\n")
         fh.write("sector_code,implicit_imports\n")
@@ -686,6 +722,13 @@ def _regionalise(args) -> int:
         "- `implicit_imports.csv` — the interregional imports the scaling "
         "implies, by product. This is the quantity that makes the method's "
         "trade assumption inspectable rather than implicit.",
+        ("- `regional_table.xlsx` — the region as a table, in the format this "
+         "engine reads back. Run it through `--check`, split a sector of it, "
+         "or point `--national` at it. Its final demand is one column and its "
+         "value added one row, because a location quotient says nothing about "
+         "how either divides."
+         if wrote_table else
+         "- (no `regional_table.xlsx`: openpyxl is not installed)"),
         "",
         f"Scaling touched {int((res.q < 1.0).sum()):,} of "
         f"{res.q.size:,} cells; {int((res.slq >= 1.0).sum())} sectors were "

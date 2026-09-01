@@ -135,6 +135,26 @@ def main_() -> int:
               f"of the national activity — so a later reader knows what was "
               f"assumed without reading the prose")
 
+        # ---- and the region comes back as a table the engine can take
+        from quadrium.io_loader import load_io_table
+        back = load_io_table(d / "regional_table.xlsx")
+        A_back = np.nan_to_num(back.Z / np.where(back.X > 0, back.X, 1.0))
+        check("the region is written as a TABLE, and reads back into the engine",
+              back.n == table.n
+              and float(np.abs(A_back - A).max()) < 1e-12,
+              f"{back.n} sectors, coefficients preserved to "
+              f"{np.abs(A_back - A).max():.1e}. Before v1.85 the command wrote "
+              f"a matrix and stopped: nothing downstream could diagnose the "
+              f"region, split a sector of it, or point --national at it")
+
+        check("and it carries what it is, not just what it contains",
+              len(back.Y_labels) == 1 and "residual" in back.Y_labels[0]
+              and len(back.VA_labels) == 1 and back.lineage,
+              f"one final-demand column ({back.Y_labels[0]!r}) and one "
+              f"value-added row, because a location quotient says nothing "
+              f"about how either divides; and {len(back.lineage)} lines of "
+              f"lineage, so a table read later cannot pass for observed")
+
         # ---- the refusals
         print()
         cases = []

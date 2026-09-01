@@ -31,6 +31,7 @@ from .export import (write_json, write_provenance_csv, write_table_csv,
                      write_xlsx)
 from .models import (AssumptionLedger, CellLabel, IOTable, Scenario,
                      SplitSpec, count_label)
+from . import references
 from .reporting import build_report
 from .scenarios import run_project
 
@@ -255,6 +256,12 @@ class IOProject:
         if self.ledger:
             report += ("\n---\n\n## Assumption ledger\n\n"
                        + self.ledger.to_markdown_table() + "\n")
+        # The document ends HERE, not where build_report returns: the ledger is
+        # appended after it. Annotating earlier put the footnote in the middle.
+        # Done at the boundary and driven by matching, so a reference written
+        # into a refusal message tomorrow is covered without anyone
+        # remembering to add it to a list.
+        report = references.annotate(report)
         (d / "report.md").write_text(report, encoding="utf-8")
         return d
 
