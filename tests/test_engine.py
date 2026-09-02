@@ -3021,3 +3021,242 @@ def test_the_refusals_the_PROXY_FILE_and_the_PROVENANCE_SHEET_make():
                       "it accepted the sheet — a grid that does not match the "
                       "table mislabels cells rather than leaving them "
                       "unlabelled")
+
+
+def test_the_config_refusals_the_SUPPLY_USE_route_makes():
+    """The third job in the workbook, and the one with no cases behind it.
+
+    A configuration workbook does one of three things: `splits` divides a
+    sector, `regionalise` estimates a region, `targets` moves a supply-use pair
+    to a later year. The first two have had cases for weeks. The third holds
+    eleven of `config.py`'s refusals and not one had ever fired, so the whole
+    supply-use route through the user's spreadsheet was unchecked at its edges.
+
+    They fall in two places, and the difference matters to whoever reads a
+    failure:
+
+        `_eurostat_sut_paths`   read off the `project` sheet BEFORE anything is
+                                downloaded -- geo, year, model, method, the
+                                unbalanced policy, the cache folder
+        `_project`              read off the `targets` sheet AFTER the pair is
+                                in memory -- an unknown kind, a value that is
+                                not a number, a kind that is missing
+
+    The first six cost nothing to reach and are checked unconditionally. The
+    last three need a real pair, so they run only when Austria's three files
+    are already cached; that is stated below rather than skipped in silence.
+
+    `project_method` has no default ON PURPOSE — it defaulted to `sut_euro`,
+    which is the worse of the two methods on every test run (OQ-B-16), so a
+    user who said nothing got the loser by silence. The sheet decides now, and
+    the refusal below is what a stranger meets when a declaration and a sheet
+    disagree in the other direction: a method that is not one of the two.
+    """
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.config import ConfigError, load_config
+
+    CACHE = ROOT / "data" / "eurostat"
+    # AT 2022, not AT 2018: the cache holds cp15 and cp16 for 2018 and NOT
+    # cp1610, the use table at basic prices split DOM/IMP -- which is the one
+    # file that makes a transformation possible at all. A pair short of it
+    # would have sent every case below to a download instead of to the refusal
+    # being tested.
+    BASE = [("project_id", "sut"), ("table_kind", "eurostat_sut"),
+            ("eurostat_geo", "AT"), ("eurostat_year", 2022),
+            ("project_to_year", 2023), ("table_path", str(CACHE))]
+    RAS = [("industry_output", "A01", 100.0),
+           ("use_column_totals", "A01", 50.0),
+           ("taxes", "", 10.0), ("imports", "", 20.0)]
+
+    def swap(rows, key, value):
+        return [(key, value) if k == key else (k, v) for k, v in rows]
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        def book(meta, targets, tag):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "project"
+            for kv in meta:
+                ws.append(list(kv))
+            ws = wb.create_sheet("targets")
+            ws.append(["kind", "code", "value"])
+            for r in targets:
+                ws.append(list(r))
+            p = tmp / f"{tag}.xlsx"
+            wb.save(p)
+            return p
+
+        def refuses(name, meta, targets, fragment, **kw):
+            tag = "".join(c if c.isalnum() else "_" for c in name)[:40]
+            try:
+                load_config(book(meta, targets, tag), **kw)
+            except ConfigError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(), str(exc)[:86])
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead of ConfigError: "
+                      f"{str(exc)[:64]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it accepted the workbook")
+
+        # ---- read off the `project` sheet, before any network
+        refuses("a three-letter country code",
+                swap(BASE, "eurostat_geo", "ESP"), RAS,
+                "must be a two-letter country code")
+        refuses("a year that is not a year",
+                swap(BASE, "eurostat_year", "dos mil"), RAS, "not a year")
+        refuses("a projection year that is not a year",
+                swap(BASE, "project_to_year", "pronto"), RAS, "not a year")
+        refuses("a transformation model outside the four in CORE_013",
+                BASE + [("eurostat_model", "Z")], RAS,
+                "must be one of the four in CORE_013")
+        refuses("a projection method that is neither of the two",
+                BASE + [("project_method", "sut_x")], RAS,
+                "must be 'sut_euro' or 'sut_ras'")
+        refuses("an unbalanced policy that is neither of the two",
+                BASE + [("sut_unbalanced", "maybe")], RAS,
+                "must be 'refuse' (the default) or 'cancelling'")
+
+        # NO suffix: a path with one is read as naming a file inside the
+        # cache folder, and its parent is used. This refusal is for a
+        # `table_path` that IS an existing file where a folder has to go --
+        # the case that produced a FileExistsError from mkdir several frames
+        # down when a single-file `eurostat` run shared a path with this one.
+        afile = tmp / "not_a_folder"
+        afile.write_text("{}")
+        refuses("a cache path that names a FILE where three downloads go",
+                BASE + [("table_path", str(afile))], RAS,
+                "which exists and is a file")
+
+        empty = tmp / "empty_cache"
+        empty.mkdir()
+        refuses("--offline with nothing cached",
+                BASE + [("table_path", str(empty))], RAS,
+                "is not cached yet", offline=True)
+
+        # ---- read off the `targets` sheet, which needs a real pair
+        from quadrium.eurostat import DATASETS
+
+        cached = all((CACHE / f"{DATASETS[n]}_AT_2022.json").exists()
+                     for n in ("supply", "use_purchasers", "use_basic"))
+        check("Austria's 2022 supply-use pair is cached, so the `targets` "
+              "refusals can be reached without a network", cached,
+              "the three files are in data/eurostat" if cached else
+              "NOT cached — the three `targets` refusals below are skipped, "
+              "and this is said rather than passed over in silence")
+        if not cached:
+            return
+
+        refuses("a targets row whose kind is not one of the six",
+                BASE, RAS + [("gva_x", "A01", 1.0)], "is not one of")
+        refuses("a targets value that is not a number",
+                BASE, [("industry_output", "A01", "mucho")] + RAS[1:],
+                "is not a number")
+        refuses("a targets sheet missing one of the four kinds a method needs",
+                BASE, RAS[:3], "row(s)")
+
+
+def test_the_regionalise_sheet_refuses_what_it_cannot_read():
+    """Three refusals on the newest sheet, none of which had a case.
+
+    `regionalise` is the sheet added at v1.86 so the guide's second sentence —
+    "No Python: you fill in a spreadsheet and run one command" — was true of
+    every job and not only two of them. It arrived with its refusals written
+    and unreached, which is the state this whole exercise exists to end.
+
+    All three are about a cell the user typed: a path that is not there, a
+    quantity that is not a quantity, a delta that is not a number. None of them
+    needs a network or a fixture beyond the national table already in the tree.
+    """
+    import csv as _csv
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.config import ConfigError, load_config
+
+    national = ROOT / "data" / "ine" / "cne_tio_21.xlsx"
+    check("a national table to point the sheet at", national.exists(),
+          national.name)
+    if not national.exists():
+        return
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        from quadrium.io_loader import load_ine_tio
+        table = load_ine_tio(national, variant="interior")
+
+        def activity(rows, tag):
+            p = tmp / f"{tag}.csv"
+            with p.open("w", newline="") as fh:
+                w = _csv.writer(fh)
+                w.writerow(["sector_code", "regional"])
+                for r in rows:
+                    w.writerow(list(r))
+            return p
+
+        good = activity([(c, f"{x * 0.2:.6f}")
+                         for c, x in zip(table.sector_codes, table.X)], "good")
+
+        def book(reg_rows, tag):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "project"
+            for kv in (("project_id", "reg"),
+                       ("table_path", str(national.resolve())),
+                       ("table_kind", "ine_interior")):
+                ws.append(list(kv))
+            ws = wb.create_sheet("regionalise")
+            ws.append(["key", "value"])
+            for r in reg_rows:
+                ws.append(list(r))
+            p = tmp / f"{tag}.xlsx"
+            wb.save(p)
+            return p
+
+        cfg = load_config(book([("method", "FLQ"), ("delta", 0.25),
+                                ("activity_path", str(good))], "ok"))
+        check("a filled-in `regionalise` sheet loads, so the breakages are the "
+              "only difference",
+              cfg.get("kind") == "regionalise" and cfg.get("method") == "FLQ"
+              and cfg.get("delta") == 0.25 and cfg.get("Q_region") is not None,
+              f"kind {cfg.get('kind')!r}, method {cfg.get('method')!r}, delta "
+              f"{cfg.get('delta')}, national activity from "
+              f"{cfg.get('national_activity_from')!r}")
+
+        cases = [
+            ("an activity_path that is not there",
+             [("method", "SLQ"), ("activity_path", str(tmp / "absent.csv"))],
+             "which does not exist"),
+            ("an activity value that is not a number",
+             [("method", "SLQ"),
+              ("activity_path", str(activity(
+                  [(c, "mucho" if i == 3 else "10.0")
+                   for i, c in enumerate(table.sector_codes)], "nan")))],
+             "not a number"),
+            ("a delta that is not a number",
+             [("method", "FLQ"), ("delta", "un cuarto"),
+              ("activity_path", str(good))],
+             "delta"),
+        ]
+        for i, (name, rows, fragment) in enumerate(cases):
+            try:
+                load_config(book(rows, f"bad{i}"))
+            except ConfigError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(), str(exc)[:86])
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead of ConfigError: "
+                      f"{str(exc)[:64]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it accepted the sheet")

@@ -115,7 +115,7 @@ docs/             the user guide
 outputs/          one finished run, published so it can be read without
                   installing anything
 examples/         four worked pilots
-tests/            56 unit tests
+tests/            58 unit tests
 ```
 
 ## What is not here

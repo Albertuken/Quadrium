@@ -23,12 +23,12 @@ matches it.
 WHAT IT SHOWS
 ---------------
     175 refusal sites of the engine's own types
-    105 reached by something in the suite
-     70 never reached
+    119 reached by something in the suite
+     56 never reached
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
-The private tree reaches 105 and the public one 104, and the difference is not
+The private tree reaches 119 and the public one fewer, and the difference is not
 a regression: the public tree does not publish the IDESCAT workbook, so nothing
 there can reach `load_idescat_mioc`'s refusal about a missing sheet. A tree
 without a fixture cannot exercise the code that reads it. That is why the floor
