@@ -3383,3 +3383,172 @@ def test_the_regionalise_sheet_refuses_what_it_cannot_read():
             else:
                 check(f"the engine refuses {name}, and says which", False,
                       "it accepted the sheet")
+
+
+def test_the_refusals_the_SUPPLY_USE_workbooks_from_two_offices_make():
+    """The ONS's supply-use workbook and the INE's, broken one thing at a time.
+
+    Both are files this project already reads for real — `run_uk_sut_identities`
+    runs on all 27 published years of the first — so the loaders that read them
+    are on the route a stranger meets when they ask for a country nobody has
+    asked for yet. Neither loader's refusals had ever been reached by anything.
+
+    The ONS book is 2.9 MB and 136 sheets, so it is NOT copied whole the way
+    `test_the_refusals_about_an_OFFICE_WORKBOOK` copies the UK and INE
+    analytical tables. One year's three sheets are read out and written into a
+    small workbook of their own, at the same row and column positions, and that
+    is what gets bent. The numbers are still the ONS's; only the book is
+    shorter. The baseline is asserted to load and to carry the same blocks as
+    the real file first, because a baseline nobody checked is not a baseline.
+
+    Three things the engine got right and this test had to be corrected to:
+
+    1. Asking for a year the book does not publish names the **intermediate
+       consumption** sheet, not supply. `load_ons_sut` reads the three sheets in
+       one tuple assignment and Python evaluates it left to right, so
+       `Table 2 - Int Con` is fetched first. The expectation was written for
+       supply and was wrong.
+
+    2. The missing value-added row is provoked by writing
+       `Gross value added at basic prices` — the CORRECT spelling. The ONS
+       prints `Gross valued added`, the loader matches what is printed, and so
+       repairing the source's typo is precisely what stops the load.
+
+    3. The products refusal fires on the SET of codes and is right to, but the
+       evidence it prints is `supply 104, use 104, final demand 104` — three
+       equal numbers offered as proof that three sheets disagree. One renamed
+       code changes no count. The message is left as it stands here because
+       editing it moves the site's key in `data/_refusal_coverage.json` and that
+       is a deliberate act with its own bookkeeping in both trees, not a side
+       effect of a coverage pass. It is worth naming the offending codes.
+    """
+    import shutil
+    import tempfile
+
+    import openpyxl
+    from quadrium.io_loader import (LoaderError, _tod_norm, load_ine_tod,
+                                    load_ons_sut)
+
+    ons = ROOT / "data" / "ons" / "NSO_UK_04_ONS_supply_use_tables_BB25.xlsx"
+    ine = ROOT / "data" / "ine" / "cne_tod_22.xlsx"
+    have = [p for p in (ons, ine) if p.exists()]
+    check("the two supply-use workbooks this mutates are present",
+          len(have) == 2, ", ".join(p.name for p in have))
+    if len(have) != 2:
+        return
+
+    def refuses(name, run, fragment):
+        try:
+            run()
+        except LoaderError as exc:
+            check(f"the engine refuses {name}",
+                  fragment.lower() in str(exc).lower(),
+                  str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+        except Exception as exc:                       # noqa: BLE001
+            check(f"the engine refuses {name}", False,
+                  f"{type(exc).__name__} instead: {str(exc)[:64]}")
+        else:
+            check(f"the engine refuses {name}", False, "it built a table")
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        # ---- the ONS supply-use workbook, 1997-2023 --------------------
+        year = 2023
+        names = [f"Table 1 - Supply {year}", f"Table 2 - Int Con {year}",
+                 f"Table 2 - Final Demand {year}"]
+        book = openpyxl.load_workbook(ons, read_only=True, data_only=True)
+        rows = {n: [list(r) for r in book[n].iter_rows(values_only=True)]
+                for n in names}
+
+        def trimmed(edit=None, name="ons.xlsx"):
+            data = {n: [list(r) for r in rows[n]] for n in names}
+            if edit:
+                edit(data)
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            for n in names:
+                ws = wb.create_sheet(n)
+                for r in data[n]:
+                    ws.append(r)
+            path = tmp / name
+            wb.save(path)
+            return path
+
+        whole = load_ons_sut(ons, year)
+        short = load_ons_sut(trimmed(), year)
+        check("the three sheets on their own load to the same table the whole "
+              "book does",
+              short.product_codes == whole.product_codes
+              and np.array_equal(short.U, whole.U)
+              and np.array_equal(short.gva, whole.gva),
+              f"{short.U.shape[0]} products by {short.U.shape[1]} industries, "
+              f"identical to the 136-sheet original")
+
+        # Against the REAL book: the years it lists are its own 27.
+        refuses("a year the ONS does not publish",
+                lambda: load_ons_sut(ons, 1066),
+                "has no sheet 'Table 2 - Int Con 1066'")
+
+        refuses("an ONS book whose value-added block has had the source's own "
+                "misspelling corrected",
+                lambda: load_ons_sut(trimmed(
+                    lambda d: d[names[1]][113].__setitem__(
+                        1, "Gross value added at basic prices"), "va.xlsx"),
+                    year),
+                "the value-added block is missing")
+
+        refuses("an ONS book whose supply sheet carries a product code the "
+                "other two do not",
+                lambda: load_ons_sut(trimmed(
+                    lambda d: d[names[0]][3].__setitem__(0, "CPA_A01x"),
+                    "cpa.xlsx"), year),
+                "the three sheets do not carry the same products")
+
+        # ---- the INE's supply-use pair --------------------------------
+        # `_tod_axes` reads both axes off the sheet rather than assuming them,
+        # so both of its refusals are about the sheet having stopped announcing
+        # its own extent. The positions are found the way the loader finds
+        # them, never hard-coded: the 2016-2020 workbooks put the supply sheet
+        # one column to the left of the use sheet, and a test with a constant
+        # here would pass on one vintage and lie on the other.
+        R = list(openpyxl.load_workbook(
+            ine, read_only=True, data_only=True)["Tabla1"].iter_rows(
+                values_only=True))
+        first_col = next((j for j, c in enumerate(R[8])
+                          if _tod_norm(c) == "1"), None)
+        first_row = (next((i for i in range(8, 24)
+                           if _tod_norm(R[i][first_col - 1]).startswith("1.")),
+                          None) if first_col else None)
+        check("the INE supply sheet's own axes are where the loader looks",
+              first_col is not None and first_row is not None,
+              f"activity index row 9 starts at column {first_col + 1}, "
+              f"product '1. …' on row {first_row + 1}"
+              if first_col and first_row else "not found")
+        if first_col is None or first_row is None:
+            return
+
+        def bent(edit, name):
+            path = tmp / name
+            shutil.copy(ine, path)
+            wb = openpyxl.load_workbook(path)
+            edit(wb["Tabla1"])
+            wb.save(path)
+            return path
+
+        def blank_index_row(ws):
+            for cell in ws[9]:
+                cell.value = None
+
+        refuses("an INE supply sheet that no longer numbers its activity "
+                "columns",
+                lambda: load_ine_tod(bent(blank_index_row, "tod1.xlsx")),
+                "the supply sheet has no activity index row")
+
+        refuses("an INE product label that has lost the number the INE prints "
+                "in front of it",
+                lambda: load_ine_tod(bent(
+                    lambda ws: setattr(
+                        ws.cell(row=first_row + 1, column=first_col),
+                        "value", "Productos de la agricultura"), "tod2.xlsx")),
+                "has no product labelled '1. …'")
