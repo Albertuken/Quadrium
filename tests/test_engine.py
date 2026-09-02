@@ -2071,6 +2071,87 @@ def test_the_refusals_the_METHODS_make():
 
 
 
+def test_the_refusals_the_SUT_to_IOT_step_makes_of_ITS_CALLER():
+    """The internal contracts of the SUT-to-IOT step, and none had a case.
+
+    These are a different animal from every other group the sweep tracks. They
+    judge neither a file from an office, nor the user's workbook, nor what was
+    asked for in it: they judge the ARGUMENTS one part of this engine hands
+    another. A rectangular supply table where the algebra needs a square one, a
+    hybrid matrix in the wrong shape or holding a fraction where CORE_013 par.
+    12.62, p. 389 defines a 0/1 matrix, a model name that is not one of
+    Figure 12.2's.
+
+    They were the whole of the `caller` class in `data/_refusal_coverage.json`
+    -- six of six unreached -- and the reason is not that they are hard. Every
+    one is a call away from a matrix written by hand, which is what this does.
+    They stayed untested because a caller check looks like it cannot fire, and
+    a check nobody can see fire is a check nobody has read.
+
+    Each case was confirmed to reach the refusal it aims at and not an earlier
+    one: `transform` screens the model name before touching a matrix,
+    `hybrid_transformation_matrix` screens H's shape before its contents, and
+    `almon` screens the supply table's shape before U's columns -- so the case
+    for the second of each pair has to satisfy the first.
+    """
+    from quadrium.transformation import (TransformationError, almon,
+                                         hybrid_matrix_avoiding_negatives,
+                                         hybrid_transformation_matrix,
+                                         transform)
+
+    def refuses(name, fn, fragment):
+        try:
+            fn()
+        except TransformationError as exc:
+            check(f"the engine refuses {name}",
+                  fragment.lower() in str(exc).lower(),
+                  str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+        except Exception as exc:                       # noqa: BLE001
+            check(f"the engine refuses {name}", False,
+                  f"{type(exc).__name__} instead: {str(exc)[:64]}")
+        else:
+            check(f"the engine refuses {name}", False, "it went ahead")
+
+    V_T = np.array([[80.0, 20.0], [10.0, 90.0]])       # square: 2 x 2
+    Ud = np.array([[30.0, 20.0], [15.0, 25.0]])
+    Um = np.zeros((2, 2))
+    Yd = np.array([[50.0], [60.0]])
+    Ym = np.zeros((2, 1))
+    W = np.array([[45.0, 65.0]])
+    g = V_T.sum(axis=0)
+    x = V_T.sum(axis=1)
+    rect = np.array([[80.0, 20.0, 5.0], [10.0, 90.0, 7.0]])   # 2 products, 3 industries
+
+    refuses("a model name that is not one of CORE_013 Figure 12.2's",
+            lambda: transform("Z", V_T, Ud, Um, Yd, Ym, W, g, x),
+            "not one of the four")
+
+    refuses("the hybrid search handed a supply table that is not square",
+            lambda: hybrid_matrix_avoiding_negatives(rect, Ud, Um, W, g, x),
+            "needs a square supply table")
+
+    refuses("an H whose shape is not the supply table's",
+            lambda: hybrid_transformation_matrix(V_T, g, x, np.ones((2, 3))),
+            "same shape as the supply table")
+
+    # H's shape is checked first, so this one has to be the right shape and
+    # wrong only in its contents: a fraction is a different model, not this one.
+    refuses("an H holding a fraction where CORE_013 defines 0 or 1",
+            lambda: hybrid_transformation_matrix(
+                V_T, g, x, np.array([[1.0, 0.5], [0.0, 1.0]])),
+            "must hold only 0 and 1")
+
+    refuses("Almon's procedure handed a supply table that is not square",
+            lambda: almon(Ud, rect),
+            "needs a square supply table")
+
+    # Same ordering: V_T must pass the square check before U's columns are
+    # looked at, so V_T stays 2 x 2 and U is the one carrying three columns.
+    refuses("a use table whose columns are not the supply table's industries",
+            lambda: almon(np.zeros((2, 3)), V_T),
+            "both are indexed by industry")
+
+
 def test_the_refusals_about_what_was_ASKED_FOR():
     """Eleven refusals judge the split itself, and none had a case.
 
@@ -2080,6 +2161,14 @@ def test_the_refusals_about_what_was_ASKED_FOR():
     subsector code that collides with a sector being split. They are a direct
     call away from the synthetic fixture, so there was no reason for them to be
     untested beyond nobody having looked.
+
+    TWO WERE ADDED LATER, AND ONE OF THEM REPLACED A CASE THAT WAS GREEN AND
+    WRONG. `_va_columns` and `_weights` refuse a mis-sized key with the same
+    sentence, and the case aimed at the first named a key the second sees
+    first, so it had been passing on the wrong refusal since it was written --
+    which is exactly what `data/_refusal_coverage.json` said, and what a
+    passing check said otherwise. The other is weights that clear the length
+    check and are still not shares.
     """
     from quadrium.disaggregation import (DisaggregationError, split_sector,
                                          split_sectors)
@@ -2152,10 +2241,42 @@ def test_the_refusals_about_what_was_ASKED_FOR():
             lambda: split_sector(table, "ACC", NEW, LBL, sc, keys,
                                  va_spec({VA_ROW: "absent"})),
             "not among the loaded keys")
+    # THIS CASE USED TO PASS FOR THE WRONG REASON, and the sweep is what showed
+    # it. It aimed at `_va_columns`'s length check and named `key_turnover` --
+    # which is also the split's OUTPUT key, so `_weights` refused it three
+    # calls earlier with a message of the same shape ("key 'key_turnover' has 2
+    # weights for 4 subsectors"), and the fragment matched either one. The
+    # engine was right both times; the case was not reaching what it claimed
+    # to. `_weights` was already covered; `_va_columns` was not, and stayed
+    # unreached in `data/_refusal_coverage.json` while a green check said
+    # otherwise. The block key is left intact and the WRONG length is put on a
+    # key no block names, so nothing sees it before the value-added rows do.
+    short_va = dict(keys)
+    kg = keys["key_gva"]
+    short_va["key_gva"] = AllocationKey(
+        key_id="key_gva", applies_to="value_added", new_sector_codes=NEW[:2],
+        raw_values=[1.0, 1.0], source=kg.source, source_year=kg.source_year,
+        strength=kg.strength)
     refuses("a value-added row key with the wrong number of weights",
-            lambda: split_sector(table, "ACC", NEW, LBL, sc, bad_len,
-                                 va_spec({VA_ROW: "key_turnover"})),
-            "weights for")
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, short_va,
+                                 va_spec({VA_ROW: "key_gva"})),
+            "key 'key_gva' has 2 weights for 4 subsectors")
+
+    # Weights that pass the length check and still are not shares. Reaching
+    # this needs `weights=` passed explicitly: `AllocationKey.__post_init__`
+    # normalises `raw_values` when `weights` is None, so a key built the
+    # ordinary way can never sum to anything but one, and the guard would be
+    # unreachable rather than merely untested.
+    kt = keys["key_turnover"]
+    bad_sum = dict(keys)
+    bad_sum["key_turnover"] = AllocationKey(
+        key_id="key_turnover", applies_to="output", new_sector_codes=NEW,
+        raw_values=[1.0, 1.0, 1.0, 1.0], source=kt.source,
+        source_year=kt.source_year, strength=kt.strength,
+        weights=[0.2, 0.2, 0.2, 0.2])
+    refuses("weights that are the right length and do not sum to one",
+            lambda: split_sector(table, "ACC", NEW, LBL, sc, bad_sum, spec),
+            "weights sum to 0.8, not 1")
 
     # Two splits in one pass, the second introducing a code the first is still
     # taking apart. Aimed at a second guard that used to sit below this one --
@@ -2665,6 +2786,7 @@ def main() -> int:
                test_the_config_refusals_a_stranger_meets_next,
                test_the_refusals_about_what_was_ASKED_FOR,
                test_the_refusals_the_METHODS_make,
+               test_the_refusals_the_SUT_to_IOT_step_makes_of_ITS_CALLER,
                test_the_catalan_table_loads_and_says_whose_residue_it_carries,
                test_the_refusals_about_an_OFFICE_WORKBOOK,
                test_the_refusals_about_a_FILE_FROM_AN_OFFICE,
@@ -2681,6 +2803,7 @@ def main() -> int:
                test_corroboration_reports_a_spread_and_refuses_to_rank,
                test_project_folder_is_reproducible,
                test_export_json_handles_numpy_and_enums,
+               test_label_mask_beats_the_naive_comparison,
                test_input_profiles_preserve_supplier_totals,
                test_input_profiles_differentiate_multipliers,
                test_input_profiles_reject_nonsense,

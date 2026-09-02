@@ -23,8 +23,8 @@ matches it.
 WHAT IT SHOWS
 ---------------
     175 refusal sites of the engine's own types
-    119 reached by something in the suite
-     56 never reached
+    127 reached by something in the suite
+     48 never reached
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
@@ -41,14 +41,20 @@ until it passed.
     scenarios.py              1       1
     sut_ras.py                2       2
     gras.py                   3       4
-    balancing.py              2       4
-    config.py                15      41
-    disaggregation.py         8      20
-    eurostat.py              10      27
-    io_loader.py             12      39
-    transformation.py         2      11
-    sut_euro.py               1       4
+    balancing.py              4       4
+    config.py                44      49
+    disaggregation.py        18      19
+    eurostat.py              16      29
+    io_loader.py             26      46
+    transformation.py        10      11
+    sut_euro.py               2       4
     acquire.py                1       6
+
+The table above is the tree's, re-read after each pass. It had been left at the
+first sweep's numbers while the record moved on underneath it, so nine of its
+eleven rows were stale -- `config.py` said 15 of 41 against an actual 44 of 49.
+A count that is not re-taken is a claim, and this file exists to stop claims
+being made about coverage.
 
 A CORRECTION, BECAUSE THIS FILE GOT IT WRONG FIRST
 ----------------------------------------------------
@@ -125,6 +131,38 @@ interior cells pinned under a method that takes only margins, a
 secondary-production type that is not one of the three, the hybrid model without
 the matrix that defines it, a projection whose pieces are not one pair. Those
 are a hand-written matrix away, so `data` went from 9 unreached to 4.
+
+**A sixth pass emptied the `caller` class, and it was the cheapest group on the
+list all along.** Six refusals guard the SUT-to-IOT step against the rest of
+this engine rather than against a user: a supply table that is not square where
+the algebra inverts it, an `H` in the wrong shape or holding a fraction where
+CORE_013 par. 12.62, p. 389 defines 0 or 1, a model name that is not one of
+Figure 12.2's. Every one is a 2x2 matrix and one call away, and all six were
+unreached — because a caller check reads as something that cannot fire, and a
+check nobody watches fire is a check nobody has read. `transformation.py` went
+2 of 11 to 10 of 11, and `caller` from 6 unreached to 0.
+
+**And the same pass found a green check that was passing on the wrong
+refusal.** `_va_columns` and `_weights` both refuse a mis-sized allocation key
+with the same sentence — *"key 'k' has 2 weights for 4 subsectors"*. The case
+in `test_the_refusals_about_what_was_ASKED_FOR` aimed at the first and named
+`key_turnover`, which is also the split's OUTPUT key, so `_weights` refused it
+three calls earlier and the fragment matched either one. It had never reached
+what it claimed to, and nothing but this record could have said so: the check
+printed `ok`, and `_va_columns` sat on the unreached list the whole time. The
+wrong length now goes on a key no block names. That is the second reason to
+keep this sweep — the first is finding refusals with no case, and the second is
+finding cases that land somewhere else.
+
+**One `scenario` refusal resisted, and the two obvious routes are recorded so
+the next pass does not re-walk them.** `disaggregation.py::neutralise_profile`
+refuses when a profile cannot be scaled to level-neutrality within `max_iter`.
+A profile that converges slowly (`{"HOT": {"AGR": 0.0}, …}`) fails at
+`max_iter=50` and **converges at 228** under the default 2000 — reaching the
+line by shrinking the budget would exercise "the iterations ran out", which is
+not what the message says. A profile concentrated on the one supplier with a
+negative column entry converges in **one**. It needs a profile that genuinely
+cannot be made neutral, and that has not been built yet.
 
 **Two passes found two defects, both of the same shape: a malformed input
 reaching the user as a traceback instead of a refusal.**

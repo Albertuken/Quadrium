@@ -58,12 +58,14 @@
   "disaggregation.py::_column_shares::suppliers were given a zero intensity for every subs",
   "disaggregation.py::_row",
   "disaggregation.py::_va_columns::. A residual row cannot take less than none of its p",
+  "disaggregation.py::_va_columns::key has weights for subsectors",
   "disaggregation.py::_va_columns::va_row_keys names key for row , which is not among t",
   "disaggregation.py::_weights::key has weights for subsectors",
   "disaggregation.py::_weights::scenario has no allocation key for block and no key ",
   "disaggregation.py::_weights::scenario names key for block , which is not among th",
   "disaggregation.py::split_sector::new_labels and new_codes differ in length",
   "disaggregation.py::split_sector::splitting into fewer than 2 subsectors is not a disa",
+  "disaggregation.py::split_sector::weights sum to , not 1",
   "disaggregation.py::split_sectors::See B_method_cards/M-049. Note what was NOT checked:",
   "disaggregation.py::split_sectors::is listed twice; a sector can only be split once per",
   "disaggregation.py::split_sectors::new subsector code(s) already exist in the table",
@@ -118,9 +120,15 @@
   "sut_ras.py::_import_factors",
   "sut_ras.py::_product_factors",
   "transformation.py::_diag_inv",
+  "transformation.py::almon::Almon's procedure needs a square supply table and th",
+  "transformation.py::almon::U has columns and V_T has ; both are indexed by indu",
   "transformation.py::choose_model",
+  "transformation.py::hybrid_matrix_avoiding_negatives::the hybrid search needs a square supply table and th",
+  "transformation.py::hybrid_transformation_matrix::H is and the supply table is . CORE_013 par. 12.62, ",
+  "transformation.py::hybrid_transformation_matrix::H must hold only 0 and 1: par. 12.62, p. 389 calls i",
   "transformation.py::transform::model ( ) needs a SQUARE supply table and this one i",
-  "transformation.py::transform::model E needs the hybrid technology matrix H (CORE_0"
+  "transformation.py::transform::model E needs the hybrid technology matrix H (CORE_0",
+  "transformation.py::transform::model is not one of the four in CORE_013 Figure 12.2"
  ],
  "by_type": {
   "AcquisitionRefused": {
@@ -351,5 +359,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 118
+ "floor": 126
 }
