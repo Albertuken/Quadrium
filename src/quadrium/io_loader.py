@@ -1548,6 +1548,9 @@ def _read_lineage(meta: dict) -> list[str]:
 # Allocation keys (MVP_0.1 §4.2)
 # ---------------------------------------------------------------------------
 
+_STRENGTH_ORDER = ("strong", "medium", "weak")   # weakest last
+
+
 def load_allocation_keys(path: Path | str, applies_to: str = "output",
                          sheet: str | None = None) -> AllocationKey:
     """Load one proxy table: new_sector_code, new_sector_label, value, source,
@@ -1590,16 +1593,33 @@ def load_allocation_keys(path: Path | str, applies_to: str = "output",
             f"({sorted(set(srcs))}, {sorted(set(yrs))}). One AllocationKey "
             f"records one source. Split the file, or reconcile it.")
 
-    weakest = min(strs, key=lambda s: ["strong", "medium", "weak"].index(s)
-                  if s in ("strong", "medium", "weak") else 0)
+    if not codes:
+        raise LoaderError(
+            f"{Path(path).name}: no row carries a new_sector_code, so the "
+            f"file declares no split. An empty key is not a key: it would "
+            f"reach the constructor as a proxy with nothing in it.")
+
+    # VALIDATE BEFORE RANKING, and the order matters.
+    # This ran the other way round until 2026-09-02, and the refusal below
+    # fired only when the invalid value happened to sort first. `weakest` was
+    # seeded by a min() whose key mapped an unknown string to 0 -- the rank of
+    # "strong" -- so an invalid row could become `weakest`, and then ranking a
+    # valid row against it raised a bare ValueError('bogus' is not in list)
+    # from the standard library: no file, no column, no list of what is
+    # allowed. `strong + bogus` refused correctly; `medium + bogus` and
+    # `weak + bogus` crashed. A refusal that depends on the order of the rows
+    # is one the user meets by luck.
+    for s in strs:
+        if s not in _STRENGTH_ORDER:
+            raise LoaderError(
+                f"{Path(path).name}: strength {s!r} is not "
+                f"strong/medium/weak. The three are the whole vocabulary; a "
+                f"fourth word would have to be given a rank, and its rank is "
+                f"what decides how the split is labelled downstream.")
+
     # The key is only as strong as its weakest row: a split resting on one weak
     # proxy is a weak split, whatever the other rows say.
-    for s in strs:
-        if s not in ("strong", "medium", "weak"):
-            raise LoaderError(f"strength {s!r} is not strong/medium/weak")
-        if ["strong", "medium", "weak"].index(s) > \
-           ["strong", "medium", "weak"].index(weakest):
-            weakest = s
+    weakest = max(strs, key=_STRENGTH_ORDER.index)
 
     return AllocationKey(
         key_id=Path(path).stem, applies_to=applies_to,

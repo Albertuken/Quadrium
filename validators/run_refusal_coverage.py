@@ -22,9 +22,20 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    166 refusal sites of the engine's own types
-     94 reached by something in the suite
-     72 never reached
+    175 refusal sites of the engine's own types
+    105 reached by something in the suite
+     70 never reached
+
+THE TWO TREES DO NOT REACH THE SAME NUMBER
+--------------------------------------------
+The private tree reaches 105 and the public one 104, and the difference is not
+a regression: the public tree does not publish the IDESCAT workbook, so nothing
+there can reach `load_idescat_mioc`'s refusal about a missing sheet. A tree
+without a fixture cannot exercise the code that reads it. That is why the floor
+below lives in each tree's own record instead of being a constant in this
+file -- a shared number would be wrong in one of them by construction, and the
+tree that failed would be the one nobody could fix except by editing a check
+until it passed.
 
     module              reached   total
     scenarios.py              1       1
@@ -326,9 +337,29 @@ def main() -> int:
     for m in sorted(tot, key=lambda x: (got[x] / tot[x], -tot[x])):
         print(f"    {m:<24}{got[m]:>9}{tot[m]:>7}")
 
-    check("a large share of the engine's refusals has never been reached",
-          len(fired) < len(static) * 0.6,
-          f"{len(fired)} of {len(static)}")
+    # A RATCHET, and it used to be a tripwire.
+    # Until 2026-09-02 this asserted `len(fired) < len(static) * 0.6` -- that
+    # the coverage was still BAD -- so that the fact could not go quiet while
+    # it was. At 105 of 175 it crossed exactly that line and the check failed
+    # for the one reason nobody should be punished for: the number got better.
+    # A tripwire that fires on improvement has finished its job. What replaces
+    # it is the thing worth defending from here on -- that coverage never goes
+    # back DOWN. Raise the floor when it rises; never lower it to make a run
+    # pass. A refusal that had a case and lost it is a promise withdrawn.
+    # The floor lives in the RECORD, not here, because the two trees do not
+    # reach the same number: the public tree ships 96 validators against the
+    # private tree's 113, so it reached 88 where the private tree reached 105.
+    # A constant in this file would be wrong in one of them by construction,
+    # and the tree that failed would be the one nobody could fix without
+    # editing a check to make it pass -- which is how a ratchet becomes a
+    # decoration. Each record carries its own high-water mark and the sweep
+    # raises it.
+    floor = int(rec.get("floor", 0))
+    check("the refusals that have been reached stay reached",
+          len(fired) >= floor,
+          f"{len(fired)} of {len(static)} — the floor is {floor}. "
+          f"{len(static) - len(fired)} still have no case, and each is listed "
+          f"below by what it judges, so none of them is a silence")
 
     # WHAT EACH ONE JUDGES, read rather than guessed. The first version of this
     # file asserted that most unreached sites were caller checks and no table

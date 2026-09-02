@@ -2843,3 +2843,181 @@ def test_a_profile_that_cannot_fit_is_turned_away_by_name():
     assert _re.search(r"headroom is -\d+\.\d+ %", profiled)
     # And it still says what to do about it.
     assert "Soften the input profiles" in profiled
+
+
+def test_the_refusals_the_PROXY_FILE_and_the_PROVENANCE_SHEET_make():
+    """Two files the user writes by hand, and a refusal that fired by luck.
+
+    A split needs a proxy file, and a table that has been through one carries a
+    `Provenance` sheet. Both are the user's own spreadsheets, both are read
+    back by `io_loader`, and neither had a case behind any of its refusals.
+
+    WHAT THIS FOUND
+    -----------------
+    `load_allocation_keys` refused an unknown `strength` **only when the
+    invalid value happened to sort first.** It ranked the rows before
+    validating them, using a min() whose key mapped an unknown word to 0 — the
+    rank of "strong" — so an invalid row could become `weakest`, and ranking a
+    valid row against it then raised a bare `ValueError('bogus' is not in
+    list)` out of the standard library: no file name, no column, no list of
+    what is allowed.
+
+        strong + bogus  ->  LoaderError, correctly
+        medium + bogus  ->  ValueError, uncaught
+        weak   + bogus  ->  ValueError, uncaught
+
+    The refusal was written, reviewed and never reached, and the record said so
+    for five days. This is the argument for the whole exercise: the message
+    existed and two thirds of the users who earned it would never have seen it.
+
+    The fix validates before it ranks. The case below runs all three orders,
+    because one order passing is exactly what hid this.
+    """
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.io_loader import LoaderError, load_allocation_keys
+
+    def keyfile(tmp, rows, tag, head=None):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(head or ["new_sector_code", "new_sector_label", "value",
+                           "source", "source_year", "strength"])
+        for r in rows:
+            ws.append(list(r))
+        p = tmp / f"{tag}.xlsx"
+        wb.save(p)
+        return p
+
+    OK = ("A", "a", 60.0, "SBS 2021", 2021, "strong")
+
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+
+        k = load_allocation_keys(keyfile(tmp, [OK, ("B", "b", 40.0, "SBS 2021",
+                                                    2021, "weak")], "valid"))
+        check("a valid proxy file loads, and takes the strength of its WEAKEST "
+              "row", k.strength.value == "weak" and len(k.new_sector_codes) == 2,
+              f"strong + weak -> {k.strength.value}; a split resting on one "
+              f"weak proxy is a weak split, whatever the other rows say")
+
+        k2 = load_allocation_keys(keyfile(tmp, [("A", "a", 60.0, "SBS 2021",
+                                                 2021, "weak"), OK], "order"))
+        check("and the answer does not depend on the order of the rows",
+              k2.strength.value == "weak",
+              f"weak + strong -> {k2.strength.value}, the same. The defect "
+              f"this test was written for was exactly an answer that changed "
+              f"with the order")
+
+        cases = [
+            # All three orders. Before 2026-09-02 the first refused and the
+            # other two crashed with a ValueError from list.index().
+            ("an unknown strength after a STRONG row",
+             [OK, ("B", "b", 40.0, "SBS 2021", 2021, "bogus")],
+             "is not strong/medium/weak"),
+            ("an unknown strength after a MEDIUM row",
+             [("A", "a", 60.0, "SBS 2021", 2021, "medium"),
+              ("B", "b", 40.0, "SBS 2021", 2021, "bogus")],
+             "is not strong/medium/weak"),
+            ("an unknown strength after a WEAK row",
+             [("A", "a", 60.0, "SBS 2021", 2021, "weak"),
+              ("B", "b", 40.0, "SBS 2021", 2021, "bogus")],
+             "is not strong/medium/weak"),
+            ("rows that disagree on the source",
+             [OK, ("B", "b", 40.0, "a different survey", 2021, "strong")],
+             "rows disagree on source or source_year"),
+            ("rows that disagree on the year",
+             [OK, ("B", "b", 40.0, "SBS 2021", 2019, "strong")],
+             "rows disagree on source or source_year"),
+            ("a file with no rows at all",
+             [], "declares no split"),
+        ]
+        for i, (name, rows, fragment) in enumerate(cases):
+            try:
+                load_allocation_keys(keyfile(tmp, rows, f"bad{i}"))
+            except LoaderError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(), str(exc)[:86])
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead of LoaderError: "
+                      f"{str(exc)[:64]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it accepted the file")
+
+        # A column the loader cannot find at all.
+        try:
+            load_allocation_keys(keyfile(
+                tmp, [OK], "nohead",
+                head=["code", "label", "value", "source", "year", "vigour"]))
+        except LoaderError as exc:
+            check("and a proxy file with no `strength` column names the column "
+                  "it wanted", "strength" in str(exc), str(exc)[:86])
+        except Exception as exc:                       # noqa: BLE001
+            check("and a proxy file with no `strength` column names the column "
+                  "it wanted", False, f"{type(exc).__name__}: {str(exc)[:60]}")
+
+        # ---- the Provenance sheet, read back off a table
+        META = [("country", "ES"), ("year", 2022), ("unit", "MIO_EUR"),
+                ("classification", "CPA_2.1"), ("source", "test")]
+        TABLE = [["", "A", "B", "HH"],
+                 ["A", 10.0, 5.0, 35.0],
+                 ["B", 4.0, 6.0, 40.0],
+                 ["VA", 36.0, 39.0, None],
+                 ["Output", 50.0, 50.0, None]]
+
+        def table_with_provenance(rows, tag):
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            ws = wb.create_sheet("table")
+            for row in TABLE:
+                ws.append(row)
+            ws = wb.create_sheet("metadata")
+            for kv in META:
+                ws.append(list(kv))
+            ws = wb.create_sheet("Provenance")
+            for row in rows:
+                ws.append(row)
+            p = tmp / f"{tag}.xlsx"
+            wb.save(p)
+            return p
+
+        from quadrium.io_loader import load_io_table
+
+        good = table_with_provenance([["", "A", "B"],
+                                      ["A", "OBSERVED", "ESTIMATED"],
+                                      ["B", "BALANCED", "OBSERVED"]], "prov_ok")
+        t = load_io_table(good)
+        counts = t.provenance_counts()
+        check("a Provenance sheet is read back, and the estimates stay "
+              "estimates", counts.get("ESTIMATED") == 1
+              and counts.get("BALANCED") == 1 and counts.get("OBSERVED") == 2,
+              f"{counts} — this is what stops a second split promoting the "
+              f"first split's estimates to observations")
+
+        prov_cases = [
+            ("a Provenance sheet with a row missing",
+             [["", "A", "B"], ["A", "OBSERVED", "OBSERVED"]],
+             "data row"),
+            ("a Provenance cell that reads something else",
+             [["", "A", "B"], ["A", "OBSERVED", "PROBABLY"],
+              ["B", "OBSERVED", "OBSERVED"]],
+             "expected one of"),
+        ]
+        for i, (name, rows, fragment) in enumerate(prov_cases):
+            try:
+                load_io_table(table_with_provenance(rows, f"prov{i}"))
+            except LoaderError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(), str(exc)[:86])
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead of LoaderError: "
+                      f"{str(exc)[:64]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it accepted the sheet — a grid that does not match the "
+                      "table mislabels cells rather than leaving them "
+                      "unlabelled")
