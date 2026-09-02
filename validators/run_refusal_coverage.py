@@ -23,12 +23,12 @@ matches it.
 WHAT IT SHOWS
 ---------------
     175 refusal sites of the engine's own types
-    143 reached by something in the suite
-     32 never reached
+    147 reached by something in the suite
+     28 never reached
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
-The private tree reaches 143 and the public one 141, and the difference is not
+The private tree reaches 147 and the public one 145, and the difference is not
 a regression: the public tree does not publish the IDESCAT workbook, so nothing
 there can reach either refusal that reads it -- `load_idescat_mioc`'s about a
 missing sheet, and `_mioc_year`'s about a title row with no year in it. A tree
@@ -46,7 +46,7 @@ until it passed.
     config.py                44      49
     disaggregation.py        18      19
     eurostat.py              23      29
-    io_loader.py             35      46
+    io_loader.py             39      46
     transformation.py        10      11
     sut_euro.py               2       4
     acquire.py                1       6
@@ -236,6 +236,37 @@ label — and not by its index, because the index is 95 on the 110-product
 vintage and something else on the 65-product one. A fixed index would have
 renamed nothing on the other file and the table would have loaded, which is
 exactly how the `Tabla1` case failed two passes ago.
+
+**A ninth pass took the four refusals that guard THE ONS SHEET'S OWN
+SIGNPOSTS.** `_uk_layout` finds every block on the `IOT` sheet from the totals
+the sheet prints -- `_T` at the end of the sector rows and columns, `TU` at the
+end of the final-demand block -- because the ONS changed the size and both axes
+between editions and a fixed offset describes one edition only. Three refusals
+defend that navigation and a fourth contrasts the located blocks against those
+same printed totals, so a block found one line out of true fails as the loader
+having looked in the wrong place rather than three identities later as an
+accusation against the ONS's arithmetic. All four were unreached, which is what
+a loader that reads the real file every day looks like from here.
+
+Same technique as the fourth and eighth passes, one cell changed on the real
+file: `TU` blanked, so the final-demand block has no end; one column code
+overwritten, so the sheet no longer carries one classification on both axes; the
+imports line renamed, so a primary input the model needs is not there; and one
+cell of the printed `_T` row moved by 1,000 against a derived bound of 1e-6 --
+that row sits one past the last sector and is not part of `Z`, so moving it
+breaks the equality between what the sheet publishes and what its own column
+adds up to, and nothing else. All four fired the message they were aimed at on
+the first run, as the eighth pass's four did: the second pass running where no
+earlier refusal got in front. `io_loader.py` went 35 of 46 to 39 of 46, `source`
+from 22 unreached to 18, and the tree from 143 to 147.
+
+The positions are read off `_uk_layout` RUN ON THE FILE rather than written
+down. This fixture is the 104 x 104 edition and the 2016-2022 ones are 105 x
+105, so a hardcoded index would deform a different cell on the next vintage --
+the `Tabla1` lesson from the other side. And each of the eight primary-input
+labels was confirmed to appear exactly once below the sector block before one
+was renamed, because `_uk_layout` keeps the FIRST occurrence of each and a
+duplicate would have shadowed the change instead of removing it.
 
 Five times in these passes the engine gave an EARLIER and more specific refusal
 than the case was aiming at — a split's rows must agree on their key before the

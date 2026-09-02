@@ -2163,6 +2163,113 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
                         variant(mioc, blank_years, "mioc.xlsx")),
                     "could not read the reference year from the title rows")
 
+        # ------------------------------------------------------------------
+        # THE ONS SHEET'S OWN SIGNPOSTS, and the four refusals that guard
+        # them. `_uk_layout` finds every block on the `IOT` sheet from the
+        # totals the sheet prints -- `_T` at the end of the sector rows and
+        # columns, `TU` at the end of the final-demand block -- and never from
+        # a fixed offset, because the ONS changed the size and both axes
+        # between editions. Three refusals defend that navigation and a fourth
+        # contrasts the result against those same printed totals, so that a
+        # block found one line out of true fails as the loader having looked
+        # in the wrong place rather than three identities later as an
+        # accusation against the ONS's arithmetic.
+        #
+        # All four were on the unreached list: a loader that reads the real
+        # file every day never takes any of these branches, which is exactly
+        # the shape of promise this sweep exists to find.
+        #
+        # The positions come from `_uk_layout` RUN ON THE REAL FILE and are
+        # not written down here. This fixture is the 104 x 104 edition and the
+        # 2016-2022 ones are 105 x 105, so a hardcoded index would deform a
+        # different cell on the next vintage -- the `Tabla1` lesson from the
+        # other side. openpyxl counts from 1 and `_open_workbook` from 0, so
+        # every row and column below is an index plus one.
+        # ------------------------------------------------------------------
+        from quadrium.io_loader import (_UK_ROWS, _open_workbook, _uk_layout,
+                                        _uk_norm)
+
+        sheets_uk = _open_workbook(uk)
+        check("the UK workbook carries the 'IOT' sheet these deform",
+              "IOT" in sheets_uk, ", ".join(list(sheets_uk)[:6]) + "…")
+        if "IOT" in sheets_uk:
+            R_uk = sheets_uk["IOT"]
+            L_uk = _uk_layout(R_uk, uk.name)
+            check("and its signposts are where the loader navigates by them",
+                  _uk_norm(R_uk[3][L_uk["tu_col"]]) == "tu"
+                  and _uk_norm(R_uk[L_uk["end_row"]][0]) == "_t",
+                  f"`TU` in column {L_uk['tu_col'] + 1}, the `_T` row at row "
+                  f"{L_uk['end_row'] + 1}, "
+                  f"{L_uk['end_col'] - L_uk['first_col']} sectors")
+
+            def uk_cell(row, col, value, name):
+                """One cell of the IOT sheet changed, and nothing else."""
+                return variant(
+                    uk,
+                    lambda wb: setattr(wb["IOT"].cell(row=row, column=col),
+                                       "value", value),
+                    name)
+
+            # Blank `TU` and the final-demand block has no end. This is the
+            # FIRST thing `_uk_layout` asks, so nothing can get in front of it.
+            refuses("a UK sheet with no `TU` to find the end of final demand by",
+                    lambda: load_uk_analytical_iot(
+                        uk_cell(4, L_uk["tu_col"] + 1, None, "uk_notu.xlsx")),
+                    "does not print the totals this loader navigates by")
+
+            # `_T` and `TU` still print, so the check above passes and this one
+            # is reached: one column header renamed and the sheet no longer
+            # carries one classification on both axes. The message names the
+            # position, which is the first column of the sector block.
+            refuses("a UK sheet whose column codes are not its row codes",
+                    lambda: load_uk_analytical_iot(uk_cell(
+                        4, L_uk["first_col"] + 1, "ZZZ", "uk_axes.xlsx")),
+                    "the 'IOT' sheet's row codes are not its column codes")
+
+            # The primary-input row is found the way the LOADER finds it --
+            # by its normalised label in column B below the sector block, the
+            # sheet's non-breaking spaces included -- and every one of the
+            # eight labels was confirmed to appear exactly once, so renaming
+            # the first occurrence removes it rather than shadowing it.
+            # `_UK_ROWS` is walked in insertion order and `imports` is first,
+            # so that is the label the message must name.
+            below = {}
+            for i in range(L_uk["end_row"], len(R_uk)):
+                key = _uk_norm(R_uk[i][1] if len(R_uk[i]) > 1 else "")
+                if key and key not in below:
+                    below[key] = i
+            imports_row = below.get(_UK_ROWS["imports"])
+            check("the imports row is where the loader looks it up by label",
+                  imports_row is not None,
+                  f"{_UK_ROWS['imports']!r} on row "
+                  f"{imports_row + 1 if imports_row is not None else '—'}")
+            if imports_row is not None:
+                refuses("a UK sheet with its imports line renamed, so a "
+                        "primary input the model needs is not there",
+                        lambda: load_uk_analytical_iot(uk_cell(
+                            imports_row + 1, 2,
+                            "Imports, under a name this loader does not know",
+                            "uk_noimports.xlsx")),
+                        "has no primary-input row labelled")
+
+            # And the contrast against the printed totals. The `_T` ROW is not
+            # part of `Z` -- it sits at `end_row`, one past the last sector --
+            # so moving one of its cells leaves the interior untouched and
+            # breaks only the equality between what the sheet publishes as the
+            # column total and what its own column adds up to. The data is at
+            # full float precision, so `assertable_tolerance` derives a bound
+            # of 1e-6 and 1,000 is unmistakably past it. This is the first of
+            # the loader's three contrasts, so it fires before the `TU` column
+            # and the GVA row are looked at, and well before `_assert_balances`.
+            printed = R_uk[L_uk["end_row"]][L_uk["first_col"]]
+            refuses("a UK sheet whose printed `_T` row is not the sum of its "
+                    "own sector columns",
+                    lambda: load_uk_analytical_iot(uk_cell(
+                        L_uk["end_row"] + 1, L_uk["first_col"] + 1,
+                        float(printed) + 1000.0, "uk_total.xlsx")),
+                    "the printed `_T` row is the sum of the sector columns")
+
+
 
 
 def test_the_catalan_table_loads_and_says_whose_residue_it_carries():

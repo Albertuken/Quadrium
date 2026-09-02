@@ -109,6 +109,9 @@
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w",
   "io_loader.py::_tod_need",
+  "io_loader.py::_uk_layout::: the 'IOT' sheet does not print the totals this loa",
+  "io_loader.py::_uk_layout::: the 'IOT' sheet has no primary-input row labelled ",
+  "io_loader.py::_uk_layout::: the 'IOT' sheet's row codes are not its column cod",
   "io_loader.py::col",
   "io_loader.py::load_allocation_keys::: no row carries a new_sector_code, so the file decl",
   "io_loader.py::load_allocation_keys::: rows disagree on source or source_year ( , ). One ",
@@ -127,6 +130,7 @@
   "io_loader.py::load_io_table::the sector code(s) appear below the sector block. Se",
   "io_loader.py::load_ons_sut::: the three sheets do not carry the same products \u2014 ",
   "io_loader.py::load_ons_sut::: the value-added block is missing . The labels are ",
+  "io_loader.py::load_uk_analytical_iot::: \u2014 and it is not, by against a bound of . The block",
   "io_loader.py::load_uk_analytical_iot::has no 'IOT' sheet; found: ,",
   "io_loader.py::sheet",
   "scenarios.py::check_feasible",
@@ -374,5 +378,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 141
+ "floor": 145
 }
