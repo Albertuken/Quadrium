@@ -71,6 +71,7 @@
   "disaggregation.py::split_sectors::new subsector code(s) already exist in the table",
   "disaggregation.py::split_sectors::no splits requested",
   "eurostat.py::__init__",
+  "eurostat.py::_read_cube::is not JSON: . A saved Eurostat download is a JSON-s",
   "eurostat.py::_read_cube::is not a JSON-stat file: it is not even text ( ). A ",
   "eurostat.py::load_iot::balances as published but the IOTable it would produ",
   "eurostat.py::load_iot::does not balance as published and will not be loaded",
@@ -83,8 +84,14 @@
   "eurostat.py::load_iot::variant 'imports' is an input table, not a symmetric",
   "eurostat.py::load_iot::variant must be 'domestic' or 'total', not",
   "eurostat.py::load_sut::+ do not balance and will not be loaded. failed ( ):",
+  "eurostat.py::load_sut::. The two files must agree on which final-demand com",
   "eurostat.py::load_sut::These are figures the SOURCE publishes in two files ",
+  "eurostat.py::load_sut::has no ` ` dimension; this expects naio_10_cp1610, u",
+  "eurostat.py::load_sut::no product carries values in both files for",
   "eurostat.py::load_sut::the basic-price use file is and the pair is . Two ec",
+  "eurostat.py::load_sut::the file has no ` ` dimension; expected naio_10_cp15",
+  "eurostat.py::load_sut::the populated industries' output sums to against a p",
+  "eurostat.py::load_sut::the populated products sum to against a published to",
   "eurostat.py::load_sut::the supply file is and the use file is . Two economi",
   "gras.py::_assert_margins_consistent",
   "gras.py::_assert_sign_feasible",
@@ -364,5 +371,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 131
+ "floor": 138
 }

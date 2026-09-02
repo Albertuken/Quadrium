@@ -1785,6 +1785,154 @@ def test_the_refusals_about_a_FILE_FROM_AN_OFFICE():
                 check("the engine refuses a pair whose halves are different "
                       "countries", False, "it built the pair")
 
+        # ---- THE SUPPLY-USE ROUTE ------------------------------------------
+        #
+        # The same kind of file, judged behind a different door: `load_sut`
+        # reads THREE datasets at once, and the office can deform any of them.
+        # None of these refusals had ever been read aloud, although the engine
+        # downloads all three files itself the moment someone asks for a
+        # country by name.
+        #
+        # Austria 2022 is the base because it is the triple this project
+        # already loads clean, 65 x 65. Every case changes ONE thing in ONE
+        # file.
+        SUP = DATA / "naio_10_cp15_AT_2022.json"
+        USE = DATA / "naio_10_cp16_AT_2022.json"
+        BAS = DATA / "naio_10_cp1610_AT_2022.json"
+
+        def deformed(src, edit, name):
+            """`mutated`, for a base other than the symmetric table."""
+            d = json.loads(src.read_text())
+            edit(d)
+            path = tmp / name
+            path.write_text(json.dumps(d))
+            return path
+
+        def scale(factor, **where):
+            """Multiply the ONE published aggregate at `where`.
+
+            Blanking a product -- which is what catches the symmetric table
+            above -- does NOT work on this source, and the first version of
+            this block found that out by building a table it expected to be
+            refused. Austria publishes both CPA levels, `CPA_B` beside
+            `CPA_B05`...`B09`, so `_finest_tiling` covers the hole with the
+            parent code and the file still adds up.
+
+            Moving the published TOTAL is a deformation no tiling can absorb,
+            and it is the likelier accident anyway: an office revises an
+            aggregate and does not re-send the parts.
+            """
+            def edit(d):
+                ids, size = d["id"], d["size"]
+                stride = [1] * len(size)
+                for i in range(len(size) - 2, -1, -1):
+                    stride[i] = stride[i + 1] * size[i + 1]
+                pos = 0
+                for i, k in enumerate(ids):
+                    idx = d["dimension"][k]["category"]["index"]
+                    v = where.get(k, next(iter(idx)))   # the rest are 1 long
+                    pos += idx[v] * stride[i]
+                d["value"][str(pos)] *= factor
+            return edit
+
+        triple = [p for p in (SUP, USE, BAS) if p.exists()]
+        check("the Austrian supply-use triple these mutations deform is "
+              "present", len(triple) == 3,
+              ", ".join(p.name for p in triple))
+
+        if len(triple) == 3:
+            pair = load_sut(SUP, USE, BAS)
+            check("the Austrian triple is real and loads, so each mutation "
+                  "below is the only difference",
+                  (pair.n_products, pair.n_activities) == (65, 65),
+                  f"AT 2022, {pair.n_products} x {pair.n_activities}")
+
+            not_json = tmp / "una_hoja_de_calculo.csv"
+            not_json.write_text("producto,valor\nCPA_A01,1234\n")
+
+            use_doc = json.loads(USE.read_text())
+            all_products = [c for c
+                            in use_doc["dimension"]["prd_ava"]["category"]["index"]
+                            if c.startswith("CPA_")]
+
+            sut_cases = [
+                # `table_kind` and `table_path` sit next to each other in the
+                # template, so pointing the Eurostat route at a spreadsheet is
+                # one wrong line. It used to answer with a codec error raised
+                # inside `codecs.py`.
+                ("a saved response that is text but is not JSON",
+                 lambda: load_iot(not_json),
+                 "is not json"),
+
+                ("a supply file with no product axis at all",
+                 lambda: load_sut(deformed(SUP, drop_dim("prd_amo"),
+                                           "sup_sin_producto.json"), USE),
+                 "no `prd_amo` dimension"),
+
+                # Aimed at the `cp1610` dimension refusal and met it: dropping
+                # the INDUSTRY axis gets there, because `_Cube.at` ignores a
+                # keyword for a dimension the cube does not carry, so the
+                # final-demand test upstream still finds its cells populated.
+                ("a basic-price use table with no industry axis",
+                 lambda: load_sut(SUP, USE,
+                                  deformed(BAS, drop_dim("ind_use"),
+                                           "bas_sin_industria.json")),
+                 "this expects naio_10_cp1610"),
+
+                # Aimed at that SAME refusal by dropping `stk_flow`, and met an
+                # earlier and more specific one instead. The engine is right
+                # and the expectation was wrong: the final-demand columns are
+                # chosen by reading the basic-price cube's DOM flow, and a cube
+                # with no `stk_flow` cannot answer, so the two files stop
+                # agreeing on which components they publish before anyone asks
+                # what dimensions the file has. Both were unreached, so the
+                # case is kept pointed where it actually lands.
+                ("a basic-price use table with no `stk_flow` axis, which "
+                 "leaves its final-demand columns unreadable",
+                 lambda: load_sut(SUP, USE,
+                                  deformed(BAS, drop_dim("stk_flow"),
+                                           "bas_sin_flujo.json")),
+                 "must agree on which final-demand"),
+
+                ("a supply file whose published total supply no longer "
+                 "matches the products under it",
+                 lambda: load_sut(
+                     deformed(SUP, scale(1.5, ind_impv="TS_BP",
+                                         prd_amo="CPA_TOTAL"),
+                              "sup_total_movido.json"), USE),
+                 "populated products sum to"),
+
+                ("a use file whose published total output no longer matches "
+                 "the industries under it",
+                 lambda: load_sut(
+                     SUP, deformed(USE, scale(1.5, ind_use="TOTAL",
+                                              prd_ava="P1"),
+                                   "use_total_movido.json")),
+                 "populated industries' output sums to"),
+
+                # Every product erased on one side. The halves are still the
+                # same country and the same year -- they simply have nothing
+                # in common, which is the one thing a PAIR has to have.
+                ("a use file carrying no product values at all",
+                 lambda: load_sut(SUP, deformed(USE,
+                                                blank(all_products, "prd_ava"),
+                                                "use_en_blanco.json")),
+                 "no product carries values in both files"),
+            ]
+            for name, run, fragment in sut_cases:
+                try:
+                    run()
+                except EurostatError as exc:
+                    check(f"the engine refuses {name}",
+                          fragment.lower() in str(exc).lower(),
+                          str(exc)[:86] + ("…" if len(str(exc)) > 86 else ""))
+                except Exception as exc:               # noqa: BLE001
+                    check(f"the engine refuses {name}", False,
+                          f"{type(exc).__name__} instead: {str(exc)[:66]}")
+                else:
+                    check(f"the engine refuses {name}", False,
+                          "it built a table")
+
 
 
 def test_the_refusals_about_an_OFFICE_WORKBOOK():

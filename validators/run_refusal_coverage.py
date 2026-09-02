@@ -23,12 +23,12 @@ matches it.
 WHAT IT SHOWS
 ---------------
     175 refusal sites of the engine's own types
-    132 reached by something in the suite
-     43 never reached
+    139 reached by something in the suite
+     36 never reached
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
-The private tree reaches 132 and the public one 131, and the difference is not
+The private tree reaches 139 and the public one 138, and the difference is not
 a regression: the public tree does not publish the IDESCAT workbook, so nothing
 there can reach `load_idescat_mioc`'s refusal about a missing sheet. A tree
 without a fixture cannot exercise the code that reads it. That is why the floor
@@ -44,7 +44,7 @@ until it passed.
     balancing.py              4       4
     config.py                44      49
     disaggregation.py        18      19
-    eurostat.py              16      29
+    eurostat.py              23      29
     io_loader.py             31      46
     transformation.py        10      11
     sut_euro.py               2       4
@@ -189,14 +189,39 @@ passed the policy that gets past it; and the product codes are read from
 quietly changed nothing and the table loaded. The row is now found by the
 pattern the loader itself matches.
 
-Four times in these passes the engine gave an EARLIER and more specific refusal
+**A seventh pass took the SUPPLY-USE route through Eurostat**, which is the
+same class of file as the fourth pass -- what an office sent -- reached through
+a different door: `load_sut` reads three datasets at once, and every one of its
+own refusals was unreached, although the engine downloads all three itself the
+moment someone asks for a country by name. Austria 2022 is the base because it
+is the triple this project already loads clean, 65 x 65, and each case changes
+one thing in one file: a supply table with no product axis, a basic-price use
+table with no industry axis, a published total moved away from the parts under
+it, a use file with every product erased. Seven refusals, and `eurostat.py`
+went 16 of 29 to 23 of 29.
+
+**That pass also found the fourth-pass technique does not transfer, and found
+it by building a table it expected to be refused.** The symmetric table is
+caught by BLANKING one product, so the codes that remain fall short of the
+published total. Doing the same to Austria's supply table refuses nothing:
+Austria publishes both CPA levels -- `CPA_B` beside `CPA_B05`...`B09` -- so
+`_finest_tiling` covers the hole with the parent code and the file still adds
+up. What no tiling can absorb is moving the published TOTAL, which is also the
+likelier accident: an office revises an aggregate and does not re-send the
+parts. A mutation that is right for one source is not right for the next, and
+only running it says which.
+
+Five times in these passes the engine gave an EARLIER and more specific refusal
 than the case was aiming at — a split's rows must agree on their key before the
 key is looked up; a new code that already exists is caught before the collision
 with the sector being split; an absent `keys` sheet reads as empty, so the
-split's own check fires first; and an INE workbook without its index sheet fails
-on the reference year before the missing-table check. Each time the test was
-rewritten, not the engine, and each earlier refusal was itself on the unreached
-list.
+split's own check fires first; an INE workbook without its index sheet fails
+on the reference year before the missing-table check; and a basic-price use
+table stripped of its `stk_flow` axis stops agreeing with the use table on
+which final-demand components they publish before anyone asks what dimensions
+the file carries, because those columns are chosen by reading that cube's `DOM`
+flow. Each time the test was rewritten, not the engine, and each earlier
+refusal was itself on the unreached list.
 
 *The record used to be keyed by `file:line`, and that was wrong.* Inserting the
 Catalan loader shifted every line below it and silently re-labelled **38 sites**
