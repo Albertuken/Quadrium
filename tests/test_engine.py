@@ -1942,7 +1942,9 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
     and the loaders refuse a great many departures from it — no `IOT` sheet, row
     codes that are not the column codes, no primary-input row, a reference year
     that cannot be read, product labels that are not numbered, duplicate codes,
-    supply and use sheets that disagree on their size.
+    supply and use sheets that disagree on their size, a final-demand column
+    map that is neither of the two known ones, a renamed line on the supply-use
+    sheets.
 
     The project holds the real files, so the baseline is not invented: one is
     copied and one thing is changed, the same way `configs/ejemplo.xlsx` is
@@ -1952,7 +1954,8 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
     import tempfile
 
     import openpyxl
-    from quadrium.io_loader import (LoaderError, load_ine_tio,
+    from quadrium.io_loader import (LoaderError, load_idescat_mioc,
+                                    load_ine_tio, load_ine_tod,
                                     load_uk_analytical_iot)
 
     uk = ROOT / "UK_IOAT_2023_domestic_ixi.xlsx"
@@ -2068,6 +2071,97 @@ def test_the_refusals_about_an_OFFICE_WORKBOOK():
                         wb["Tabla2"].cell(row=row0, column=col).value),
                     "ine4.xlsx"), **ok_policy),
                 "duplicate INE product codes")
+
+        # ------------------------------------------------------------------
+        # Four refusals about the reference year and the column maps. Each one
+        # had a message written for it and nothing had ever read one out; the
+        # deformation is always ONE thing changed on the real file.
+        # ------------------------------------------------------------------
+
+        # The year is read from the workbook's own banner and never from the
+        # filename (`OQ-D-01`, and this project's own fixture is named 2022 and
+        # is for 2023). A workbook that arrives without the banner therefore
+        # has to stop rather than guess, and removing the `Menu` sheet is that
+        # workbook.
+        refuses("a UK workbook with no Menu sheet to read the year from",
+                lambda: load_uk_analytical_iot(
+                    variant(uk, drop_sheet("Menu"), "uk_nomenu.xlsx")),
+                "could not read the reference year from the Menu sheet")
+
+        # `_ine_columns` knows two final-demand layouts and decides which one
+        # it is holding from two fixed header cells, 76 and 77 of row 8. This
+        # fixture is the split-exports shape, so 77 carries the European Union
+        # export column; overwriting it leaves a workbook that is neither
+        # shape, which is the third layout the loader says needs its own map.
+        def header_cell(path, sheet, row, col):
+            book = openpyxl.load_workbook(path, read_only=True,
+                                          data_only=True)
+            r = list(book[sheet].iter_rows(values_only=True))[row - 1]
+            return str(r[col - 1] or "").strip() if col - 1 < len(r) else ""
+
+        ine_hdr = header_cell(ine, "Tabla1", 8, 77)
+        check("the INE workbook is the split-exports layout this deforms",
+              ine_hdr.lower().startswith("exportaciones"), ine_hdr)
+
+        refuses("an INE workbook whose final-demand columns are a third "
+                "layout, mapped nowhere",
+                lambda: load_ine_tio(variant(
+                    ine,
+                    lambda wb: setattr(wb["Tabla1"].cell(row=8, column=77),
+                                       "value",
+                                       "Columna que este cargador no conoce"),
+                    "ine5.xlsx")),
+                "match neither layout this loader knows")
+
+        # The supply-use loader finds every position by the label the INE
+        # prints, so a renamed line stops the load instead of shifting the
+        # block underneath it. The column is found here THE WAY THE LOADER
+        # FINDS IT — by its normalised label — because its index differs
+        # between the 65-product vintage and the 110-product one, and a fixed
+        # index would quietly rename nothing on the other.
+        from quadrium.io_loader import _tod_norm
+        tod = ROOT / "data" / "ine" / "cne_tod_22.xlsx"
+        check("the INE supply-use workbook this mutates is present",
+              tod.exists(), tod.name)
+        if tod.exists():
+            book = openpyxl.load_workbook(tod, read_only=True, data_only=True)
+            hdr = list(book["Tabla2"].iter_rows(values_only=True))[7]
+            fd_col = next((j + 1 for j, v in enumerate(hdr)
+                           if _tod_norm(v) == "total demanda final"), None)
+            check("the use sheet's final-demand total is where the loader "
+                  "looks it up by label",
+                  fd_col is not None,
+                  f"row 8, column {fd_col} of 'Tabla2'")
+            if fd_col is not None:
+                refuses("an INE supply-use workbook with its final-demand "
+                        "total column renamed",
+                        lambda: load_ine_tod(variant(
+                            tod,
+                            lambda wb: setattr(
+                                wb["Tabla2"].cell(row=8, column=fd_col),
+                                "value", "Suma de la demanda"),
+                            "tod.xlsx")),
+                        "no column labelled 'total demanda final'")
+
+        # IDESCAT's own year, the same rule and its own refusal. This file is
+        # NOT published in the public tree, so the case is guarded rather than
+        # required: a tree without a fixture cannot exercise the code that
+        # reads it, which is why the coverage floor lives in each tree's own
+        # record instead of in `run_refusal_coverage.py`.
+        mioc = ROOT / "data" / "idescat" / "mioc2021ts64.xlsx"
+        if mioc.exists():
+            def blank_years(wb):
+                for row in wb["ts total"].iter_rows(min_row=1, max_row=6):
+                    for cell in row:
+                        if cell.value is not None and _re.search(
+                                r"\b(19|20)\d{2}\b", str(cell.value)):
+                            cell.value = None
+
+            refuses("a Catalan workbook with no year anywhere in its title "
+                    "rows",
+                    lambda: load_idescat_mioc(
+                        variant(mioc, blank_years, "mioc.xlsx")),
+                    "could not read the reference year from the title rows")
 
 
 

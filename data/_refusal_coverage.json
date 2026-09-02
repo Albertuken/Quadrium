@@ -100,12 +100,15 @@
   "io_loader.py::_assert_ine_layout",
   "io_loader.py::_ine_codes::duplicate INE product codes: ,",
   "io_loader.py::_ine_codes::row is not a numbered product label:",
+  "io_loader.py::_ine_columns",
   "io_loader.py::_infer_ine_year",
+  "io_loader.py::_infer_year",
   "io_loader.py::_open_workbook",
   "io_loader.py::_read_provenance::Provenance cell ( , ) reads ; expected one of . ,",
   "io_loader.py::_read_provenance::the Provenance sheet has data row(s) for sectors. A ",
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w",
+  "io_loader.py::_tod_need",
   "io_loader.py::col",
   "io_loader.py::load_allocation_keys::: no row carries a new_sector_code, so the file decl",
   "io_loader.py::load_allocation_keys::: rows disagree on source or source_year ( , ). One ",
@@ -371,5 +374,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 138
+ "floor": 141
 }

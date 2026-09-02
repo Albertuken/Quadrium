@@ -23,14 +23,15 @@ matches it.
 WHAT IT SHOWS
 ---------------
     175 refusal sites of the engine's own types
-    139 reached by something in the suite
-     36 never reached
+    143 reached by something in the suite
+     32 never reached
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
-The private tree reaches 139 and the public one 138, and the difference is not
+The private tree reaches 143 and the public one 141, and the difference is not
 a regression: the public tree does not publish the IDESCAT workbook, so nothing
-there can reach `load_idescat_mioc`'s refusal about a missing sheet. A tree
+there can reach either refusal that reads it -- `load_idescat_mioc`'s about a
+missing sheet, and `_mioc_year`'s about a title row with no year in it. A tree
 without a fixture cannot exercise the code that reads it. That is why the floor
 below lives in each tree's own record instead of being a constant in this
 file -- a shared number would be wrong in one of them by construction, and the
@@ -45,7 +46,7 @@ until it passed.
     config.py                44      49
     disaggregation.py        18      19
     eurostat.py              23      29
-    io_loader.py             31      46
+    io_loader.py             35      46
     transformation.py        10      11
     sut_euro.py               2       4
     acquire.py                1       6
@@ -210,6 +211,31 @@ up. What no tiling can absorb is moving the published TOTAL, which is also the
 likelier accident: an office revises an aggregate and does not re-send the
 parts. A mutation that is right for one source is not right for the next, and
 only running it says which.
+
+**An eighth pass took four in `io_loader.py` that decide WHERE THINGS ARE on
+the sheet** — the reference year, and the column maps. Same technique as the
+fourth pass and the same four workbooks the project already holds, one thing
+changed on each: the ONS book without its `Menu` sheet, so there is no banner
+to read the year off; the INE's symmetric table with one final-demand header
+overwritten, so its columns are a third layout mapped nowhere; the INE's
+supply-use pair with `Total demanda final` renamed on the use sheet, so a
+position the loader looks up by label is not there; and IDESCAT's table with
+every four-digit number cleared from its title rows. All four fired the message
+they were aimed at on the first run — no earlier refusal got in front of them,
+which is the first pass here where that happened. `io_loader.py` went 31 of 46
+to 35 of 46, and `source` from 26 unreached to 22.
+
+The Catalan case is guarded on the file being present rather than required,
+which is what made the two trees differ by two instead of one. That is the
+mechanism the section above describes, seen from the other side: a case can only
+be written where the fixture is, and the floor has to live in each tree's own
+record for both of them to be checkable.
+
+The supply-use column is found the way the LOADER finds it — by its normalised
+label — and not by its index, because the index is 95 on the 110-product
+vintage and something else on the 65-product one. A fixed index would have
+renamed nothing on the other file and the table would have loaded, which is
+exactly how the `Tabla1` case failed two passes ago.
 
 Five times in these passes the engine gave an EARLIER and more specific refusal
 than the case was aiming at — a split's rows must agree on their key before the
