@@ -4060,3 +4060,376 @@ def test_the_refusals_the_EUROSTAT_CONNECTOR_makes():
               f"{t.n} products. A total table's uses are output PLUS imports, "
               f"so Z.sum(1) + Y.sum(1) == X cannot hold without them; the "
               f"domestic table never needed them")
+
+
+def test_the_refusals_the_ACQUISITION_module_makes():
+    """The worst-covered module in the engine: 1 of 6 refusals ever reached.
+
+    `acquire.py` is how this project fetches a document from a statistical
+    office, and its refusals are the ones that decide what the engine is
+    ALLOWED to bring in. That made them the least-tested and the most worth
+    testing: an acquisition guard nobody has watched fire is a policy nobody
+    has confirmed exists.
+
+    Five had no case. Each is checked here by handing the network layer the
+    situation rather than waiting to meet it:
+
+        robots.txt says no          — twice: `acquire` and `find_documents`
+        the response is too big     — the 64 MB cap, patched down so the test
+                                      does not have to produce 64 MB
+        the response is not a doc   — `image/png` where a PDF was expected
+        any other HTTP error        — 500, which is NOT access control
+
+    WHY THE HTTP SPLIT MATTERS
+    ----------------------------
+    `_open` sorts HTTP failures into two kinds and they mean opposite things.
+    401, 402, 403 and 407 raise `AccessRefused` and the engine stops for a
+    human, because CLAUDE.md's standing authorisation covers technical
+    friction around content already confirmed open and NOT getting past a
+    paywall or a login — and nothing in the code can tell those apart. Every
+    other code is an ordinary failure and raises `AcquisitionRefused`. The
+    case below checks a 500 lands on the ordinary side, so the day someone
+    widens that tuple, the meaning of stopping does not quietly widen with it.
+
+    The robots.txt refusal is a POLICY, not a protocol rule: a statistics
+    portal is public and this is a single request, but an engine fetching on
+    its own account reads the sign on the door. Nothing had ever shown it
+    doing so.
+    """
+    import tempfile
+    import urllib.error
+    from unittest.mock import patch
+
+    from quadrium import acquire as A
+    from quadrium.acquire import AccessRefused, AcquisitionRefused
+
+    URL = "https://www.ine.es/algo.pdf"          # an allowlisted host, so the
+    PORTAL = "https://www.ine.es/portal.htm"     # allowlist is not what fires
+
+    class Resp:
+        """What `_open` returns: headers, a body, and a final URL."""
+
+        def __init__(self, body=b"%PDF-1.4", ctype="application/pdf",
+                     url=URL):
+            self.body, self._url = body, url
+            self.headers = {"Content-Type": ctype}
+
+        def geturl(self):
+            return self._url
+
+        def read(self, n=None):
+            return self.body[:n] if n else self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    # `headers` must answer .get() and .get_content_charset()
+    class H(dict):
+        def get_content_charset(self):
+            return "utf-8"
+
+    def resp(body=b"%PDF-1.4", ctype="application/pdf"):
+        r = Resp(body, ctype)
+        r.headers = H({"Content-Type": ctype})
+        return r
+
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "doc.pdf"
+
+        # ---- the sign on the door, on both doors
+        with patch.object(A, "_robots_allows", lambda url: False):
+            for name, run in (("acquire", lambda: A.acquire(URL, dest)),
+                              ("find_documents",
+                               lambda: A.find_documents(PORTAL, ["metodolog"]))):
+                try:
+                    run()
+                except AcquisitionRefused as exc:
+                    check(f"{name} refuses what robots.txt disallows",
+                          "robots.txt" in str(exc), str(exc)[:88])
+                except Exception as exc:                # noqa: BLE001
+                    check(f"{name} refuses what robots.txt disallows", False,
+                          f"{type(exc).__name__}: {str(exc)[:60]}")
+                else:
+                    check(f"{name} refuses what robots.txt disallows", False,
+                          "it fetched anyway")
+
+        # ---- everything below gets past robots and fails on the response
+        with patch.object(A, "_robots_allows", lambda url: True):
+            with patch.object(A, "_open", lambda *a, **k:
+                              resp(b"x" * 40, "image/png")):
+                try:
+                    A.acquire(URL, dest)
+                except AcquisitionRefused as exc:
+                    check("a response that is not a document type is refused",
+                          "not a document type" in str(exc), str(exc)[:88])
+                except Exception as exc:                # noqa: BLE001
+                    check("a response that is not a document type is refused",
+                          False, f"{type(exc).__name__}: {str(exc)[:60]}")
+                else:
+                    check("a response that is not a document type is refused",
+                          False, "it saved an image as a document")
+
+            # The cap is 64 MB. Patch it down rather than produce 64 MB: the
+            # refusal is about the comparison, not about the number.
+            with patch.object(A, "MAX_BYTES", 16), \
+                 patch.object(A, "_open", lambda *a, **k: resp(b"y" * 64)):
+                try:
+                    A.acquire(URL, dest)
+                except AcquisitionRefused as exc:
+                    check("a response over the byte cap is refused",
+                          "larger than the" in str(exc)
+                          and "16-byte cap" in str(exc), str(exc)[:88])
+                except Exception as exc:                # noqa: BLE001
+                    check("a response over the byte cap is refused", False,
+                          f"{type(exc).__name__}: {str(exc)[:60]}")
+                else:
+                    check("a response over the byte cap is refused", False,
+                          "it saved it")
+
+            check("and neither refusal left a file behind", not dest.exists(),
+                  "a document refused for its type or its size must not be on "
+                  "disk: the register would cite a file the engine declined")
+
+        # ---- the HTTP split, which is the one with two meanings
+        def http(code):
+            def boom(req, timeout=None):
+                raise urllib.error.HTTPError(URL, code, "no", {}, None)
+            return boom
+
+        with patch("urllib.request.urlopen", http(500)):
+            try:
+                A._open(URL)
+            except AccessRefused as exc:                # noqa: BLE001
+                check("an ordinary HTTP failure is NOT treated as access "
+                      "control", False,
+                      f"500 raised AccessRefused: {str(exc)[:60]}")
+            except AcquisitionRefused as exc:
+                check("an ordinary HTTP failure is NOT treated as access "
+                      "control", "answered HTTP 500" in str(exc),
+                      f"{str(exc)[:60]} — AcquisitionRefused, not "
+                      f"AccessRefused. The two mean opposite things and only "
+                      f"one of them stops for a human")
+            else:
+                check("an ordinary HTTP failure is NOT treated as access "
+                      "control", False, "it returned a response")
+
+        # ---- and the page that is not behind HTTP at all
+        with patch.object(A, "_robots_allows", lambda url: True), \
+             patch.object(A, "_open", lambda *a, **k: resp(
+                 b"<html><body>Please sign in to read this article.</body></html>",
+                 "text/html")):
+            try:
+                A.acquire(URL, dest)
+            except AccessRefused as exc:
+                check("a login page served as HTML is refused, not saved "
+                      "under the document's name",
+                      "paywall or login page" in str(exc)
+                      and "sign in to read" in str(exc).lower(), str(exc)[:88])
+            except Exception as exc:                    # noqa: BLE001
+                check("a login page served as HTML is refused, not saved "
+                      "under the document's name", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a login page served as HTML is refused, not saved "
+                      "under the document's name", False,
+                      "it saved the login page")
+        check("and it is not on disk, because a login page under a document's "
+              "name would be cited", not dest.exists(),
+              "this refusal and the 401/403 one are the two the coverage "
+              "counter could not see at all until 2026-09-03: AccessRefused "
+              "subclasses AcquisitionRefused, so the sweep caught their "
+              "raises at run time but its static pass matched neither name")
+
+        with patch("urllib.request.urlopen", http(403)):
+            try:
+                A._open(URL)
+            except AccessRefused as exc:
+                check("and 403 still is, and says why the engine stops there",
+                      "access control" in str(exc) and "CLAUDE.md" in str(exc),
+                      "the standing authorisation covers technical friction "
+                      "around content already confirmed open, not getting "
+                      "past a login — and nothing in the code can tell those "
+                      "apart, so a human decides")
+            except Exception as exc:                    # noqa: BLE001
+                check("and 403 still is, and says why the engine stops there",
+                      False, f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("and 403 still is, and says why the engine stops there",
+                      False, "it returned a response")
+
+
+def test_three_refusals_left_over_from_three_different_routes():
+    """The last loose ones: a projection target, a download, and an iteration.
+
+    They have nothing in common except that nobody had reached them, which is
+    why they were still here after the groups were cleared. Each belongs to a
+    different part of the engine and each is checked on its own terms.
+
+    1. `config.vector` — a `targets` sheet naming an industry the supply-use
+       pair does not have. The sheet is the user's, the codes are the
+       publisher's, and a typo in one is the most ordinary way this fails.
+
+    2. `config._load_eurostat` — the download failed, and the message has to
+       say **nothing was written** and name the cache path. A half-written
+       file would be read as a cache hit by the next run, so "nothing was
+       written" is a promise, not a pleasantry.
+
+    3. `disaggregation.neutralise_profile` — the rescaling did not converge
+       inside the iterations allowed. Reached by lowering the ceiling, which
+       is the caller's own parameter and exactly the documented failure: a
+       profile is meant to change composition and not level, and returning an
+       unconverged one would move subsector size while claiming to describe
+       only its shape.
+    """
+    import tempfile
+    from unittest.mock import patch
+
+    import numpy as np
+    import openpyxl
+
+    from quadrium.config import ConfigError, load_config
+    from quadrium.disaggregation import DisaggregationError, neutralise_profile
+    from quadrium.eurostat import EurostatError
+
+    CACHE = ROOT / "data" / "eurostat"
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        # ---- 1. a targets code the pair does not have
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "project"
+        for kv in (("project_id", "p"), ("table_kind", "eurostat_sut"),
+                   ("eurostat_geo", "AT"), ("eurostat_year", 2022),
+                   ("project_to_year", 2023), ("table_path", str(CACHE))):
+            ws.append(list(kv))
+        ws = wb.create_sheet("targets")
+        ws.append(["kind", "code", "value"])
+        for row in (("industry_output", "NO_SUCH_INDUSTRY", 100.0),
+                    ("use_column_totals", "NO_SUCH_INDUSTRY", 50.0),
+                    ("taxes", "", 10.0), ("imports", "", 20.0)):
+            ws.append(list(row))
+        bad_codes = tmp / "badcodes.xlsx"
+        wb.save(bad_codes)
+
+        from quadrium.eurostat import DATASETS
+        cached = all((CACHE / f"{DATASETS[n]}_AT_2022.json").exists()
+                     for n in ("supply", "use_purchasers", "use_basic"))
+        check("Austria's 2022 pair is cached, so the targets refusal is "
+              "reachable without a network", cached,
+              "the three files are in data/eurostat" if cached else
+              "NOT cached — this case is skipped and said so")
+        if cached:
+            try:
+                load_config(bad_codes)
+            except ConfigError as exc:
+                check("a targets sheet naming an industry the pair does not "
+                      "have is refused, and both lists are printed",
+                      "do not match this pair" in str(exc)
+                      and "NO_SUCH_INDUSTRY" in str(exc), str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check("a targets sheet naming an industry the pair does not "
+                      "have is refused, and both lists are printed", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a targets sheet naming an industry the pair does not "
+                      "have is refused, and both lists are printed", False,
+                      "it projected onto codes that are not there")
+
+        # ---- 2. the download failed, and nothing was written
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "project"
+        for kv in (("project_id", "p"), ("table_kind", "eurostat"),
+                   ("eurostat_geo", "ES"), ("eurostat_year", 1998),
+                   ("table_path", str(tmp / "cache"))):
+            ws.append(list(kv))
+        # The workbook must declare a JOB, or it is refused for having none
+        # before the download is ever attempted. A `regionalise` sheet is the
+        # cheapest one: the table load fails first, so the activity file is
+        # never read and need not match anything.
+        act = tmp / "activity.csv"
+        act.write_text("sector_code,regional\nA,1.0\n")
+        ws = wb.create_sheet("regionalise")
+        ws.append(["key", "value"])
+        ws.append(["method", "SLQ"])
+        ws.append(["activity_path", str(act)])
+        failing = tmp / "failing.xlsx"
+        wb.save(failing)
+
+        def boom(*a, **k):
+            raise EurostatError("naio_10_cp1700 returned no values for "
+                                "geo=ES, time=1998.")
+
+        # `config` imports `fetch` inside the function, so the name to patch
+        # is the one in `quadrium.eurostat`, not a module attribute of config.
+        with patch("quadrium.eurostat.fetch", boom):
+            try:
+                load_config(failing)
+            except ConfigError as exc:
+                check("a failed Eurostat download says nothing was written, "
+                      "and where it would have gone",
+                      "Nothing was written" in str(exc)
+                      and "cache path was" in str(exc), str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check("a failed Eurostat download says nothing was written, "
+                      "and where it would have gone", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a failed Eurostat download says nothing was written, "
+                      "and where it would have gone", False, "it loaded")
+
+        leftovers = list((tmp / "cache").glob("*")) if (tmp / "cache").exists() \
+            else []
+        check("and the promise holds: the cache folder has no half-file in it",
+              not leftovers,
+              "a partial download left behind would be read as a cache hit by "
+              "the next run, which is the failure the message rules out")
+
+        # ---- 3. a profile that will not go level-neutral in the iterations given
+        from quadrium.models import CellLabel, IOTable
+
+        n = 3
+        Z = np.array([[4.0, 3.0, 2.0], [2.0, 5.0, 3.0], [1.0, 2.0, 6.0]])
+        Y = np.array([[11.0], [10.0], [11.0]])
+        X = Z.sum(axis=1) + Y.sum(axis=1)
+        VA = (X - Z.sum(axis=0)).reshape(1, n)
+        t = IOTable(table_id="t", country="XX", year=2021, unit="",
+                    classification="", sector_codes=["A", "B", "C"],
+                    sector_labels=["a", "b", "c"], Z=Z, Y=Y, Y_labels=["FD"],
+                    VA=VA, VA_labels=["VA"], X=X, source="fixture")
+
+        w = np.array([0.6, 0.4])
+        profiles = {"A1": {"B": 9.0}, "A2": {"B": 0.05}}
+        try:
+            neutralise_profile(t, "A", ["A1", "A2"], w, profiles, max_iter=1)
+        except DisaggregationError as exc:
+            check("a profile that will not go level-neutral in the iterations "
+                  "allowed is refused",
+                  "level-neutral" in str(exc) and "still off by" in str(exc),
+                  str(exc)[:88])
+        except Exception as exc:                       # noqa: BLE001
+            check("a profile that will not go level-neutral in the iterations "
+                  "allowed is refused", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("a profile that will not go level-neutral in the iterations "
+                  "allowed is refused", False,
+                  "it returned a profile that moves subsector size while "
+                  "claiming to describe only composition")
+
+        ok = neutralise_profile(t, "A", ["A1", "A2"], w, profiles,
+                                max_iter=2000)
+        check("and the SAME profile converges when given the room, so the "
+              "refusal is about the ceiling and not about a profile that "
+              "could never work",
+              ok["shift_after"] < 1e-9 < ok["shift_before"]
+              and ok["iterations"] < 2000,
+              f"the level shift goes from {ok['shift_before']:.4f} to "
+              f"{ok['shift_after']:.1e} in {ok['iterations']} iterations — "
+              f"which is the distinction the message has to earn, and the "
+              f"reason max_iter is the caller's to set")

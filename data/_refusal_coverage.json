@@ -1,9 +1,16 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
  "taken": "2026-09-03",
- "n_sites": 175,
+ "n_sites": 177,
  "fired": [
+  "acquire.py::_open::answered HTTP .",
+  "acquire.py::_open::answered HTTP . That is access control, and this eng",
+  "acquire.py::acquire::is disallowed for automated clients by robots.txt.",
+  "acquire.py::acquire::is larger than the -byte cap. Fetch it deliberately ",
+  "acquire.py::acquire::looks like a paywall or login page \u2014 it says . Refus",
+  "acquire.py::acquire::served ` `, which is not a document type this engine",
   "acquire.py::check_allowed",
+  "acquire.py::find_documents",
   "balancing.py::balance::",
   "balancing.py::balance::locked cells were requested with GRAS. GRAS as speci",
   "balancing.py::ras",
@@ -25,6 +32,7 @@
   "config.py::_load_declared_table::table_unbalanced= applies only to table_kind 'ine_in",
   "config.py::_load_declared_table::the table could not be loaded:",
   "config.py::_load_eurostat::--offline was given and is not cached yet. Either dr",
+  "config.py::_load_eurostat::the Eurostat download failed: Nothing was written. T",
   "config.py::_load_eurostat_sut::--offline was given and is not cached yet. A supply-",
   "config.py::_need",
   "config.py::_project::Write the rows for what you have. There is no defaul",
@@ -52,6 +60,7 @@
   "config.py::read_activity::and the table do not describe the same sectors. in t",
   "config.py::read_activity::has a value that is not a number:",
   "config.py::read_activity::must start with a header row reading `sector_code,re",
+  "config.py::vector",
   "disaggregation.py::_column_shares::input intensity for from is ; a relative intensity c",
   "disaggregation.py::_column_shares::input_profiles for names supplier , which is not a s",
   "disaggregation.py::_column_shares::input_profiles names subsector , which is not among",
@@ -63,6 +72,7 @@
   "disaggregation.py::_weights::key has weights for subsectors",
   "disaggregation.py::_weights::scenario has no allocation key for block and no key ",
   "disaggregation.py::_weights::scenario names key for block , which is not among th",
+  "disaggregation.py::neutralise_profile",
   "disaggregation.py::split_sector::new_labels and new_codes differ in length",
   "disaggregation.py::split_sector::splitting into fewer than 2 subsectors is not a disa",
   "disaggregation.py::split_sector::weights sum to , not 1",
@@ -206,9 +216,11 @@
   }
  },
  "classified": {
-  "acquire.py::_open": "source",
+  "acquire.py::_open::answered HTTP .": "source",
+  "acquire.py::_open::answered HTTP . That is access control, and this eng": "source",
   "acquire.py::acquire::is disallowed for automated clients by robots.txt.": "source",
   "acquire.py::acquire::is larger than the -byte cap. Fetch it deliberately ": "source",
+  "acquire.py::acquire::looks like a paywall or login page \u2014 it says . Refus": "source",
   "acquire.py::acquire::served ` `, which is not a document type this engine": "source",
   "acquire.py::check_allowed": "source",
   "acquire.py::find_documents": "source",
@@ -384,5 +396,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 151
+ "floor": 161
 }

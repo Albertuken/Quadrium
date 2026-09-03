@@ -346,7 +346,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 SRC = ROOT / "src" / "quadrium"
 RECORD = ROOT / "data" / "_refusal_coverage.json"
-TYPES = ("BalancingError", "AcquisitionRefused", "ConfigError",
+# THIRTEEN. `AccessRefused` subclasses `AcquisitionRefused` and was missing
+# from both this list and the sweep's until 2026-09-03, so its two sites --
+# the 401/403 that stops for a human, and the page that looks like a login --
+# were never counted here and could never be reported uncovered. The sweep
+# caught their raises at run time (it patches the parent class) and kept
+# reporting them as "outside a known raise site"; the complaint was the clue.
+TYPES = ("BalancingError", "AcquisitionRefused", "AccessRefused", "ConfigError",
          "DisaggregationError", "EurostatError", "SignInfeasibleError",
          "DegenerateMarginError", "MarginImbalanceError", "LoaderError",
          "ScenarioInfeasible", "TransformationError", "SutEuroError")
