@@ -34,6 +34,9 @@
   "config.py::_load_eurostat::--offline was given and is not cached yet. Either dr",
   "config.py::_load_eurostat::the Eurostat download failed: Nothing was written. T",
   "config.py::_load_eurostat_sut::--offline was given and is not cached yet. A supply-",
+  "config.py::_load_eurostat_sut::model could not transform this system: model",
+  "config.py::_load_eurostat_sut::the Eurostat download failed on : A supply-use syste",
+  "config.py::_load_eurostat_sut::the supply-use pair could not be built:",
   "config.py::_need",
   "config.py::_project::Write the rows for what you have. There is no defaul",
   "config.py::_project::project_method says and the `targets` sheet carries ",
@@ -112,6 +115,7 @@
   "gras.py::_assert_margins_consistent",
   "gras.py::_assert_sign_feasible",
   "gras.py::_scaling_factor",
+  "gras.py::gras",
   "io_loader.py::_assert_balances",
   "io_loader.py::_assert_ine_layout",
   "io_loader.py::_ine_codes::duplicate INE product codes: ,",
@@ -154,6 +158,8 @@
   "io_loader.py::sheet",
   "scenarios.py::check_feasible",
   "sut_euro.py::sut_euro::SUT-EURO needs as many industries as products and th",
+  "sut_euro.py::sut_euro::a product with no base-year output has no market sha",
+  "sut_euro.py::sut_euro::industr would have to change the SIGN of their value",
   "sut_euro.py::sut_euro::shapes do not describe one SUT pair: use , imports ,",
   "sut_ras.py::_import_factors",
   "sut_ras.py::_product_factors",
@@ -399,5 +405,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 164
+ "floor": 170
 }

@@ -14,7 +14,7 @@ rather than waited for.
 
 HOW
 -----
-Each of the twelve exception types `quadrium` defines was wrapped so that
+Each of the thirteen exception types `quadrium` defines was wrapped so that
 constructing one records the line that raised it, and then every validator and
 the unit tests were run as separate processes. `data/_refusal_coverage.json`
 holds the result and how it was taken; this file checks that the code still
@@ -22,16 +22,34 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    175 refusal sites of the engine's own types
-    147 reached by something in the suite
-     28 never reached
+    177 refusal sites of the engine's own types
+    176 reached by something in the suite
+      1 never reached — named below, with its reason
+
+THE FRONT IS CLOSED, AND NOT BY REACHING EVERYTHING
+-----------------------------------------------------
+This said 52 of 159 on 2026-08-27. The one still unreached is
+`hybrid_matrix_avoiding_negatives`'s "model A cannot even be computed on this
+table": reaching it would mean building a supply table singular under model A
+and not under the search that wraps it, which is a table no statistical office
+would publish. It stays a stated gap. The closing position was never
+"0 unreached" — it was "none unexplained".
+
+Two of the 177 were invisible until 2026-09-03. `AccessRefused` subclasses
+`AcquisitionRefused`, so the sweep caught its raises at run time but the static
+pass matched neither name, and its two sites — the 401/403 that stops for a
+human, and the page that looks like a login — were never counted. The sweep
+had been reporting them as "outside a known raise site" for days and nobody
+had read the complaint.
 
 THE TWO TREES DO NOT REACH THE SAME NUMBER
 --------------------------------------------
-The private tree reaches 147 and the public one 145, and the difference is not
+The private tree reaches 176 and the public one fewer, and the difference is not
 a regression: the public tree does not publish the IDESCAT workbook, so nothing
-there can reach either refusal that reads it -- `load_idescat_mioc`'s about a
-missing sheet, and `_mioc_year`'s about a title row with no year in it. A tree
+there can reach any of the SIX refusals that read it -- `_mioc_year`'s about a
+title row with no year in it, and the five in `load_idescat_mioc` about a
+missing sheet, a missing `Codi` row, an undelimited final-demand block, row
+codes that are not the column codes, and a missing numbered row. A tree
 without a fixture cannot exercise the code that reads it. That is why the floor
 below lives in each tree's own record instead of being a constant in this
 file -- a shared number would be wrong in one of them by construction, and the

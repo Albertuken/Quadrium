@@ -4592,3 +4592,215 @@ def test_the_refusals_TWO_SPANISH_WORKBOOKS_make_when_deformed():
     deformed(load_idescat_mioc, CAT, drop_the_output_row,
              "a sheet missing a numbered row that carries the column identity",
              "are not on the 'ts total' sheet")
+
+
+def test_the_last_refusals_the_NUMBERS_and_the_PIPELINE_make():
+    """The six left over, and the one that stays a stated gap.
+
+    These are the refusals that need something to go wrong in the arithmetic
+    or in the middle of the supply-use pipeline, which is why they outlasted
+    every other group.
+
+    THE ONE WORTH THE SEARCH
+    --------------------------
+    `gras` tests sign feasibility twice. The cheap per-line test asks whether
+    each row and column that needs a negative total has a negative entry; the
+    exact test asks, by linear programming, whether ANY table with this sign
+    pattern has those margins. The second refusal fires only where the first
+    passes — a system that looks fine line by line and is globally impossible
+    — and no fixture in the suite had ever been one.
+
+    Rather than declare it unreachable, a search found one in sixteen tries: a
+    3x3 that clears the per-line test and fails the exact one. It is written
+    out below as a constant, so the case is reproducible and nobody has to run
+    the search again. This is `OQ-B-09` — no specified method lets a cell
+    change sign — showing up in the balancing.
+
+    The two SUT-EURO refusals are the same question in the projection. A
+    product with no base-year output has no market shares to hold constant,
+    and an industry whose value added changes sign cannot be reached by a
+    method that scales by `target / base`: the ratio carries a negative base
+    to a negative number of the target's magnitude, however many iterations
+    it is given. Hungary's air transport went from -96.7 in 2021 to +28.3 in
+    2022, and every back-test run crossing that sign stalled at ~300 %
+    deviation, unmoved at 60,000 iterations.
+
+    The three pipeline refusals are the supply-use route failing at each of
+    its three steps in turn: the download, the pair, the transformation.
+
+    WHAT IS DELIBERATELY NOT HERE
+    -------------------------------
+    `hybrid_matrix_avoiding_negatives`'s "model A cannot even be computed on
+    this table" stays unreached and is recorded as a known gap in
+    `run_refusal_coverage.py` with its reason. Reaching it would mean building
+    a supply table that is singular under model A and not under the search
+    that wraps it, which is a table nobody would publish. A stated gap is
+    worth more than a fixture invented to close a number.
+    """
+    import tempfile
+    from unittest.mock import patch
+
+    import numpy as np
+    import openpyxl
+
+    from quadrium.config import ConfigError, load_config
+    from quadrium.eurostat import EurostatError
+    from quadrium.gras import SignInfeasibleError, gras
+    from quadrium.sut_euro import SutEuroError, sut_euro
+
+    # ---- the exact sign-feasibility test, on a system found by search
+    T = np.array([[2.0, -1.0, -2.0], [1.0, 1.0, 1.0], [0.0, 1.0, -2.0]])
+    u = np.array([1.0, 3.0, 3.0])
+    v = np.array([0.0, 10.5, -3.5])
+    check("the fixture is balanced, so the refusal is not about the margins "
+          "failing to add up", abs(u.sum() - v.sum()) < 1e-12,
+          f"row totals {u.sum():g}, column totals {v.sum():g}")
+    try:
+        gras(T, u, v)
+    except SignInfeasibleError as exc:
+        check("a system that passes the per-line sign test and fails the "
+              "exact one is refused",
+              "at least one cell to change sign" in str(exc)
+              and "sign preserving by construction" in str(exc),
+              "the per-line test asks whether each line that needs a negative "
+              "total has a negative entry; the exact one asks by LP whether "
+              "ANY table with this sign pattern has these margins. Only the "
+              "second catches this 3x3")
+    except Exception as exc:                           # noqa: BLE001
+        check("a system that passes the per-line sign test and fails the "
+              "exact one is refused", False,
+              f"{type(exc).__name__}: {str(exc)[:60]}")
+    else:
+        check("a system that passes the per-line sign test and fails the "
+              "exact one is refused", False,
+              "it balanced a table that cannot exist")
+
+    # ---- the two SUT-EURO refusals
+    Ud0 = np.array([[3.0, 1.0, 5.0], [1.0, 4.0, 4.0]])
+    Um0 = np.array([[0.5, 0.2, 1.0], [0.2, 0.6, 0.8]])
+    tls0 = np.array([0.3, 0.2, 0.5])
+    V0 = np.array([[8.0, 1.0], [2.0, 9.0]])
+    va0 = V0.sum(axis=1) - (Ud0[:, :2] + Um0[:, :2]).sum(axis=0) - tls0[:2]
+    base = dict(va_target=va0 * 1.05, final_use_target=np.array([6.0]),
+                tls_target=1.1, imports_target=float(Um0.sum()) * 1.05)
+
+    ok = sut_euro(Ud0, Um0, tls0, V0, **base)
+    check("the base pair projects, so the two refusals below are the only "
+          "difference", ok is not None,
+          f"value added {va0[0]:+.1f}, {va0[1]:+.1f} in the base year")
+
+    V_zero = V0.copy()
+    V_zero[:, 1] = 0.0
+    for name, args, fragment in (
+            ("a product with no base-year output",
+             dict(V0=V_zero, **base), "no market shares to hold constant"),
+            ("an industry whose value added changes sign",
+             dict(V0=V0, **{**base,
+                            "va_target": np.array([va0[0],
+                                                   -abs(va0[1]) * 1.2])}),
+             "change the SIGN of their value added")):
+        V = args.pop("V0")
+        try:
+            sut_euro(Ud0, Um0, tls0, V, **args)
+        except SutEuroError as exc:
+            check(f"SUT-EURO refuses {name}",
+                  fragment.lower() in str(exc).lower(), str(exc)[:88])
+        except Exception as exc:                       # noqa: BLE001
+            check(f"SUT-EURO refuses {name}", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check(f"SUT-EURO refuses {name}", False, "it projected anyway")
+
+    # ---- the supply-use pipeline, failing at each of its three steps
+    CACHE = ROOT / "data" / "eurostat"
+    from quadrium.eurostat import DATASETS
+    cached = all((CACHE / f"{DATASETS[n]}_AT_2022.json").exists()
+                 for n in ("supply", "use_purchasers", "use_basic"))
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        def book(table_path):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "project"
+            for kv in (("project_id", "p"), ("table_kind", "eurostat_sut"),
+                       ("eurostat_geo", "AT"), ("eurostat_year", 2022),
+                       ("table_path", str(table_path))):
+                ws.append(list(kv))
+            # A job has to be declared or the workbook is refused for having
+            # none before the pipeline is ever entered. `regionalise` is the
+            # cheapest: every case here fails upstream of the activity file,
+            # so it is never read.
+            act = tmp / "activity.csv"
+            act.write_text("sector_code,regional\nA,1.0\n")
+            ws = wb.create_sheet("regionalise")
+            ws.append(["key", "value"])
+            ws.append(["method", "SLQ"])
+            ws.append(["activity_path", str(act)])
+            p = tmp / f"cfg{abs(hash(str(table_path)))}.xlsx"
+            wb.save(p)
+            return p
+
+        def boom(*a, **k):
+            raise EurostatError("naio_10_cp15 returned no values for geo=AT.")
+
+        empty = tmp / "empty"
+        empty.mkdir()
+        with patch("quadrium.eurostat.fetch", boom):
+            try:
+                load_config(book(empty))
+            except ConfigError as exc:
+                check("a download that fails mid-system says nothing was "
+                      "transformed", "download failed on" in str(exc)
+                      and "needs all three files" in str(exc), str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check("a download that fails mid-system says nothing was "
+                      "transformed", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a download that fails mid-system says nothing was "
+                      "transformed", False, "it loaded")
+
+        check("Austria's 2022 pair is cached, so the last two steps can fail "
+              "on their own terms", cached,
+              "the three files are in data/eurostat" if cached else
+              "NOT cached — the last two cases are skipped and said so")
+        if not cached:
+            return
+
+        with patch("quadrium.eurostat.load_sut", boom):
+            try:
+                load_config(book(CACHE))
+            except ConfigError as exc:
+                check("a pair that cannot be built says so, and carries the "
+                      "reason up", "supply-use pair could not be built"
+                      in str(exc) and "returned no values" in str(exc),
+                      str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check("a pair that cannot be built says so, and carries the "
+                      "reason up", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a pair that cannot be built says so, and carries the "
+                      "reason up", False, "it built one")
+
+        from quadrium.models import SupplyUseTables
+
+        def no_transform(self, model):
+            raise ValueError(f"D^T is singular for model {model}")
+
+        with patch.object(SupplyUseTables, "to_iot", no_transform):
+            try:
+                load_config(book(CACHE))
+            except ConfigError as exc:
+                check("a transformation that fails names the model that could "
+                      "not do it", "could not transform this system"
+                      in str(exc) and "singular" in str(exc), str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check("a transformation that fails names the model that could "
+                      "not do it", False,
+                      f"{type(exc).__name__}: {str(exc)[:60]}")
+            else:
+                check("a transformation that fails names the model that could "
+                      "not do it", False, "it transformed")
