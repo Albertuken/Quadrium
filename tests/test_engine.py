@@ -3901,3 +3901,162 @@ def test_the_refusals_the_SUPPLY_USE_workbooks_from_two_offices_make():
                         ws.cell(row=first_row + 1, column=first_col),
                         "value", "Productos de la agricultura"), "tod2.xlsx")),
                 "has no product labelled '1. …'")
+
+
+def test_the_refusals_the_EUROSTAT_CONNECTOR_makes():
+    """Six refusals about a server's answer, and none had ever fired.
+
+    `fetch` is the only function in this engine that touches the network, and
+    four of its refusals judge what came back: an HTTP 413, any other HTTP
+    error, a body that is not JSON, and the 200 that carries an empty `value`.
+    Nothing had reached them, because reaching them by making a real request
+    would need the server to misbehave on command — so this hands `urlopen`
+    the failures instead. That is the whole trick, and it is why they stayed
+    unreached for so long when they are four lines apart.
+
+    THE 413 IS THE ONE WORTH READING
+    ----------------------------------
+    `fetch`'s docstring records that a 413 has been seen twice and that
+    NEITHER time survived a retry — and that on the second sighting a clean
+    mechanism was inferred (`geo=ES` answered 200, `geo=GB` and `geo=XX`
+    answered 413, so an unrecognised filter must be dropped and the request
+    becomes every country) and written into the docstring as measured fact.
+    Three minutes later all three codes answered 200. The message therefore
+    says *retry first* and refuses to explain, which is the correct thing for
+    a symptom observed twice and understood zero times. This checks it still
+    says that, because a future reader's instinct will be to "improve" it into
+    a diagnosis again.
+
+    The other two are the cube: a dimension asked for without a value, and a
+    total-flows table with no imports by product. A total table's uses are
+    output PLUS imports, so `Z.sum(1) + Y.sum(1) == X` cannot hold without
+    them; the fixture strips exactly the `IMP` values from a real Spanish file
+    and checks that `domestic` still loads from the same file — the refusal is
+    about what `total` needs, not about a broken download.
+    """
+    import json as _json
+    import tempfile
+    import urllib.error
+    from unittest.mock import patch
+
+    from quadrium.eurostat import (EurostatError, _Cube, _read_cube, fetch,
+                                   load_iot)
+
+    ES = ROOT / "data" / "eurostat" / "naio_10_cp1700_ES_2022.json"
+    check("a real Eurostat response to build the fixtures from", ES.exists(),
+          ES.name)
+    if not ES.exists():
+        return
+
+    class Answer:
+        """What `urlopen` returns, as a context manager, and nothing more."""
+
+        def __init__(self, body):
+            self.body = body
+
+        def read(self):
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def http(code):
+        def boom(*a, **k):
+            raise urllib.error.HTTPError("http://x", code, "no", {}, None)
+        return boom
+
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "out.json"
+
+        cases = [
+            ("HTTP 413, without inventing a reason for it",
+             http(413), "retry first"),
+            ("any other HTTP error, with the code in it",
+             http(503), "returned HTTP 503"),
+            ("a body that is not JSON",
+             lambda *a, **k: Answer(b"<html>Service Unavailable</html>"),
+             "did not return JSON"),
+            ("a 200 that carries no values at all",
+             lambda *a, **k: Answer(_json.dumps(
+                 {"id": [], "size": [], "dimension": {}, "value": {}}).encode()),
+             "returned no values for geo="),
+        ]
+        for name, fake, fragment in cases:
+            with patch("urllib.request.urlopen", fake):
+                try:
+                    fetch("product_by_product", "ES", 2022, dest)
+                except EurostatError as exc:
+                    check(f"the connector refuses {name}",
+                          fragment.lower() in str(exc).lower(), str(exc)[:88])
+                except Exception as exc:               # noqa: BLE001
+                    check(f"the connector refuses {name}", False,
+                          f"{type(exc).__name__} instead of EurostatError: "
+                          f"{str(exc)[:60]}")
+                else:
+                    check(f"the connector refuses {name}", False, "it accepted")
+            check(f"and writes nothing to disk when {name.split(',')[0]} came "
+                  f"back", not dest.exists(),
+                  "a refused download must not leave a half-file behind for "
+                  "the next run to read as a cache hit")
+
+        # ---- and the 413 still refuses to explain itself
+        with patch("urllib.request.urlopen", http(413)):
+            try:
+                fetch("product_by_product", "ES", 2022, dest)
+            except EurostatError as exc:
+                msg = str(exc)
+        check("the 413 message says retry and offers no mechanism",
+              "transient both times" in msg and "stk_flow" in msg
+              and "filter" not in msg.lower(),
+              "it reports the symptom and the workaround. A mechanism was "
+              "inferred from one observation twice, and was wrong twice; the "
+              "message must not grow one back")
+
+        # ---- the cube
+        doc = _read_cube(ES)
+        cube = _Cube(doc)
+        try:
+            cube.at()
+        except EurostatError as exc:
+            check("the cube refuses a lookup that leaves a dimension open",
+                  "needs a value" in str(exc), str(exc)[:88])
+        except Exception as exc:                       # noqa: BLE001
+            check("the cube refuses a lookup that leaves a dimension open",
+                  False, f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("the cube refuses a lookup that leaves a dimension open",
+                  False, "it returned something")
+
+        # ---- a total table with the imports removed
+        i = cube.ids.index("stk_flow")
+        j, stride, size = cube.index["stk_flow"]["IMP"], cube.stride[i], cube.size[i]
+        before = len(doc["value"])
+        doc["value"] = {k: v for k, v in doc["value"].items()
+                        if (int(k) // stride) % size != j}
+        stripped = Path(td) / "no_imports.json"
+        stripped.write_text(_json.dumps(doc))
+        check("the fixture removed the import block and nothing else",
+              len(doc["value"]) < before,
+              f"{before} values down to {len(doc['value'])}")
+
+        try:
+            load_iot(stripped, variant="total")
+        except EurostatError as exc:
+            check("a TOTAL table with no imports by product is refused",
+                  "imports by product" in str(exc), str(exc)[:88])
+        except Exception as exc:                       # noqa: BLE001
+            check("a TOTAL table with no imports by product is refused", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check("a TOTAL table with no imports by product is refused", False,
+                  "it built a table whose rows cannot close")
+
+        t = load_iot(stripped, variant="domestic")
+        check("and the SAME file still loads as domestic, so the refusal is "
+              "about what `total` needs", t.n > 0,
+              f"{t.n} products. A total table's uses are output PLUS imports, "
+              f"so Z.sum(1) + Y.sum(1) == X cannot hold without them; the "
+              f"domestic table never needed them")

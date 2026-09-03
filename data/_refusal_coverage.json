@@ -1,6 +1,6 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
- "taken": "2026-09-02",
+ "taken": "2026-09-03",
  "n_sites": 175,
  "fired": [
   "acquire.py::check_allowed",
@@ -73,6 +73,11 @@
   "eurostat.py::__init__",
   "eurostat.py::_read_cube::is not JSON: . A saved Eurostat download is a JSON-s",
   "eurostat.py::_read_cube::is not a JSON-stat file: it is not even text ( ). A ",
+  "eurostat.py::at",
+  "eurostat.py::fetch::HTTP 413 for , geo= , . This has been transient both",
+  "eurostat.py::fetch::did not return JSON:",
+  "eurostat.py::fetch::returned HTTP",
+  "eurostat.py::fetch::returned no values for geo= , time= . The country ma",
   "eurostat.py::load_iot::balances as published but the IOTable it would produ",
   "eurostat.py::load_iot::does not balance as published and will not be loaded",
   "eurostat.py::load_iot::has neither `prd_use` nor `ind_use`; this loader exp",
@@ -81,6 +86,7 @@
   "eurostat.py::load_iot::no code carries a value for stk_flow= in . The count",
   "eurostat.py::load_iot::none of is fully populated for stk_flow= ; the final",
   "eurostat.py::load_iot::the codes that carry values sum to against a publish",
+  "eurostat.py::load_iot::the total table needs imports by product to close it",
   "eurostat.py::load_iot::variant 'imports' is an input table, not a symmetric",
   "eurostat.py::load_iot::variant must be 'domestic' or 'total', not",
   "eurostat.py::load_sut::+ do not balance and will not be loaded. failed ( ):",
@@ -378,5 +384,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 145
+ "floor": 151
 }
