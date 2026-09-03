@@ -4433,3 +4433,162 @@ def test_three_refusals_left_over_from_three_different_routes():
               f"{ok['shift_after']:.1e} in {ok['iterations']} iterations — "
               f"which is the distinction the message has to earn, and the "
               f"reason max_iter is the caller's to set")
+
+
+def test_the_refusals_TWO_SPANISH_WORKBOOKS_make_when_deformed():
+    """Seven refusals about a published file, reached by deforming a real one.
+
+    `load_ine_tod` reads the INE's supply-use workbook and `load_idescat_mioc`
+    the Catalan symmetric table. Both are read every day by this project, both
+    are full of refusals about layout, and none of those refusals had a case —
+    because the only files that reach them are files a statistical office got
+    wrong, and the offices do not oblige.
+
+    So the fixtures are the REAL workbooks with one thing broken. Each case
+    reads the file once, mutates the in-memory sheets, and patches
+    `_open_workbook` to hand the loader the mutation. No file is written and
+    no shipped data is touched.
+
+    WHAT DEFORMING THEM TAUGHT
+    ----------------------------
+    Cutting six columns off the use sheet to make the axes disagree did NOT
+    reach the size refusal: a more specific one fired first, about a column
+    label that had gone missing. The size refusal needs a deformation that
+    leaves the labels alone — one activity number removed from the index row.
+    That is the sixth time in this project a refusal turned out to sit behind
+    an earlier and more specific one, and each time the engine was right.
+
+    The Catalan pair is worth naming precisely. `list(col_of) != codes` is not
+    a set comparison: it fails when the row codes are the column codes IN
+    ANOTHER ORDER, which is checked below by swapping two products and getting
+    "63 rows against 63 columns". A symmetric table has to be square and in
+    one order, and a set comparison would have let a permuted table through.
+    """
+    import re as _re
+    from unittest.mock import patch
+
+    from quadrium import io_loader as L
+    from quadrium.io_loader import (LoaderError, load_idescat_mioc,
+                                    load_ine_tod)
+
+    def clean(v):
+        return _re.sub(r"\s+", " ", str(v if v is not None else "")).strip()
+
+    def deformed(loader, path, mutate, name, fragment):
+        sheets = {k: [list(r) for r in v]
+                  for k, v in L._open_workbook(path).items()}
+        mutate(sheets)
+        with patch.object(L, "_open_workbook", lambda p: sheets):
+            try:
+                loader(path)
+            except LoaderError as exc:
+                check(f"the engine refuses {name}, and says which",
+                      fragment.lower() in str(exc).lower(), str(exc)[:88])
+            except Exception as exc:                   # noqa: BLE001
+                check(f"the engine refuses {name}, and says which", False,
+                      f"{type(exc).__name__} instead of LoaderError: "
+                      f"{str(exc)[:60]}")
+            else:
+                check(f"the engine refuses {name}, and says which", False,
+                      "it loaded the deformed workbook")
+
+    # ---- the INE supply-use workbook
+    INE = ROOT / "data" / "ine" / "cne_tod_21.xlsx"
+    check("the INE supply-use workbook is on disk", INE.exists(), INE.name)
+    if INE.exists():
+        sut = load_ine_tod(INE)
+        check("and it loads unbroken, so the breakages are the only difference",
+              sut.n_products > 0 and sut.n_activities > 0,
+              f"{sut.n_products} products by {sut.n_activities} activities")
+
+        deformed(load_ine_tod, INE, lambda S: S.pop("Tabla1"),
+                 "a workbook with no `Tabla1`", "has no 'Tabla1'")
+
+        def one_activity_fewer(S):
+            # The index row numbers the activity columns 1, 2, 3, … Blanking
+            # the last number shortens the use axis and LEAVES EVERY LABEL in
+            # place, which is what it takes to reach the size refusal rather
+            # than the label one that guards the road to it.
+            row = S["Tabla2"][8]
+            last = max(j for j, c in enumerate(row)
+                       if str(c).strip().replace(".0", "").isdigit())
+            row[last] = None
+
+        deformed(load_ine_tod, INE, one_activity_fewer,
+                 "supply and use sheets that disagree on the size of the table",
+                 "disagree on the size")
+
+        def one_figure_moved(S):
+            for row in S["Tabla1"]:
+                for j, c in enumerate(row):
+                    if isinstance(c, (int, float)) and c and abs(c) > 1000:
+                        row[j] = c + 5000.0
+                        return
+
+        deformed(load_ine_tod, INE, one_figure_moved,
+                 "a workbook whose own printed totals do not add up",
+                 "does not satisfy an identity")
+
+    # ---- the Catalan symmetric table
+    CAT = ROOT / "data" / "idescat" / "mioc2021ts64.xlsx"
+    if not CAT.exists():
+        # NOT A FAILURE, and saying so is the point. The public tree does not
+        # publish the Catalan workbook, so nothing there can reach these four
+        # refusals — a tree without a fixture cannot exercise the code that
+        # reads it. That is why the coverage floor is recorded per tree
+        # instead of being a constant shared by both.
+        check("the four Catalan cases are skipped, because this tree does not "
+              "publish the workbook they deform", True,
+              "mioc2021ts64.xlsx is not here. The private tree reaches these "
+              "four; this one cannot, and its floor is lower by exactly that")
+        return
+    check("the Catalan symmetric table is on disk", True, CAT.name)
+
+    t = load_idescat_mioc(CAT)
+    check("and it loads unbroken", t.n > 20, f"{t.n} sectors")
+
+    def product_rows(T):
+        hdr = next(i for i, r in enumerate(T)
+                   if r and any(clean(c) == "Codi" for c in r if c is not None))
+        col_of = {clean(c): j for j, c in enumerate(T[hdr])
+                  if c is not None and j > 2}
+        return hdr, col_of, [i for i in range(hdr + 1, len(T))
+                             if len(T[i]) > 1 and T[i][1] is not None
+                             and clean(T[i][1]) in col_of]
+
+    def rename(S, what, to):
+        for row in S["ts total"]:
+            for j, c in enumerate(row):
+                if isinstance(c, str) and c.strip().lower() == what:
+                    row[j] = to
+
+    deformed(load_idescat_mioc, CAT, lambda S: rename(S, "codi", "Code"),
+             "a Catalan sheet with no `Codi` row", "no row carries 'Codi'")
+    deformed(load_idescat_mioc, CAT,
+             lambda S: rename(S, "consum final", "XXX"),
+             "a final-demand block with no `CONSUM FINAL` head",
+             "not delimited by a")
+
+    def swap_two_products(S):
+        T = S["ts total"]
+        _, _, rows = product_rows(T)
+        T[rows[0]], T[rows[1]] = list(T[rows[1]]), list(T[rows[0]])
+
+    deformed(load_idescat_mioc, CAT, swap_two_products,
+             "row codes that are the column codes IN ANOTHER ORDER",
+             "the row codes are not the column codes")
+
+    def drop_the_output_row(S):
+        from quadrium.io_loader import _MIOC_OUTPUT
+        T = S["ts total"]
+        hdr, _, _ = product_rows(T)
+        for i in range(hdr, len(T)):
+            if T[i] and T[i][0] is not None \
+               and str(T[i][0]).strip().replace(".0", "").isdigit() \
+               and int(float(T[i][0])) == _MIOC_OUTPUT:
+                T[i][0] = None
+                return
+
+    deformed(load_idescat_mioc, CAT, drop_the_output_row,
+             "a sheet missing a numbered row that carries the column identity",
+             "are not on the 'ts total' sheet")

@@ -136,6 +136,9 @@
   "io_loader.py::load_ine_tio::is missing ; found: . This loader expects the INE's ",
   "io_loader.py::load_ine_tio::unbalanced must be 'refuse' or 'residual_column', no",
   "io_loader.py::load_ine_tio::variant must be 'interior' or 'total', not",
+  "io_loader.py::load_ine_tod::: the supply and use sheets disagree on the size of ",
+  "io_loader.py::load_ine_tod::does not satisfy an identity the INE's own printed t",
+  "io_loader.py::load_ine_tod::has no ; found: . This loader expects the INE's `cne",
   "io_loader.py::load_io_table::data columns for sectors: \u00a74.1 requires at least one",
   "io_loader.py::load_io_table::metadata sheet is missing: ,",
   "io_loader.py::load_io_table::no 'metadata' sheet. It must carry: ,",
@@ -396,5 +399,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 161
+ "floor": 164
 }
