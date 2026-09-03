@@ -28,7 +28,11 @@ pdf = ["pymupdf>=1.23"]
 # VALIDATOR for that function cannot do its job without the exact test, so scipy
 # is a checking dependency. It was undeclared until CI ran without it and the
 # validator failed, correctly, rather than passing on a test it had not run.
-dev = ["pytest>=7", "scipy>=1.10"]
+# `xlrd` joins scipy on the same footing and for the same reason: Eurostat
+# ships the NUTS 2010-2013 correspondence as a legacy `.xls`, openpyxl cannot
+# read one, and `run_mrio_nuts_join.py` needs it to resolve Greece. Without it
+# that validator reports the nine Greek regions unresolved instead of guessing.
+dev = ["pytest>=7", "scipy>=1.10", "xlrd>=2.0"]
 
 [project.scripts]
 quadrium = "quadrium.cli:main"
