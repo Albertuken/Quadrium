@@ -107,12 +107,19 @@ def _catalogue(args) -> int:
 
     sources = scan(args.data)
     if not sources:
+        # STDOUT AND EXIT 0, AND THE TWO GO TOGETHER.
+        # This said "Nothing is wrong" on stderr and then exited 1, which is
+        # the message contradicting itself: a shell, a CI step or any wrapper
+        # reads the code, not the prose. It is also the FIRST thing every new
+        # user sees, because a fresh `pip install` ships no tables at all --
+        # found by release_check.py, which installs the wheel into an empty
+        # interpreter and runs the documented commands from an empty
+        # directory.
         print(f"No loadable table found under {args.data.resolve()}.\n"
               f"Nothing is wrong: this looks in `data/eurostat/`, `data/ine/` "
               f"and for `UK_IOAT_*.xlsx`. A configuration with "
-              f"`table_kind: eurostat` fetches one without any of them.",
-              file=sys.stderr)
-        return 1
+              f"`table_kind: eurostat` fetches one without any of them.")
+        return 0
 
     if args.sources:
         tables = [s for s in sources if s.kind == "table"]

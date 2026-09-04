@@ -20,6 +20,8 @@ src/quadrium/models.py
 src/quadrium/precision.py
 src/quadrium/project.py
 src/quadrium/reaggregation.py
+src/quadrium/references.py
+src/quadrium/regionalise.py
 src/quadrium/reporting.py
 src/quadrium/scenarios.py
 src/quadrium/sign_flip_ras.py
