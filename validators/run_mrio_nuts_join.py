@@ -48,6 +48,16 @@ Pairing them would understate Mazovia's final demand by whatever `PL92` holds,
 and nothing in the archive says what that is. So this file resolves 271 and
 refuses the 272nd by name.
 
+SUPERSEDED AS AN UNBLOCKER, AND STILL TRUE AS A FINDING
+--------------------------------------------------------
+Written to unblock the side files, and it does not: `run_mrio_side_join.py`
+shows the following day that those files' label column describes nothing, so
+there was never a vintage mismatch in the DATA to correct. Everything below
+stands — the block really does carry French codes from NUTS 2013 and Greek
+codes from NUTS 2010, and `PL12` really was split rather than recoded — and
+none of it is what makes the join possible. It is a fact about the block's own
+labels, which is worth holding for anyone who reads them.
+
 Run:
     python3 validators/run_mrio_nuts_join.py
 """
