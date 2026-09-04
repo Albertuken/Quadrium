@@ -67,6 +67,8 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     if not ok:
         FAIL.append(name)
 
+from quadrium import identities  # noqa: E402
+
 
 def main() -> int:
     if not DATA.exists():
@@ -97,19 +99,25 @@ def main() -> int:
     check("ID-07 supply columns give activity output",
           float(np.abs(s.V.sum(0) - s.g).max()) < TOL,
           f"max deviation {float(np.abs(s.V.sum(0) - s.g).max()):.3e}")
-    check("ID-07 total output is the same counted either way",
-          abs(float(s.q.sum() - s.g.sum())) < TOL,
-          f"{s.q.sum():,.1f} by product, {s.g.sum():,.1f} by activity")
+    # THROUGH THE ENGINE'S OWN MODULE, NOT BY HAND.
+    # `quadrium.identities` implements the numbered identities of the spec,
+    # and until 2026-09-04 this file checked ID-07 and ID-08 with its own two
+    # lines of arithmetic while that module sat uncalled -- the same identity
+    # defined twice, one of them by nobody. The reachability sweep found it.
+    # Going through the module also prints the CITATION with the result, which
+    # the inline version could not.
+    r7 = identities.id07_supply_totals(s.V, q=s.q, g=s.g)
+    check(f"{r7.identity} total output is the same counted either way",
+          r7.passed, f"{r7.detail} — {r7.citation}")
 
     # ID-08 -- the identity the project's whole solver choice rests on.
-    for label, v in (("trade", s.trade_margins),
-                     ("transport", s.transport_margins)):
-        tot = float(v.sum())
-        pos = float(v[v > 0].sum())
-        check(f"ID-08 {label} margins sum to zero across the economy",
-              abs(tot) < TOL,
-              f"{tot:.3e}, from {pos:,.1f} positive against "
-              f"{float(v[v < 0].sum()):,.1f} negative")
+    r8 = identities.id08_margins_sum_to_zero(s.trade_margins,
+                                             s.transport_margins)
+    check(f"{r8.identity} trade and transport margins each sum to zero across "
+          f"the economy", r8.passed,
+          f"{r8.detail}, worst {r8.max_abs_dev:.3e} — {r8.citation}. The "
+          f"origin of the structurally negative cells that make a "
+          f"sign-agnostic solver necessary")
 
     # ID-19 -- and the negatives are required, not merely allowed.
     for label, v in (("trade", s.trade_margins),

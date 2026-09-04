@@ -4804,3 +4804,94 @@ def test_the_last_refusals_the_NUMBERS_and_the_PIPELINE_make():
             else:
                 check("a transformation that fails names the model that could "
                       "not do it", False, "it transformed")
+
+
+def test_the_COMMANDS_THE_GUIDE_DOCUMENTS_actually_run():
+    """Four command-line paths the guide names, and none had ever been run.
+
+    The reachability sweep of 2026-09-04 found `cli.py`'s `_catalogue`,
+    `_describe`, `_verdicts` and `_wrap` entered by nothing in the suite. They
+    are not dead code: `_catalogue` is what `--sources` and `--find` do, and
+    `docs/GUIDE.md` documents both — `--find` in four places. `run_public_docs`
+    checks that every option APPEARS in the guide. **Nothing checked that any
+    of them works.** A regression in either would have shipped in silence,
+    past a validator whose job is the guide.
+
+    `_describe` and `_warn_about_substance` are worse placed: they run on
+    every split, on both the `--check` path and the one that produces numbers.
+    Their never having been entered means the route the guide opens with —
+    fill in a spreadsheet, run one command — had never been exercised through
+    `cli.main` at all. The engine was reached through `IOProject` instead,
+    which is not what a user types.
+
+    `_availability` is left out on purpose: it queries Eurostat over the
+    network for a country whose tables are not on disk, and a test that needs
+    a fetch is a test that fails on a train.
+    """
+    import io
+    import tempfile
+    from contextlib import redirect_stderr, redirect_stdout
+
+    from quadrium.cli import main
+
+    def run(argv):
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                code = main(argv)
+        except SystemExit as exc:                      # noqa: PERF203
+            code = exc.code
+        return code, out.getvalue(), err.getvalue()
+
+    code, out, err = run(["--sources"])
+    check("`--sources` runs and lists what can actually be loaded",
+          code == 0 and "table(s) you can load and split" in out
+          and out.count("eurostat:") > 5,
+          f"exit {code}, {out.count('eurostat:')} Eurostat sources among "
+          f"{out.splitlines()[0] if out else '(nothing)'}")
+
+    code, out, err = run(["--find", "I55", "--geo", "ES", "--offline"])
+    check("`--find` answers for a sector Spain does not separate, and says "
+          "what to do instead",
+          code == 0 and "I55" in out
+          and ("split" in out.lower() or "contains it" in out.lower()),
+          f"exit {code}. The guide names --find in four places and nothing "
+          f"had ever run it")
+
+    check("and the answer names the countries that DO separate it, which is "
+          "what makes it a real distinction rather than a missing row",
+          any(g in out for g in ("BE", "FR", "HU", "UK")),
+          "a user told only that their own country cannot split I55 learns "
+          "nothing about whether the split is meaningful")
+
+    # ---- the route the guide opens with, through the command the guide names
+    example = ROOT / "configs" / "ejemplo.xlsx"
+    check("the shipped example workbook is where the guide says", example.exists(),
+          str(example.name))
+    if not example.exists():
+        return
+
+    import shutil
+
+    import openpyxl
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        cfg = tmp / "cfg.xlsx"
+        shutil.copy(example, cfg)
+        wb = openpyxl.load_workbook(cfg)
+        for row in wb["project"].iter_rows(min_col=1, max_col=2):
+            if row[0].value == "table_path":
+                row[1].value = str((example.parent / str(row[1].value)).resolve())
+        wb.save(cfg)
+
+        code, out, err = run([str(cfg), "--check"])
+        check("`quadrium <workbook> --check` runs the guide's own route and "
+              "describes what it read",
+              code == 0 and "Nothing was run" in out,
+              f"exit {code}" + (f"; stderr {err[:80]}" if err else ""))
+
+        check("and it says what the configuration IS before saying it is valid",
+              any(w in out for w in ("sector", "split", "scenario")),
+              "`_describe` prints the table, the splits and the scenarios; a "
+              "check that only says 'valid' tells a user nothing about what "
+              "it validated")
