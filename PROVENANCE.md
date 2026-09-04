@@ -53,6 +53,18 @@ one — so `run_regionalisation_crosshauling`, `run_idescat_catalonia`,
 privately. And `run_mrio_axis_scale` reads a 33 MB workbook that neither
 repository tracks.
 
-Nothing here fails for any of those absences — a validator that could not run
-was removed rather than left to pass vacuously, which is the same rule in both
-cases.
+A third group is here and **says out loud that it cannot run**, which is a
+different answer from the two above and is stated rather than left to be
+inferred. `run_mrio_nuts_join`, `run_mrio_side_join`, `run_mrio_real_output`
+and `run_mrio_spillovers` all read the 33 MB European MRIO workbook that
+neither repository tracks, and the first of them also reads Eurostat's NUTS
+correspondence tables, which are open and are held privately because nothing
+public needs them. `run_reachability` reads a record taken by a tool that lives
+in the private tree. Each of them, run here, reports **which instrument it does
+not have** and exits without asserting anything.
+
+That is not the same as passing vacuously and the distinction is the point: a
+check that quietly returns success on evidence it never saw is the failure this
+project keeps finding in itself, so each of these names the missing file and
+what it would have established. A validator that could not run and could not
+say so was removed instead — the rule for the two groups above.
