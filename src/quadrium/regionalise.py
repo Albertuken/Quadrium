@@ -21,6 +21,9 @@ The costs are measurements, not opinions, and each is checked by a validator:
     using delta = 0.25 blind, against a fitted value   mean 2.2 points, worst 6.8
     cross-hauling the family does not reproduce        28.3 % of Catalonia's
                                                        interregional trade
+    interregional feedback a single-region table       median 11.7 % of the
+    cannot contain at all                              multiplier, 2.1 % to
+                                                       41.5 % (259 regions)
 
 See `run_flq_delta.py`, `run_delta_across_regions.py` and
 `run_regionalisation_crosshauling.py`.
@@ -42,6 +45,12 @@ EVIDENCE = {
     "fitted_delta_median": 0.26,
     "regions_measured": 10,
     "countries_measured": 2,
+    # What a SINGLE-REGION table cannot contain, measured on the European
+    # MRIO's 272 regions: the share of the output multiplier that travels
+    # through other regions and comes back. Every table this module produces
+    # has it at zero by construction. `run_mrio_spillovers.py`.
+    "spillover_share_pct": {"p10": 2.1, "median": 11.7, "p90": 41.5},
+    "spillover_regions_measured": 259,
 }
 
 
@@ -238,6 +247,15 @@ def regionalise(A_national: np.ndarray,
         f"{lo:.1f} % to {hi:.1f} %",
         f"  - cross-hauling is not reproduced in any amount anyone chose; it is "
         f"28.3 % of Catalonia's interregional trade",
+        f"  - this is a SINGLE-REGION table: an impulse cannot leave it and "
+        f"come back. Across {EVIDENCE['spillover_regions_measured']} European "
+        f"regions that feedback is a median "
+        f"{EVIDENCE['spillover_share_pct']['median']:.1f} % of the output "
+        f"multiplier, and between "
+        f"{EVIDENCE['spillover_share_pct']['p10']:.1f} % and "
+        f"{EVIDENCE['spillover_share_pct']['p90']:.1f} % from the tenth "
+        f"percentile to the ninetieth. Nothing in a region's own accounts "
+        f"says which end it sits at",
     ]
     if method == "FLQ":
         caveats.insert(1, f"  - delta = {delta:g} was supplied, not derived. A "

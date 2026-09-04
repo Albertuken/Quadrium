@@ -123,10 +123,14 @@ def main_() -> int:
                             ("the printed output", out)):
             check(f"the measured cost is in {where}, unasked for",
                   "known to get wrong" in text and "28.3" in text
-                  and "2.2 points" in text and "CORE_036" in text,
+                  and "2.2 points" in text and "CORE_036" in text
+                  and "11.7" in text and "SINGLE-REGION" in text,
                   "it names the cross-hauling share, the price of a blind "
-                  "delta and the family's multiplier bias, and says where the "
-                  "position comes from")
+                  "delta, the family's multiplier bias, and the interregional "
+                  "feedback a single-region table cannot contain at all — a "
+                  "median 11.7 % of the multiplier across 259 European "
+                  "regions, measured in run_mrio_spillovers.py — and says "
+                  "where the position comes from")
         check("and in the machine-readable record",
               len(ledger.get("caveats", [])) >= 3
               and ledger.get("delta") == 0.25
