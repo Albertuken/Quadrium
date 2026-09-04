@@ -219,6 +219,42 @@ def main() -> int:
               f"{', '.join(named)} is named in the README or the guide — a "
               f"folder nobody mentions is a folder nobody finds")
 
+        # A PUBLISHED RUN NEEDS A PAGE THAT SAYS WHAT IT WAS.
+        # `report.md` is the engine's verbatim output, which is the right thing
+        # to publish and the wrong thing to hand somebody first: it opens on
+        # solver diagnostics. A reader deciding whether this is worth their
+        # afternoon needs the question, the inputs and the answer.
+        # Read from the PUBLIC tree, like everything else in this section, and
+        # the narration lives only there. It is a public artefact: it exists so
+        # a reader can judge the work without installing, and a second copy in
+        # the private tree that sync_public.py does not carry would be two
+        # sources of truth waiting to disagree.
+        for run in published:
+            page = run / "README.md"
+            report = (run / "report.md").read_text()
+            check(f"{run.name} says what it WAS, not only what it printed",
+                  page.exists(),
+                  "README.md beside report.md" if page.exists() else
+                  "report.md opens on solver diagnostics; a reader deciding "
+                  "whether to spend an afternoon on this needs the question, "
+                  "the inputs and the answer first")
+            if not page.exists():
+                continue
+
+            # AND ITS FIGURES MUST BE THE RUN'S.
+            # This file exists because counts rot when nothing counts them.
+            # A narration quoting figures from a report that has since been
+            # regenerated is the same failure in a more persuasive form.
+            quoted = set(re.findall(r"\b\d{1,3}(?:,\d{3})+\.\d\b|\b1\.\d{3}\b",
+                                    page.read_text()))
+            missing = sorted(q for q in quoted if q not in report)
+            check(f"and every figure {run.name}'s page quotes is in the report "
+                  f"it narrates",
+                  not missing,
+                  f"{len(quoted)} figures checked against report.md, all "
+                  f"present" if not missing else
+                  f"not in the report: {', '.join(missing[:6])}")
+
     print("\n" + "=" * 78)
     if FAIL:
         print(f"{len(FAIL)} check(s) FAILED: {', '.join(FAIL)}")

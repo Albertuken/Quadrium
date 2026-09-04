@@ -176,8 +176,14 @@ It exists so you can see the shape of a result before you commit real data to
 it.
 
 **And if you would rather read a result than run one**, one finished run is
-published in this repository: `outputs/uk_food_beverage/report.md`, verbatim
-output, no installation needed.
+published in this repository. Start with
+`outputs/uk_food_beverage/README.md`, which says what was asked, what the
+engine was given and what came out — then `report.md` beside it is the verbatim
+output. Neither needs anything installed.
+
+It is worth reading even if you never run this: the three subsectors come out
+with **identical multipliers**, and the page explains why that is a statement of
+what was not attempted rather than a result.
 
 **Four more, in `examples/`.** They are Python rather than a workbook, which
 makes them worth reading for a different reason: each one says in its docstring
@@ -983,6 +989,10 @@ asked or not, what the method is known to get wrong:
   6.9 % to 20.0 %
 - cross-hauling is not reproduced in any amount anyone chose; it is
   28.3 % of Catalonia's interregional trade
+- this is a SINGLE-REGION table: an impulse cannot leave it and come back.
+  Across 259 European regions that feedback is a median 11.7 % of the output
+  multiplier, and between 2.1 % and 41.5 % from the tenth percentile to the
+  ninetieth. Nothing in a region's own accounts says which end it sits at
 ```
 
 There is no flag to turn that off. The whole family is known to overstate how
@@ -998,10 +1008,26 @@ Catalan table, which is **not** redistributed here — `PROVENANCE.md` says why 
 so what this repository can verify about it is that the engine states it, not
 that it is true. That distinction is the reason it is phrased this way.
 
-**This is not a multi-region table.** It estimates one region at a time from a
-national table. The engine can hold an interregional table — sectors are
-(region, sector) pairs and the blocks slice out — but it does not build the
-trade between regions, and nothing here estimates it.
+**This is not a multi-region table, and the fourth line above says what that
+costs.** It estimates one region at a time from a national table. The engine can
+hold an interregional table — sectors are (region, sector) pairs and the blocks
+slice out — but it does not build the trade between regions, and nothing here
+estimates it.
+
+What it does now is **measure what leaving it out is worth**, which is the
+number you actually need in order to decide whether a single-region table is
+enough for your question. `validators/run_mrio_spillovers.py` takes the
+Leontief inverse of a 272-region European table and splits every output
+multiplier into the part that stays inside the region and the part that travels
+out and comes back. The second part is exactly what this method cannot contain.
+
+**Read the spread, not the median.** At the tenth percentile a single-region
+table is nearly complete and 11.7 % would badly overstate your error; at the
+ninetieth it is missing two fifths of the answer and 11.7 % would badly
+understate it. **Nothing in a region's own accounts tells you which one you are
+holding.** If your question turns on the size of a multiplier rather than on its
+composition, that is the first thing to worry about — ahead of which member of
+the quotient family you picked, and ahead of delta.
 
 ---
 
