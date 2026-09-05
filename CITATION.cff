@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: "Roca Florido"
     given-names: "Alberto"
-    # orcid: "https://orcid.org/0000-0000-0000-0000"   # add yours and delete this line
+    orcid: "https://orcid.org/0000-0002-0159-6032"
 repository-code: "https://github.com/Albertuken/Quadrium"
 license: MIT
 version: 0.1.0
