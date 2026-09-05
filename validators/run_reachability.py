@@ -23,17 +23,27 @@ editing the record.
 
 WHAT IT FOUND, THE FIRST TIME IT WAS RUN
 ------------------------------------------
-284 functions, 262 entered, **22 never**. Acting on the two groups below
-took it to 269 and 15. They were not spread thin — they came
-in two groups, and each is a different kind of problem.
+284 functions, 262 entered, **22 never**. Acting on the two groups below took
+it to 269 and 15, and reading the remaining fifteen one by one took it to 281
+and **3**. They were not spread thin — they came in groups, and each is a
+different kind of problem.
 
 **Seven of `identities.py`'s eighteen.** That module implements the numbered
 accounting identities of the specification, with the printed citation attached
 to each result. `ID-01`, `ID-06`, `ID-07`, `ID-08`, `ID-10`, `ID-13` and
 `structural_zero_check` were called by nothing — while `run_ine_sut_identities.py`
 checked ID-07 and ID-08 **with its own two lines of arithmetic**, and printed no
-citation. The same identity defined twice, one of them by nobody. Wired on
-2026-09-04, and the citation now travels with the answer.
+citation. The same identity defined twice, one of them by nobody. ID-07 and
+ID-08 were wired on 2026-09-04, and the citation now travels with the answer.
+
+**And only those two.** This paragraph said "wired" of all seven and was true
+of two: `ID-06`, `ID-10`, `ID-13` and `structural_zero_check` were still
+entered by nothing five days later, and `run_structural_zeros.py` was still
+checking structural zeros with its own arithmetic beside an uncalled
+`structural_zero_check`. A summary written at the moment of acting outran what
+was done, which is the same failure the record itself guards against — so the
+four now have cases in `tests/test_engine.py`, asserted in both directions,
+and this file no longer reports a group when it means part of one.
 
 `ID-01` was deliberately NOT wired. This file's inline version goes through
 `SupplyUseTables.supply_at_purchasers()`, which articulates the valuation on
@@ -52,8 +62,38 @@ fill in a spreadsheet, run one command — had never been exercised through
 `cli.main` at all. The engine was always reached through `IOProject`, which is
 not what a user types. Covered on 2026-09-04.
 
-`_availability` is left uncovered on purpose: it queries Eurostat over the
-network, and a test that needs a fetch is a test that fails on a train.
+THE REMAINING FIFTEEN, READ ONE BY ONE
+----------------------------------------
+Twelve had no case and could have one, so they were given one on 2026-09-05:
+the four identities above; `intermediate_row_totals` and
+`intermediate_col_totals`, which are the same two numbers the intermediate
+matrix already sums to; `label_counts` and `level_of`; `reaggregate_vector`,
+the companion of a `reaggregate` that was covered; `SutEuroStep1.inconsistency`,
+which `run_sut_euro_austria.py` was subtracting by hand; and
+`IOProject.summary` with the `n_warnings` it reads — **what `cli.py` prints
+after every run**, so the files on disk were checked and the line on the screen
+was not.
+
+Three are declared instead, in the record's `classified`, because a case for
+them would be a worse thing than the gap:
+
+- `cli.py::_availability` and `catalogue.py::available_years` — `network`.
+  They query Eurostat, and a test that needs a fetch is a test that fails on a
+  train. `check.sh` runs offline on purpose.
+- `identities.py::id01_product_balance` — `second-api`. Its articulated form
+  goes through `SupplyUseTables.supply_at_purchasers()`, which articulates the
+  valuation on the object that owns it; routing a caller through the free
+  function would be a second duplication rather than the removal of one.
+
+**Not every unentered function should be called**, and saying which is which is
+the whole value of reading the list instead of counting it. What the check
+below enforces is not "nothing is unentered" but **nothing is unentered without
+a reason on file** — the same closure the refusal front reached at 176 of 177.
+
+The public tree carries seven more, all `no-fixture`: it does not publish the
+Catalan workbook, so `load_idescat_mioc` and the helpers it calls cannot be
+entered there. Same reason, and the same per-tree floor, as the IDESCAT
+refusals.
 
 Run:
     python3 validators/run_reachability.py
@@ -166,6 +206,30 @@ def main() -> int:
           f"%, of which {len(public_never)} are public. Every one is listed "
           f"above; a coverage figure with no list is a number nobody can act "
           f"on")
+
+    # THE CLOSURE THIS FRONT ACTUALLY REACHES. Not "nothing is unentered" --
+    # two of these need the network and one is a second API for something an
+    # object does better, and forcing a case for either would be worse than
+    # the gap. What can be held to is that no function sits unentered without
+    # a reason someone wrote down, which is where the refusal front closed
+    # too: 176 of 177, and the 177 declared.
+    classified = rec.get("classified", {})
+    mute = [k for k in never if k not in classified]
+    check("and every unentered function carries a reason, not just a name",
+          not mute,
+          f"{len(never)} unentered, {len(never) - len(mute)} declared in the "
+          f"record's `classified`"
+          + (f". WITHOUT A REASON: {', '.join(mute)} — give each one a case or "
+             f"a classification; a silent gap is the only kind this front "
+             f"cannot close" if mute else
+             f" ({', '.join(sorted(set(classified[k] for k in never)))})"))
+
+    gone = sorted(k for k in classified if k not in never)
+    check("and no reason outlives the gap it explained", not gone,
+          f"{len(gone)} classified and now entered: {', '.join(gone[:4])}. "
+          f"Remove them from `classified` — a reason for a gap that closed "
+          f"reads as a gap that is still open"
+          if gone else "none")
 
     print("=" * 78)
     if FAIL:

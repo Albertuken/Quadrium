@@ -267,5 +267,16 @@
  "floor": 262,
  "taken": "2026-09-04",
  "_note": "Which of the functions the engine defines anything in the suite has ever ENTERED. Taken by library/tools/sweep_reachability.py, which installs a sys.setprofile hook through sitecustomize and runs every validator and the unit tests as separate processes. Keyed by file.py::name; Python 3.10 has no co_qualname, so same-named methods in one file share a key and the collision is recorded on the entry.",
- "classified": {}
+ "classified": {
+  "catalogue.py::available_years": "network",
+  "cli.py::_availability": "network",
+  "identities.py::id01_product_balance": "second-api",
+  "io_loader.py::_mioc_year": "no-fixture",
+  "io_loader.py::clean": "no-fixture",
+  "io_loader.py::load_idescat_mioc": "no-fixture",
+  "io_loader.py::num": "no-fixture",
+  "models.py::_as_printed": "no-fixture",
+  "models.py::_norm": "no-fixture",
+  "models.py::key_from_report": "no-fixture"
+ }
 }

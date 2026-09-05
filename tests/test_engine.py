@@ -837,6 +837,28 @@ def test_project_folder_is_reproducible():
               "the derived floor and the residue of genuine choice, rather "
               "than a pointer to a register a reader may not hold")
 
+        # WHAT THE USER ACTUALLY SEES. `cli.py` prints `project.summary()`
+        # after every run, and the reachability sweep found that neither it
+        # nor `ValidationReport.n_warnings`, which it reads, had ever been
+        # entered -- the files on disk were checked and the line on the screen
+        # was not.
+        text = proj.summary()
+        check("the run summary names every scenario that ran and every one "
+              "that was rejected, which is all a user sees on stdout",
+              all(r.scenario_id in text for r in proj.results)
+              and all(i["scenario_id"] in text
+                      for i in proj.meta.get("infeasible", []))
+              and "REJECTED" in text,
+              f"{len(proj.results)} ran, "
+              f"{len(proj.meta.get('infeasible', []))} rejected, "
+              f"{len(text.splitlines())} lines")
+        check("and it carries each scenario's warning count, which comes from "
+              "the report rather than from the folder",
+              all(f"{r.report.n_warnings} warn" in text
+                  for r in proj.results),
+              ", ".join(f"{r.scenario_id}: {r.report.n_warnings}"
+                        for r in proj.results))
+
 
 def test_label_mask_beats_the_naive_comparison():
     """`prov == CellLabel.X` on an object array is silently all-False.
@@ -4895,3 +4917,161 @@ def test_the_COMMANDS_THE_GUIDE_DOCUMENTS_actually_run():
               "`_describe` prints the table, the splits and the scenarios; a "
               "check that only says 'valid' tells a user nothing about what "
               "it validated")
+
+
+def test_the_functions_the_REACHABILITY_SWEEP_found_UNCALLED():
+    """Ten functions the engine defines that nothing had ever entered.
+
+    `library/tools/sweep_reachability.py` counts 284 functions and found 22
+    that no validator and no test had ever called. Wiring `identities.py`'s
+    ID-07 and ID-08 into `run_ine_sut_identities.py` and six of `cli.py`'s took
+    it to 15; this covers ten of those fifteen.
+
+    Every case asserts what the function is FOR, in both directions where it
+    has two. A smoke call would move the number and prove nothing, which is
+    exactly the failure `run_refusal_coverage.py` exists to stop: a count that
+    rises without a claim behind it is not coverage.
+
+    Three of the four identities below were reported as wired on 2026-09-04 and
+    were not -- `run_ine_sut_identities.py` wired ID-07 and ID-08 only, and
+    `run_structural_zeros.py` still checks structural zeros with its own
+    arithmetic while `identities.structural_zero_check` sits uncalled. The same
+    duplication, found again by re-reading the list instead of the summary.
+
+    The five left uncalled are declared in `data/_reachability.json` with their
+    reasons: two need the network, one is a second API for something an object
+    does better, and two are the run-summary path of `quadrium run`.
+    """
+    from quadrium.classification import NACE_REV_2_1, NATIONAL_NACE
+    from quadrium.identities import (id06_gdp_three_approaches,
+                                     id10_cif_fob_sums_to_zero,
+                                     id13_value_added_preserved,
+                                     structural_zero_check)
+    from quadrium.models import CellLabel, count_label, label_counts
+    from quadrium.reaggregation import reaggregate_vector
+    from quadrium.sut_euro import SutEuroStep1
+
+    # ---- ID-06: the three approaches converge only after balancing ---------
+    agree = id06_gdp_three_approaches(1_000_000.0, 1_000_000.0, 1_000_000.0)
+    apart = id06_gdp_three_approaches(1_000_000.0, 1_002_500.0)
+    check("ID-06 passes when the three approaches give one GDP and fails when "
+          "two of them differ",
+          agree.passed and not apart.passed,
+          f"agreeing {agree.max_abs_dev:.3g}, differing "
+          f"{apart.max_abs_dev:,.0f} — {agree.citation}")
+    check("and the citation travels with the answer, which is why the free "
+          "function exists rather than two lines of arithmetic",
+          "9.16" in agree.citation, agree.citation)
+
+    # ---- ID-10: the CIF/FOB adjustment sums to zero ------------------------
+    zero = id10_cif_fob_sums_to_zero(-4_820.0, 4_820.0)
+    nonzero = id10_cif_fob_sums_to_zero(-4_820.0, 4_000.0)
+    check("ID-10 accepts a CIF/FOB adjustment whose two entries cancel and "
+          "refuses one that does not",
+          zero.passed and not nonzero.passed,
+          f"sum 0 against {abs(-4_820.0 + 4_000.0):,.0f} — {zero.citation}")
+    disagree = id10_cif_fob_sums_to_zero(-4_820.0, 4_820.0,
+                                         total_imports_cif=500_000.0,
+                                         total_imports_fob=495_180.0)
+    check("and it catches the second half of the identity too: the entries "
+          "cancel while the two import totals disagree",
+          not disagree.passed and disagree.n_violations >= 1,
+          f"{disagree.n_violations} violation(s), worst "
+          f"{disagree.max_abs_dev:,.0f}")
+
+    # ---- ID-13: what a transformation may and may not move -----------------
+    W = np.array([[150.0, 620.0, 140.0], [186.0, 452.0, 82.0]])
+    moved_rows = np.array([[160.0, 610.0, 140.0], [176.0, 462.0, 82.0]])
+    check("ID-13 industry x industry requires the value-added block itself to "
+          "be unaltered, so a block that moved fails",
+          id13_value_added_preserved(W, W, "IOT_IXI").passed
+          and not id13_value_added_preserved(W, moved_rows, "IOT_IXI").passed,
+          "CORE_005 par. 36.50, p. 1017 — only composition changes, and it "
+          "changes by moving entries between ROWS of the intermediate matrix")
+    check("ID-13 product x product requires only the TOTAL to survive, so the "
+          "same moved block passes and one that gained value does not",
+          id13_value_added_preserved(W, moved_rows, "IOT_PXP").passed
+          and not id13_value_added_preserved(W, moved_rows + 500.0,
+                                             "IOT_PXP").passed,
+          f"total {W.sum():,.0f} either way — CORE_005 par. 36.49, p. 1017")
+
+    # ---- the structural zero, which is not an identity but is required -----
+    cite = "CORE_003 par. 15.95, p. 495"
+    empty = structural_zero_check(np.zeros((4, 3)), "use table, lower right",
+                                  cite)
+    dirty = np.zeros((4, 3))
+    dirty[2, 1] = -37.5
+    filled = structural_zero_check(dirty, "use table, lower right", cite)
+    check("a block that must be zero by construction passes empty and fails "
+          "with one cell in it, and the failure names how far off it is",
+          empty.passed and not filled.passed
+          and abs(filled.max_abs_dev - 37.5) < 1e-9,
+          f"worst {filled.max_abs_dev} in {filled.n_violations} cell(s) — "
+          f"{filled.citation}")
+
+    # ---- the two intermediate margins of an IOTable ------------------------
+    t = build_table()
+    row = t.intermediate_row_totals()
+    col = t.intermediate_col_totals()
+    check("intermediate sales counted as output less final demand equal the "
+          "intermediate matrix's own row sums",
+          float(np.abs(row - t.Z.sum(1)).max()) < 1e-9,
+          f"max deviation {float(np.abs(row - t.Z.sum(1)).max()):.2e} over "
+          f"{t.n} sectors")
+    check("and intermediate purchases counted as output less value added "
+          "equal its column sums — the same two numbers reached two ways, "
+          "which is the whole content of the pair",
+          float(np.abs(col - t.Z.sum(0)).max()) < 1e-9,
+          f"max deviation {float(np.abs(col - t.Z.sum(0)).max()):.2e}")
+
+    # ---- label_counts, and the numpy trap its helper was written for -------
+    prov = np.array([[CellLabel.OBSERVED.value, CellLabel.OBSERVED.value],
+                     [CellLabel.PROXY_ESTIMATED.value,
+                      CellLabel.BALANCED_ADJUSTMENT.value]], dtype=object)
+    counts = label_counts(prov)
+    check("label_counts reports every label the vocabulary defines, counts "
+          "summing to the cells of the array",
+          set(counts) == set(CellLabel) and sum(counts.values()) == prov.size,
+          f"{ {k.name: v for k, v in counts.items() if v} } over "
+          f"{prov.size} cells")
+    check("and it agrees with count_label label by label, which is the "
+          "comparison that beats `provenance == label`",
+          all(counts[lbl] == count_label(prov, lbl) for lbl in CellLabel),
+          "a str-Enum member stringifies as 'CellLabel.OBSERVED' on 3.10, so "
+          "the naive array comparison counts zero everywhere")
+
+    # ---- what level of the classification a code sits at -------------------
+    check("level_of reads the level off the digit count, section letter and "
+          "dots included, and returns None for what is not a code",
+          (NACE_REV_2_1.level_of("56") == "division"
+           and NACE_REV_2_1.level_of("56.1") == "group"
+           and NACE_REV_2_1.level_of("C5610") == "class"
+           and NACE_REV_2_1.level_of("Accommodation") is None),
+          "CORE_030 p. 13 — the section letter is not part of the numeric code")
+    check("and a national version reaches the fifth digit NACE itself does "
+          "not have",
+          NATIONAL_NACE.level_of("56101") == "national subclass"
+          and NACE_REV_2_1.level_of("56101") is None,
+          "CORE_030 p. 15 permits a fifth digit for national purposes "
+          "provided it still nests")
+
+    # ---- reaggregating a vector, the companion of reaggregate() ------------
+    mapping = [0, 1, 1, 1, 2]          # sector 1 was split into three
+    v = np.array([90.0, 12.0, 30.0, 8.0, 700.0])
+    back = reaggregate_vector(v, mapping, 3)
+    check("a split vector sums back to the original sectors exactly, and to "
+          "the same grand total",
+          np.allclose(back, [90.0, 50.0, 700.0])
+          and abs(back.sum() - v.sum()) < 1e-12,
+          f"{back.tolist()} from {len(v)} subsectors, total {back.sum():,.1f}")
+
+    # ---- the GDP disagreement SUT-EURO reports and does not repair ---------
+    step1 = SutEuroStep1(Ud=np.zeros((2, 2)), Um=np.zeros((2, 2)),
+                         tls=np.zeros(2), gva=np.zeros(2),
+                         gdp_supply_side=257_346.0, gdp_use_side=258_432.0)
+    check("step 1 of SUT-EURO reports the size of its own inconsistency, the "
+          "one UNH_18 ¶18.94, p. 576 prints and leaves standing",
+          abs(step1.inconsistency - 1_086.0) < 1e-9,
+          f"{step1.inconsistency:,.0f} between a use side of 258,432 and a "
+          f"supply side of 257,346 — the property existed and "
+          f"run_sut_euro_austria.py subtracted the two by hand instead")

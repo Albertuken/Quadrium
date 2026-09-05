@@ -3,7 +3,7 @@
   "description": "<p>An engine for building and manipulating supply-use and input-output systems: loading published tables from statistical offices, disaggregating sectors against proxy data, balancing with RAS and GRAS, transforming supply-use pairs into symmetric tables, projecting to a later year, and regionalising a national table with the location quotient family.</p><p>Every method is implemented against the paragraph and page of the manual that specifies it, and verified against that manual's own printed numbers. Every cell carries whether it was observed, estimated from a proxy or moved by the balancer, and that status survives the file boundary. Every result is printed together with the measured cost of the assumptions that produced it &mdash; figures obtained by running each method against tables where the answer is independently known.</p><p>The data files distributed with the software are official statistics published by Eurostat, the UK Office for National Statistics, the Spanish INE and the United Nations Statistics Division, each under its own reuse terms; see PROVENANCE.md. The MIT licence covers the software only.</p>",
   "creators": [
     {
-      "name": "Roca Florido, Alberto",
+      "name": "Roca-Florido, Alberto",
       "orcid": "0000-0002-0159-6032"
     }
   ],

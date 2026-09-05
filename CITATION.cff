@@ -3,7 +3,7 @@ title: "Quadrium: constructing supply-use and input-output systems, with the mea
 message: "If you use this software, please cite it using the metadata from this file."
 type: software
 authors:
-  - family-names: "Roca Florido"
+  - family-names: "Roca-Florido"
     given-names: "Alberto"
     orcid: "https://orcid.org/0000-0002-0159-6032"
 repository-code: "https://github.com/Albertuken/Quadrium"
