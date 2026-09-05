@@ -1037,8 +1037,12 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
         description="Trade among new subsectors is estimated by double "
                     "proportionality, damped on the diagonal by alpha.",
         applies_to="internal block",
-        source="MVP_0.1 §6.3 — project convention, no methodological source",
-        validated_by="pending analyst review", confidence=ProxyStrength.WEAK,
+        source="CORE_031 (Wolsky 1984, via Zhao 2014) eq. (14) at the "
+               "default alpha=1.0; a raised alpha is a project choice with "
+               "no source",
+        validated_by="library/validators/check_wolsky_internal_block.py "
+                     "reproduces eq. (14) to 5.6e-17 and eq. (15) to 0.0",
+        confidence=ProxyStrength.WEAK,
         impact_on_results="high — the only part of the table with no "
                           "observation behind it"))
 
@@ -1172,7 +1176,9 @@ def write_template(path: Path | str) -> Path:
            ["S2_profiled", "Differentiated input structures",
             "Subsectors buy different mixes.", None]],
           ["One row per scenario. Leave internal_block_alpha blank for the",
-           "default 0.5 (MVP_0.1 §6.3 — a project convention, not a source).",
+           "default 1.0 — CORE_031 eq. (14), the outer product of the",
+           "weights, which conserves the parent cell exactly. It was 0.5",
+           "until v1.12, on an intuition measurement showed was backwards.",
            "Two or more scenarios let you see how much the answer depends on",
            "your choices, which is the honest way to present it."])
 
