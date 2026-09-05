@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: "Quadrium: constructing supply-use and input-output systems, with the measured cost of each assumption"
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+authors:
+  - family-names: "Roca Florido"
+    given-names: "Alberto"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   # add yours and delete this line
+repository-code: "https://github.com/Albertuken/Quadrium"
+license: MIT
+version: 0.1.0
+abstract: >-
+  An engine for building and manipulating supply-use and input-output systems:
+  loading published tables from statistical offices, disaggregating sectors
+  against proxy data, balancing with RAS and GRAS, transforming supply-use
+  pairs into symmetric tables, projecting to a later year, and regionalising a
+  national table with the location quotient family. Every method is implemented
+  against the paragraph and page of the manual that specifies it, every cell
+  carries whether it was observed, estimated or adjusted, and every result is
+  printed together with the measured cost of the assumptions that produced it.
+keywords:
+  - input-output analysis
+  - supply-use tables
+  - regionalisation
+  - location quotient
+  - sector disaggregation
+  - reproducible research
