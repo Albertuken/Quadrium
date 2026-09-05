@@ -80,15 +80,13 @@ them would be a worse thing than the gap:
 - `cli.py::_availability` and `catalogue.py::available_years` — `network`.
   They query Eurostat, and a test that needs a fetch is a test that fails on a
   train. `check.sh` runs offline on purpose.
-- `identities.py::id01_product_balance` — `second-api`. Its articulated form
-  goes through `SupplyUseTables.supply_at_purchasers()`, which articulates the
-  valuation on the object that owns it; routing a caller through the free
-  function would be a second duplication rather than the removal of one.
+- `identities.py::id01_product_balance` — `second-api`, for the reason given
+  above: the object already articulates that valuation better.
 
-**Not every unentered function should be called**, and saying which is which is
-the whole value of reading the list instead of counting it. What the check
-below enforces is not "nothing is unentered" but **nothing is unentered without
-a reason on file** — the same closure the refusal front reached at 176 of 177.
+So what the check below enforces is not "nothing is unentered" but **nothing is
+unentered without a reason on file**, and equally that no reason outlives the
+gap it explained. That is the same closure the refusal front reached at 176 of
+177.
 
 The public tree carries seven more, all `no-fixture`: it does not publish the
 Catalan workbook, so `load_idescat_mioc` and the helpers it calls cannot be
