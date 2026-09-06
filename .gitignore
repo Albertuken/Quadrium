@@ -27,3 +27,23 @@ outputs/_scratch/
 # and the owner opens them, so these appear next to tracked data and read as
 # something to commit. One turned up in `data/ine/` on 2026-09-06.
 ~$*
+
+# The MRIO workbooks a reader downloads to reproduce anything computed on the
+# European system. `data/mrio/README.md` and the paper both say to put
+# MRIO_2018_272regions.xlsx, Final_demand_2018.xlsx and TAXSUB_VA_2018.xlsx in
+# this folder; that is 33 MB of somebody else's archive, and without these
+# lines `git status` invites them into a commit. Ignored BEFORE the first
+# download rather than after, which is the only order that works.
+#
+# The private tree has carried these since it first fetched the archive. This
+# one did not, which nobody noticed until 2026-09-06, when the six validators
+# that read the workbook shipped and the instructions to download it followed.
+#
+# Single `*` does not cross a directory separator, so `data/mrio/truth/` -- the
+# tracked 844 kB validation set, which holds .xlsx of its own -- is untouched.
+data/mrio/*.zip
+data/mrio/*.xlsx
+data/mrio/*.xlsb
+data/mrio/*.ods
+data/mrio/*.npz
+data/mrio/raw/
