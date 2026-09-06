@@ -9,6 +9,18 @@ authors:
 repository-code: "https://github.com/Albertuken/Quadrium"
 license: MIT
 version: 0.1.0
+date-released: 2026-09-05
+# The concept DOI. It always resolves to the latest version, which is what
+# a citation of the software should point at; the DOI of this particular
+# version is below.
+doi: 10.5281/zenodo.22345637
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22345637
+    description: "Concept DOI — resolves to the latest version"
+  - type: doi
+    value: 10.5281/zenodo.22345638
+    description: "Version 0.1.0"
 abstract: >-
   An engine for building and manipulating supply-use and input-output systems:
   loading published tables from statistical offices, disaggregating sectors
