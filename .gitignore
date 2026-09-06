@@ -20,3 +20,10 @@ venv/
 # Scratch fixtures the validators write and delete. Tracked by accident until
 # 2026-08-26, so every run of check.sh left six binary diffs in the tree.
 outputs/_scratch/
+
+# Excel's lock files. It writes `~$name.xlsx` beside a workbook while the
+# workbook is open and usually removes it on close, but not after a crash or a
+# force quit. This repository is mostly xlsx published by statistical offices
+# and the owner opens them, so these appear next to tracked data and read as
+# something to commit. One turned up in `data/ine/` on 2026-09-06.
+~$*
