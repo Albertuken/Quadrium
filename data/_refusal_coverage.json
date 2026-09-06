@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
- "taken": "2026-09-03",
- "n_sites": 177,
+ "taken": "2026-09-06",
+ "n_sites": 178,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -31,6 +31,7 @@
   "config.py::_load_declared_table::table_unbalanced must be 'refuse' (the default) or '",
   "config.py::_load_declared_table::table_unbalanced= applies only to table_kind 'ine_in",
   "config.py::_load_declared_table::the table could not be loaded:",
+  "config.py::_load_declared_table::the table could not be loaded: This table is known n",
   "config.py::_load_eurostat::--offline was given and is not cached yet. Either dr",
   "config.py::_load_eurostat::the Eurostat download failed: Nothing was written. T",
   "config.py::_load_eurostat_sut::--offline was given and is not cached yet. A supply-",
@@ -253,6 +254,7 @@
   "config.py::_load_declared_table::table_unbalanced must be 'refuse' (the default) or '": "workbook",
   "config.py::_load_declared_table::table_unbalanced= applies only to table_kind 'ine_in": "workbook",
   "config.py::_load_declared_table::the table could not be loaded:": "workbook",
+  "config.py::_load_declared_table::the table could not be loaded: This table is known n": "source",
   "config.py::_load_eurostat::--offline was given and is not cached yet. Either dr": "upstream",
   "config.py::_load_eurostat::the Eurostat download failed: Nothing was written. T": "upstream",
   "config.py::_load_eurostat_sut::--offline was given and is not cached yet. A supply-": "workbook",
@@ -405,5 +407,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 170
+ "floor": 171
 }

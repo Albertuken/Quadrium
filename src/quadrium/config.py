@@ -827,6 +827,29 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
     try:
         table = loaders[kind](table_path)
     except LoaderError as exc:
+        # A refusal that names the problem and not the remedy dead-ends the
+        # user, and this one had a remedy sitting in the sheet they already
+        # have open. The INE's interior table genuinely does not balance
+        # (OQ-D-04) and `table_unbalanced` exists for exactly that; until
+        # 2026-09-05 nothing said so, so the documented Spanish route stopped
+        # at the first command with no way forward. Named here rather than in
+        # the loader because the key is a WORKBOOK key: the loader is also
+        # called from Python, where the argument is already visible.
+        if (kind == "ine_interior" and unbalanced == "refuse"
+                and "does not balance" in str(exc)):
+            raise ConfigError(
+                f"the table could not be loaded:\n{exc}\n"
+                f"\nThis table is known not to balance, and it is not a "
+                f"defect in your copy: the INE publishes it that way for one "
+                f"product (OQ-D-04). You can carry the difference instead of "
+                f"stopping, by adding one row to the `project` sheet:\n"
+                f"\n    table_unbalanced    residual_column\n"
+                f"\nThat puts the difference in a labelled RESIDUAL column "
+                f"that travels into every report, so it is visible rather "
+                f"than absorbed into a cell that would read as observed. It "
+                f"is a disclosure, NOT a repair — the residual is computed "
+                f"here and the INE never published it. Leave the key off and "
+                f"this refusal is the right answer.") from None
         raise ConfigError(f"the table could not be loaded:\n{exc}") from None
     return table, table_path, kind
 

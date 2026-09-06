@@ -280,8 +280,32 @@ def test_the_spanish_table_is_reachable_from_a_workbook():
     except ConfigError as exc:
         check("the default still refuses the unbalanced table",
               "does not balance" in str(exc))
+        # A refusal that names the problem and not the remedy dead-ends the
+        # user, and this is the first command the Spanish route runs. Until
+        # 2026-09-05 the message stopped at "does not balance" while the key
+        # that carries it sat in the sheet already open in front of them.
+        check("and it names the key that carries the difference",
+              "table_unbalanced" in str(exc)
+              and "residual_column" in str(exc), str(exc)[-200:])
+        check("and says it is a disclosure rather than a repair",
+              "NOT a repair" in str(exc), str(exc)[-200:])
     else:
         check("the default still refuses the unbalanced table", False,
+              "it loaded")
+
+    # The remedy above is offered ONLY for the table it applies to. Every
+    # other load failure still comes through the general message, and adding
+    # the special case took the only test that reached the general one --
+    # which the refusal sweep caught the same day. A branch nothing reaches
+    # is a message nobody has read.
+    try:
+        build_config({**base, "table_kind": "uk_analytical"}, splits)
+    except ConfigError as exc:
+        check("a load failure of another kind gets the plain message",
+              "could not be loaded" in str(exc)
+              and "table_unbalanced" not in str(exc), str(exc)[:120])
+    else:
+        check("a load failure of another kind gets the plain message", False,
               "it loaded")
 
     try:
