@@ -41,9 +41,9 @@ you are holding, which is the same shape as the FLQ's delta — a parameter the
 data does not supply.
 
 By sector the pattern is the one theory expects and is worth recording because
-nothing here was tuned to produce it: finance `K` 27.8 %, professional services
-`M_N` 26.7 % and information `J` 23.0 % lead; industry `B-E` is lowest at
-7.3 %. Traded services reach furthest across regional borders.
+nothing here was tuned to produce it: finance `K` 28.6 %, professional services
+`M_N` 28.2 % and information `J` 25.0 % lead; industry `B-E` is lowest at
+7.5 %. Traded services reach furthest across regional borders.
 
 THIRTEEN REGIONS ARE ISLANDS, AND ONE OF THEM IS PARIS
 --------------------------------------------------------

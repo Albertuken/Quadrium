@@ -22,9 +22,14 @@ matches it.
 
 WHAT IT SHOWS
 ---------------
-    177 refusal sites of the engine's own types
-    176 reached by something in the suite
+    178 refusal sites of the engine's own types
+    177 reached by something in the suite, in the private tree
       1 never reached — named below, with its reason
+
+The public tree reaches 171 of the same 178, and the gap is by design
+rather than by omission: it does not ship the Catalan workbook, so the
+refusals only that fixture can provoke have nothing to provoke them.
+Each tree records its own floor for that reason.
 
 THE FRONT IS CLOSED, AND NOT BY REACHING EVERYTHING
 -----------------------------------------------------

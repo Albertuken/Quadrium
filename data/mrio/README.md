@@ -45,10 +45,23 @@ records the method used.
 **Here:** `truth/`, the validation set — 844 kB, the publishers' own bytes.
 
 **Not here:** the eleven `MRIO_YYYY_272regions.xlsx` workbooks, 33 MB each. They
-are re-obtainable from the URL above and the project gitignores them in both
-repositories. `run_mrio_axis_scale.py`, which uses the 2018 one, runs privately
-for that reason and is not in this repository — a validator that could not run
-was removed rather than left to pass vacuously.
+are re-obtainable from the URL above and neither repository tracks them. The
+licence would allow it; eleven 33 MB workbooks in git would not be worth it.
+
+**To reproduce anything that uses the 2018 workbook**, download `MRIO.zip` from
+the record above and put `MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx`
+and `TAXSUB_VA_2018.xlsx` in this folder. Six validators then run:
+`run_mrio_axis_scale`, `run_mrio_spillovers`, `run_spillover_predictability`,
+`run_mrio_side_join`, `run_mrio_nuts_join` and `run_mrio_real_output`. The first
+run reads the 33 MB sheet and caches it as `_mrio2018_cache.npz`; the rest are
+fast.
+
+`run_mrio_axis_scale.py` was **not** in this repository until 2026-09-06, on the
+rule that a validator which cannot run is removed rather than left to pass
+vacuously. The rule is right and it was applied to the wrong file: the other
+five import it, so with the workbook absent they returned early and with it
+present they died on a missing import. There was no state in which they worked.
+All six read the same workbook, so all six are here.
 
 ---
 

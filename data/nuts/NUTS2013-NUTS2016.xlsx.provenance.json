@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2013-NUTS2016.xlsx",
+  "final_url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2013-NUTS2016.xlsx",
+  "office": "Eurostat / European Commission",
+  "path": "data/nuts/NUTS2013-NUTS2016.xlsx",
+  "bytes": 373947,
+  "sha256": "1f1d7044cbbb41de54ad50414a60971e8c241a4239a5bc10e29eb7ea8a15f639",
+  "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "retrieved_at": "2026-09-03T21:45:42+00:00",
+  "note": "NUTS 2013 to NUTS 2016 correspondence, to join the MRIO block to its side files"
+}

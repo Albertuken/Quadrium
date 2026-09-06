@@ -52,11 +52,11 @@ At the default, the estimated block misses the published one by a median of
 **60.9 %**. It is comfortably the worst-estimated part of a split — the cell
 error over the whole touched cross is 41.6 % (`run_split_backtest.py`).
 
-    block error       vs multiplier error      r = +0.030
-    block weight      vs multiplier error      r = +0.277
+    block error       vs multiplier error      r = -0.031
+    block weight      vs multiplier error      r = +0.265
 
 **Essentially nothing.** How wrong the block is does not predict how wrong the
-answer is. Its weight in a subsector's own input column — median 8.9 %, from
+answer is. Its weight in a subsector's own input column — median 8.6 %, from
 0.0 % to 55.6 % — carries a little more signal, and not much.
 
 So "the weakest assumption in the result" is half right and misleading as

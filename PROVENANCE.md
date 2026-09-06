@@ -11,7 +11,7 @@ URL, retrieval date, size, hash, and what the file was fetched for.
 
 | Source | What | Reuse terms |
 |---|---|---|
-| **Eurostat** | `data/eurostat/` — supply, use, valuation and symmetric tables (`naio_10_*`), employment by industry (`nama_10_a64_e`), structural business statistics | Commission reuse policy: reuse permitted with attribution |
+| **Eurostat** | `data/eurostat/` — supply, use, valuation and symmetric tables (`naio_10_*`), employment by industry (`nama_10_a64_e`), structural business statistics; `data/nuts/` — the NUTS 2010→2013 and 2013→2016 correspondence tables | Commission reuse policy: reuse permitted with attribution |
 | **ONS (United Kingdom)** | `data/ons/`, `UK_IOAT_2023_domestic_ixi.xlsx` — the analytical input-output tables (six editions, 2019–2023) and the Blue Book supply-use tables, 1997–2023 | Open Government Licence v3.0, Crown copyright |
 | **INE (Spain)** | `data/ine/` — symmetric tables and supply-use tables, 2016–2022 | INE reuse conditions, attribution required |
 | **UNSD** | `data/unsd/` — the NACE↔ISIC correspondence | United Nations, attribution required |
@@ -50,18 +50,30 @@ copyright. The Catalan tables (IDESCAT) are not redistributed here because their
 reuse terms have not been read, which is the owner's call and not a technical
 one — so `run_regionalisation_crosshauling`, `run_idescat_catalonia`,
 `run_es_cat_bridge`, `run_charm_heterogeneity` and `run_flq_delta` run
-privately. And `run_mrio_axis_scale` reads a 33 MB workbook that neither
-repository tracks.
+privately.
 
 A third group is here and **says out loud that it cannot run**, which is a
 different answer from the two above and is stated rather than left to be
-inferred. `run_mrio_nuts_join`, `run_mrio_side_join`, `run_mrio_real_output`
-and `run_mrio_spillovers` all read the 33 MB European MRIO workbook that
-neither repository tracks, and the first of them also reads Eurostat's NUTS
-correspondence tables, which are open and are held privately because nothing
-public needs them. `run_reachability` reads a record taken by a tool that lives
-in the private tree. Each of them, run here, reports **which instrument it does
-not have** and exits without asserting anything.
+inferred. `run_mrio_axis_scale`, `run_mrio_nuts_join`, `run_mrio_side_join`,
+`run_mrio_real_output`, `run_mrio_spillovers` and
+`run_spillover_predictability` all read the 33 MB European MRIO workbook.
+Neither repository tracks it, and the reason is its size rather than its
+licence: it is CC BY 4.0 and could be redistributed, but the archive holds
+eleven such workbooks and git is the wrong place for them. It is one download
+away for anyone — Huang & Koutroumpis, Zenodo record 7875024 — and the URL,
+byte count and SHA-256 are in `data/mrio/_provenance.json`.
+With the workbook in `data/mrio/`, all six run and reproduce what they report.
+`run_reachability` reads a record taken by a tool that lives in the private
+tree. Each of them, run without its instrument, reports **which instrument it
+does not have** and exits without asserting anything.
+
+`run_mrio_axis_scale` was in the private group until 2026-09-06, on the
+reasoning that a validator with nothing to run against should be removed rather
+than shipped broken. The reasoning was sound and the file was the wrong one:
+five of the validators above import it, so the tree it was removed from had no
+state in which they worked — without the workbook they returned early, and with
+it they died on the missing import. All six read the same file, so all six
+ship.
 
 That is not the same as passing vacuously and the distinction is the point: a
 check that quietly returns success on evidence it never saw is the failure this

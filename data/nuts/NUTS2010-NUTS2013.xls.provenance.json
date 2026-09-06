@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS+2010+-+NUTS+2013.xls",
+  "final_url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS+2010+-+NUTS+2013.xls",
+  "office": "Eurostat / European Commission",
+  "path": "data/nuts/NUTS2010-NUTS2013.xls",
+  "bytes": 823296,
+  "sha256": "dd72ca303a21a4830041aa16cf427d57796543c91282a616680588ad20cb7e45",
+  "content_type": "application/vnd.ms-excel",
+  "retrieved_at": "2026-09-03T21:47:17+00:00",
+  "note": "NUTS 2010 to NUTS 2013 correspondence, to identify the vintage of the MRIO block's Greek codes"
+}
