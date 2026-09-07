@@ -289,12 +289,25 @@ def find(target: str, sources: list[Source]) -> list[dict]:
                         "label": s.labels.get(t, t), "container": None})
             continue
         if t in s.finer:
-            holders = [c for c in s.codes if _covers(c, t)]
+            holders = [c for c in s.codes if _inside(c, t)]
             out.append({"source": s, "verdict": "PUBLISHED_NOT_LOADED",
                         "code": t, "label": s.labels.get(t, t),
                         "container": holders[0] if holders else None})
             continue
-        holders = [c for c in s.codes if _covers(c, t)]
+        # `_inside` and not `_covers`, and the difference is a whole answer.
+        #
+        # `_covers` reads DIVISIONS, which is the level an input-output table
+        # publishes. A user does not ask at that level: they ask about C101,
+        # meat processing, or I561, restaurants. Asked for a NACE GROUP this
+        # matched nothing and the verdict came back ABSENT -- "no code in any
+        # BE table covers C101" -- while the Belgian table carries C10, which
+        # contains it and is exactly the sector to divide.
+        #
+        # `_inside` was written for precisely this, for the proxy search, and
+        # its own docstring explains the failure. It was not applied here. The
+        # fix existed one function away and the neighbouring call site kept the
+        # bug for as long as both have existed (2026-09-07).
+        holders = [c for c in s.codes if _inside(c, t)]
         if holders:
             # The finest container is the one no other container covers.
             finest = min(holders, key=lambda c: len(
@@ -577,3 +590,170 @@ def available_years(geo: str, cache_dir: Path | str,
     except OSError:
         pass
     return out
+
+
+# ---------------------------------------------------------------------------
+# Reading a proxy's actual numbers -- OQ-E-01
+# ---------------------------------------------------------------------------
+
+class ProxyValueError(Exception):
+    """A proxy cube that cannot be reduced to one number per sector."""
+
+
+def proxy_values(source: "Source", geo: str, year: int | None = None,
+                 measure: str | None = None) -> dict:
+    """One number per sector code, for a country and a year.
+
+    WHY THIS EXISTS
+    ----------------
+    `--find` already names the proxies that measure the parts of a sector, and
+    then leaves the analyst to go and get the numbers. That is the afternoon
+    this module was written to remove, and it was only half removed. `OQ-E-01`,
+    opened by the owner on 2026-09-06 in his own words -- he might not know
+    where to look, and a tool for people who do not know where to look has to
+    look for them.
+
+    WHAT IT REFUSES, AND THIS IS THE WHOLE DESIGN
+    -----------------------------------------------
+    A JSON-stat cube has more dimensions than sectors. `sbs_na_1a_se_r2` is
+    `freq x nace_r2 x indic_sb x geo x time`: eleven countries, three years and
+    an indicator. A key is one number per sector, so every other dimension has
+    to be pinned to one category.
+
+    `geo` and `time` are pinned by argument. **Anything else with more than one
+    category is refused by name**, because the alternative is summing across
+    it -- and summing employment over three years, or across two indicators
+    that measure different things, produces a number that looks like a
+    measurement and is not one. `_eurostat_source` does sum a code's cells that
+    way, deliberately, because it only asks whether a code carries data at all;
+    a value that will drive a split cannot be built the same way.
+
+    WHAT IT RETURNS
+    ----------------
+    `{"values": {code: float}, "pinned": {dim: category}, "year": int,
+      "label": str}`. Codes are bare, matching what the catalogue reports.
+    Raises `ProxyValueError` with the reason otherwise.
+    """
+    try:
+        doc = json.loads(Path(source.path).read_text())
+    except (ValueError, OSError) as exc:
+        raise ProxyValueError(f"{source.path.name} could not be read: {exc}")
+
+    ids, size, value = doc["id"], doc["size"], doc.get("value") or {}
+    pos = next((ids.index(k) for k in _SECTOR_DIMS if k in ids), None)
+    if pos is None:
+        raise ProxyValueError(
+            f"{source.source_id} has no sector dimension among "
+            f"{', '.join(ids)}, so it cannot be read as a key")
+
+    def cats(dim):
+        return doc["dimension"][dim]["category"]["index"]
+
+    # Pin every dimension but the sectors'.
+    pinned, offset_parts = {}, []
+    for i, dim in enumerate(ids):
+        if i == pos:
+            continue
+        index = cats(dim)
+        if dim == "geo":
+            want = geo.upper()
+            if want not in index:
+                raise ProxyValueError(
+                    f"{source.source_id} does not carry {want}. It has "
+                    f"{', '.join(sorted(index))}")
+            pinned[dim] = want
+        elif dim == "time":
+            years = sorted(index, key=lambda y: -int(y))
+            want = str(year) if year is not None else years[0]
+            if want not in index:
+                raise ProxyValueError(
+                    f"{source.source_id} has no {want}. It has "
+                    f"{', '.join(years)}")
+            pinned[dim] = want
+        elif len(index) == 1:
+            pinned[dim] = next(iter(index))
+        elif measure and measure.upper() in {k.upper() for k in index}:
+            pinned[dim] = next(k for k in index
+                               if k.upper() == measure.upper())
+        else:
+            # The refusal that matters. Named rather than summed, and it says
+            # what to do next: the alternative is adding employment to
+            # turnover, which produces a number that reads as one measurement
+            # and is none.
+            lab = doc["dimension"][dim]["category"].get("label", {})
+            shown = sorted(index)[:6]
+            listed = "; ".join(f"{k} — {lab.get(k, k)}"[:60] for k in shown)
+            raise ProxyValueError(
+                f"{source.source_id} carries {len(index)} categories of "
+                f"{dim!r} and this cannot choose between them. They are "
+                f"different measurements of the same sectors. Name one with "
+                f"--measure. The first few are: {listed}"
+                f"{'; …' if len(index) > 6 else ''}"
+                + (f" — {measure!r} is not among them." if measure else ""))
+        offset_parts.append((i, index[pinned[dim]]))
+
+    strides = [1] * len(size)
+    for i in range(len(size) - 2, -1, -1):
+        strides[i] = strides[i + 1] * size[i + 1]
+
+    base = sum(strides[i] * j for i, j in offset_parts)
+    sector_index = cats(ids[pos])
+    labels = doc["dimension"][ids[pos]]["category"].get("label", {})
+
+    out = {}
+    for code, j in sector_index.items():
+        v = value.get(str(base + strides[pos] * j))
+        if isinstance(v, (int, float)):
+            out[_bare(code)] = float(v)
+    if not out:
+        raise ProxyValueError(
+            f"{source.source_id} carries no value for {geo.upper()} in "
+            f"{pinned.get('time', '?')}. The cube lists the sectors and the "
+            f"cells are empty, which is a gap in the publisher's data and not "
+            f"in this file.")
+
+    # The label of whatever was pinned as the measurement, so a caller can
+    # print what the number IS instead of guessing. A cube's own `label` names
+    # the dataset, not the indicator, and the two are not the same sentence.
+    measure_label = ""
+    for dim, cat in pinned.items():
+        if dim in ("geo", "time", "freq"):
+            continue
+        lab = doc["dimension"][dim]["category"].get("label", {})
+        if lab.get(cat):
+            measure_label = str(lab[cat])
+            break
+
+    return {"values": out, "pinned": pinned,
+            "year": int(pinned.get("time", source.year) or 0),
+            "labels": {_bare(c): labels.get(c, c) for c in sector_index},
+            "measure_label": measure_label,
+            "label": str(doc.get("label") or source.dataset)}
+
+
+def tiling_only(codes) -> list[str]:
+    """The codes of one level: drop any code another code in the set contains.
+
+    A proxy cube lists every level it publishes. Asked for the parts of `C10`
+    the Belgian SBS file returns C101 AND C1011, C1012, C1013 -- the group and
+    the classes inside it -- and `C109` alongside `C1091` and `C1092`. Pasted
+    into a `keys` sheet as they come, those count the same euro twice, and the
+    shares that result are meaningless while looking perfectly ordinary.
+
+    `_inside` does not settle it: it was written to carry a NACE GROUP up to
+    its DIVISION, which is the step an input-output table needs, and it does
+    not know that `C1091` sits inside `C109`. The rule here is the
+    classification's own — a NACE code contains every code it prefixes — and it
+    is kept separate rather than folded into `_inside`, whose callers depend on
+    the narrower behaviour.
+
+    Keeps the COARSER level, because that is the one whose parts sum to the
+    parent: taking C1011 and dropping C102 would tile nothing.
+    """
+    bare = {_bare(c).upper(): c for c in codes}
+    keep = []
+    for b, original in bare.items():
+        if any(o != b and b.startswith(o) for o in bare):
+            continue
+        keep.append(original)
+    return sorted(keep)

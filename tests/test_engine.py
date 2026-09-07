@@ -4957,6 +4957,41 @@ def test_the_COMMANDS_THE_GUIDE_DOCUMENTS_actually_run():
           "a user told only that their own country cannot split I55 learns "
           "nothing about whether the split is meaningful")
 
+    # ---- OQ-E-01: it hands over the numbers, not the name of the file.
+    #
+    # `C101` is a NACE GROUP, and until 2026-09-07 asking about one answered
+    # "none" for every country: the holder search read DIVISIONS, which is the
+    # level a table publishes and not the level a user asks at. Belgium's table
+    # carried `C10` the whole time.
+    code, out, err = run(["--find", "C101", "--geo", "BE", "--offline"])
+    check("a NACE group finds the division that carries it",
+          code == 0 and "C10" in out and "split" in out.lower(),
+          f"exit {code} — this said 'none' while BE's table held C10")
+    check("and a cube with many indicators refuses to choose one",
+          "--measure" in out,
+          "48 indicators measure the same sectors; adding them up would give "
+          "a figure that reads as a measurement and is none")
+
+    code, out, err = run(["--find", "C101", "--geo", "BE", "--offline",
+                          "--measure", "AV_MEUR"])
+    check("and with one named it prints the keys rows, filled in",
+          code == 0 and "new_sector_code" in out and "C102" in out,
+          f"exit {code} — the afternoon --find exists to remove was only half "
+          f"removed while it named the file and left the numbers in it")
+    # Scoped to the ROWS. The line above them lists every code the cube
+    # carries, C1011 included, and that listing is the honest inventory --
+    # what must not contain both levels is the block a user pastes.
+    rows = out[out.find("new_sector_code"):]
+    rows = rows[:rows.find("source:")]
+    check("at ONE level, so the same euro is not counted twice",
+          "C1011" not in rows and "C1091" not in rows and "C102" in rows,
+          "the cube lists C101 AND C1011-C1013; pasted together they overlap "
+          "and the shares look perfectly ordinary")
+    check("and it prints what the number IS rather than guessing",
+          "Value added" in out,
+          "the first version asserted 'a count of ENTERPRISES' over a column "
+          "of value added in millions of euro")
+
     # ---- the route the guide opens with, through the command the guide names
     example = ROOT / "configs" / "ejemplo.xlsx"
     check("the shipped example workbook is where the guide says", example.exists(),

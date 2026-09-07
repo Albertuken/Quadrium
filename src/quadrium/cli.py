@@ -212,12 +212,80 @@ def _catalogue(args) -> int:
                   f"of `{a['best']['container']}`. They cover one")
             print(f"        piece of it and say nothing about the rest, so "
                   f"they cannot drive this split.")
+            continue
+        # OQ-E-01. The numbers, not just the name of the file that has them.
+        # Only for a proxy that TILES the sector -- printing rows a user can
+        # paste for a key the engine would then refuse is worse than printing
+        # nothing, and this module already knows which is which.
+        _print_key_rows(pr, args.geo.strip().upper(),
+                        getattr(args, "measure", None))
     if a.get("proxies"):
         print("\n  A proxy is a candidate, not a recommendation. Whether "
               "employment is the\n  right key is a judgement about the "
               "sectors — two subsectors share a\n  headcount far more evenly "
               "than they share an output.")
     return 0
+
+
+def _print_key_rows(pr, geo: str, measure: str | None = None) -> None:
+    """The `keys` sheet, filled in, for a proxy that tiles the sector.
+
+    WHY THE ROWS AND NOT A FILE
+    -----------------------------
+    Because the user has to see the numbers before they use them. Writing the
+    workbook directly would put a figure behind a split without anyone having
+    read it, and the population question -- whether the proxy counts the same
+    objects the table does -- is exactly what no cube can answer and every
+    analyst must. Spanish product 36 is the standing proof: the survey counts
+    ENTERPRISES classified to a NACE code, the table counts PRODUCT, and the
+    conceptually closest key is 40.8 % out because of it.
+
+    So this prints what to paste, with the source string already written, and
+    stops there.
+    """
+    from quadrium.catalogue import ProxyValueError, proxy_values
+    try:
+        got = proxy_values(pr["source"], geo, measure=measure)
+    except ProxyValueError as exc:
+        print(f"      — its numbers cannot be read as a key: {exc}")
+        return
+
+    vals = {c: v for c, v in got["values"].items() if c in pr["parts"]}
+
+    # ONE LEVEL, NOT EVERY LEVEL. `parts` is every code inside the container,
+    # so for `C10` it holds C101 AND C1011, C1012, C1013 -- the group and the
+    # classes inside it. Pasted as a key those would count the same euro twice
+    # and the shares would be meaningless while looking perfectly ordinary.
+    # Keep only the codes no other code in the set contains.
+    from quadrium.catalogue import tiling_only
+    vals = {c: vals[c] for c in tiling_only(vals)}
+
+    if len(vals) < 2:
+        print(f"      — it carries {len(vals)} of these sectors for {geo}, "
+              f"which is not a split.")
+        return
+
+    # The measure's OWN label, never a guess about what it counts. The first
+    # version of this said "a count of ENTERPRISES" whatever was asked for,
+    # and printed it over value added in millions of euro.
+    what = got["measure_label"] or got["label"]
+    src = f"Eurostat {pr['source'].dataset}, {got['label'][:60]}"
+    print(f"      and here are its numbers for {geo} in {got['year']} — "
+          f"paste into the `keys` sheet:")
+    print()
+    print(f"        {'key_id':10s} {'new_sector_code':16s} {'value':>14s} "
+          f"{'source_year':>12s} {'strength':>9s}")
+    kid = f"k_{pr['source'].dataset.split('_')[0]}"[:10]
+    for code, v in sorted(vals.items()):
+        print(f"        {kid:10s} {code:16s} {v:14,.0f} "
+              f"{got['year']:>12d} {'medium':>9s}")
+    print(f"\n        source: {src}")
+    print(f"        measures: {what}")
+    print(f"        pinned:  {', '.join(f'{k}={v}' for k, v in got['pinned'].items())}")
+    print("\n      Read them before you use them. This measures enterprises "
+          "classified\n      to a NACE code; your table may count PRODUCT, "
+          "which is a different\n      population. On Spanish product 36 that "
+          "difference alone put the\n      best-matching proxy 40.8 % out.")
 
 
 def _availability(args, a) -> None:
@@ -422,6 +490,11 @@ def main(argv=None) -> int:
                     help="the .xlsx configuration workbook")
     ap.add_argument("--template", type=Path, metavar="PATH",
                     help="write a blank workbook to PATH and exit")
+    ap.add_argument("--measure", metavar="CODE",
+                    help="which measurement of a proxy cube to read, when it "
+                         "carries several — employment, turnover, wages. "
+                         "`--find` names the ones it holds when it needs "
+                         "telling.")
     ap.add_argument("--key-alternatives", action="store_true",
                     help="re-run each split under every other registered "
                          "allocation key and report what came out. Costs one "

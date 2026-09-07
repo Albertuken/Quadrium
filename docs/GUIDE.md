@@ -71,6 +71,36 @@ If nothing for your country is on disk, it asks Eurostat which years that
 country actually publishes — per dataset, cached afterwards — and prints the
 configuration rows to paste.
 
+**And where a source measures the parts, it gives you the numbers.** Not the
+name of a file to go and find — the `keys` rows, filled in, ready to paste:
+
+```
+      A key that measures its parts:
+          eurostat:sbs_ovw_act:BE:2022
+
+          key_id     new_sector_code           value  source_year  strength
+          k_sbs      C101                      1,111         2022    medium
+          k_sbs      C102                         97         2022    medium
+          …
+          measures: Value added - million euro
+          pinned:   freq=A, indic_sbs=AV_MEUR, geo=BE, time=2022
+```
+
+Two things about that.
+
+**Some cubes measure the same sectors many ways** — `sbs_ovw_act` carries 48
+indicators — and one number per sector is what a key is. It refuses to choose
+and lists what it holds; name one with `--measure AV_MEUR`. It will not add
+employment to turnover to make a single figure, because the result would read
+as a measurement and be none.
+
+**Read the numbers before you use them.** A business-statistics cube counts
+ENTERPRISES classified to a NACE code; your table may count PRODUCT. That is a
+different population, and on Spanish product 36 the difference alone put the
+best-matching proxy 40.8 % out — measured in
+`validators/run_key_alternatives.py`. No API can tell you this; the
+classification notes can.
+
 **And it tells you whether it loads.** Every country's newest table of each kind
 was loaded once and the result recorded, so `--find` names the verdict rather
 than warning you in general terms:
