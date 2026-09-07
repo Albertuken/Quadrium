@@ -422,6 +422,11 @@ def main(argv=None) -> int:
                     help="the .xlsx configuration workbook")
     ap.add_argument("--template", type=Path, metavar="PATH",
                     help="write a blank workbook to PATH and exit")
+    ap.add_argument("--key-alternatives", action="store_true",
+                    help="re-run each split under every other registered "
+                         "allocation key and report what came out. Costs one "
+                         "full run per key. Also settable in the workbook: "
+                         "`key_alternatives  yes` in the `project` sheet.")
     ap.add_argument("--check", action="store_true",
                     help="validate the configuration and the table, then stop")
     ap.add_argument("--outputs", type=Path, default=Path("outputs"),
@@ -584,7 +589,8 @@ def main(argv=None) -> int:
         title=cfg["title"], source_file=cfg["source_file"], root=args.outputs,
         preamble=cfg["notes"] or "")
     try:
-        project.run().write()
+        project.run(key_alternatives=(args.key_alternatives
+                                      or cfg.get("key_alternatives", False))).write()
     except ScenarioInfeasible as exc:
         print(f"\nEvery scenario was rejected.\n\n{exc.detail}\n",
               file=sys.stderr)

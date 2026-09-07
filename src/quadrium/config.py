@@ -120,6 +120,21 @@ TABLE_KINDS = ("uk_analytical", "interchange",
 TEMPLATE_TABLE_PATH = "../UK_IOAT_2023_domestic_ixi.xlsx"
 
 
+def _yes(value) -> bool:
+    """A spreadsheet cell that means yes, in the forms a user actually types.
+
+    Excel turns some of these into a real bool and leaves others as text, and a
+    user writing `si` in a Spanish workbook means the same as one writing
+    `TRUE`. An unrecognised value is FALSE and not an error: this switch only
+    adds a section to the report, so a typo costs a missing section rather than
+    a refused run -- and the report says when the section is absent.
+    """
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in (
+        "yes", "y", "true", "1", "si", "sí", "on")
+
+
 class ConfigError(ValueError):
     """Something in the workbook is wrong, said in the analyst's terms."""
 
@@ -1104,6 +1119,11 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
             "table": table, "splits": splits, "scenarios": scenarios,
             "keys": keys, "ledger": ledger, "source_file": table_path,
             "notes": str(meta.get("notes") or ""),
+            # OQ-E-03. A workbook key rather than a flag alone, because the
+            # guide's first promise is that the spreadsheet can express
+            # everything: a feature reachable only from the command line breaks
+            # it, which is how regionalisation was found doing the same thing.
+            "key_alternatives": _yes(meta.get("key_alternatives")),
             "defaults_taken": defaults_taken}
 
 
@@ -1189,6 +1209,11 @@ def write_template(path: Path | str) -> Path:
             "# The first run downloads and records the URL and SHA-256; every",
             "# run after it reads those same bytes offline. --refresh forces a",
             "# new download and warns that your results may move.",
+            "# key_alternatives: yes to re-run each split under every OTHER",
+            "#             allocation key registered for it, and print what",
+            "#             each one would have given. Off by default: it",
+            "#             costs one full run per key. It never says which",
+            "#             is right -- see OQ-E-03.",
             "# table_unbalanced: refuse (default) or residual_column.",
             "#             Only for ine_interior, which does not balance for",
             "#             one product -- see OQ-D-04. Anywhere else it is an error.",

@@ -668,6 +668,98 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   "also was for the size of the error. See "
                   "`validators/run_key_bias.py` and `validators/run_real_key.py`.", ""]
 
+    # ------------------------------------------------------------------
+    # OQ-E-03. What the answer would have been under each of the other keys.
+    #
+    # The section above compares the SHARES an unused key implies. This one
+    # re-runs the split under it and reports what came out, which is what the
+    # user publishes. Present only when the run asked for it: it costs one full
+    # run per candidate key.
+    #
+    # It prints LEVELS first and multipliers second, and that order is not
+    # presentation. The multiplier is invariant to the key -- the weight
+    # cancels in `a_ij = Z_ij / X_j` -- so leading with it would show a column
+    # of zeros to a reader who would take them for agreement between sources.
+    # `validators/run_key_sensitivity.py` had warned about exactly that before
+    # this was written.
+    #
+    # It does NOT rank them, for the same reason the scenario ranking above was
+    # removed, and now with a second measurement behind it: on the Spanish case
+    # the key an economist would pick on conceptual grounds is +40.8 % out and
+    # the loosest conceptual match is the closest at -11.3 %.
+    # ------------------------------------------------------------------
+    alts = meta.get("key_alternatives")
+    if alts:
+        lines += ["### What the answer would have been under a different key", "",
+                  f"Each split re-run under every other allocation key "
+                  f"registered for it, on scenario "
+                  f"`{meta.get('key_alternatives_scenario')}`. Not a "
+                  f"perturbation: these are the proxies actually registered, "
+                  f"and each row is a complete run.", ""]
+        for code, a in sorted(alts.items()):
+            if not a["runs"]:
+                continue
+            new_codes = a["new_codes"]
+            lines += [f"**`{code}` into {', '.join(f'`{c}`' for c in new_codes)}**",
+                      "",
+                      "| Key | strength | "
+                      + " | ".join(f"{c} level" for c in new_codes)
+                      + " | vs the run |",
+                      "|---|---|" + "---:|" * (len(new_codes) + 1)]
+            driving = ", ".join(f"`{k}`" for k in a["driving"])
+            lines.append(
+                f"| {driving} — **the one used** | | "
+                + " | ".join(f"{x:,.1f}" for x in a["actual_levels"])
+                + " | — |")
+            for r in sorted(a["runs"], key=lambda r: r["level_gap"][0]):
+                lines.append(
+                    f"| `{r['key_id']}` | {r['strength']} | "
+                    + " | ".join(f"{x:,.1f}" for x in r["levels"])
+                    + f" | {_pct(r['level_gap'][0])} |")
+            lines += ["",
+                      f"Widest disagreement between any two runs: "
+                      f"**{a['level_spread_pct']:,.1f} %** of a subsector's "
+                      f"size."]
+
+            if a["multiplier_invariant_by_construction"]:
+                lines += ["",
+                          "> **The multipliers are identical in every one of "
+                          "those runs, and that is arithmetic rather than "
+                          "agreement.** This scenario carries no input "
+                          "profiles, so each subsector gets a scaled copy of "
+                          "the parent's input structure and the weight cancels "
+                          "in `a_ij = Z_ij / X_j`. A key cannot move a "
+                          "multiplier here whatever it says. Read the zero as "
+                          "*this choice does not touch that number*, never as "
+                          "*my sources agree*."]
+            else:
+                lines += ["",
+                          f"Multipliers move too, by up to "
+                          f"**{a['multiplier_spread_pct']:,.2f} %**, because "
+                          f"this scenario carries input profiles."]
+
+            for sk in a["skipped"]:
+                lines += ["",
+                          f"*`{sk['key_id']}` was not run: {sk['reason']}*"]
+
+            lines += ["",
+                      "> **Which of these is right cannot be decided from "
+                      "inside, and this engine will not pretend otherwise.** "
+                      "If a source existed that said which proxy to believe, "
+                      "the proxy would not be needed. The one split in this "
+                      "project where the answer is published settles what "
+                      "guessing costs: on Spanish product 36 the key with the "
+                      "best conceptual match — production against output — is "
+                      "**+40.8 %** from the truth, and employment, the "
+                      "loosest match of the seven, is the closest at "
+                      "**-11.3 %**. Ranking by plausibility would have picked "
+                      "one of the worst and called it founded. See "
+                      "`validators/run_key_alternatives.py`.",
+                      ">",
+                      "> **Choose one and say why.** The choice belongs in the "
+                      "assumption ledger with its argument, where a reader can "
+                      "disagree with it. `D_open_questions.md` OQ-E-03.", ""]
+
     # If the multipliers do not differ across subsectors, say why, loudly. An
     # economist reading "range 0.0 %" could otherwise take the result as robust,
     # when in fact the method cannot produce any other answer.

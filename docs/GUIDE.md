@@ -529,6 +529,29 @@ check this system can make on your split. If they disagree, you have learned
 something before publishing rather than after. With one key registered, the
 tool will tell you nothing can corroborate the result.
 
+**And you can see what each of them would have given.** Put
+`key_alternatives  yes` in the `project` sheet, or pass `--key-alternatives`,
+and every registered key is used to run the split again. The report prints what
+each one produced, side by side.
+
+It is off by default because it costs a full run per key: nine keys make the
+job nine times as long.
+
+Two things it deliberately does not do. It does not rank them — if a source
+existed that said which proxy to believe, you would not need a proxy. And it
+does not lead with the multipliers, because **the key cannot move a
+multiplier** unless you also give the subsectors different purchasing patterns
+in the `profiles` sheet: the weight scales `Z_ij` and `X_j` together and
+cancels in `a_ij = Z_ij / X_j`. A column of zeros there is arithmetic, not
+agreement between your sources. What the key does move, and enormously, is
+**how big each subsector is** — and that is what the table shows first.
+
+On the one split where the answer happens to be published — Spanish product 36,
+which the INE separates in its 110-product supply table — eight survey proxies
+span **423.8 %** in the size of accommodation, and the proxy an economist would
+pick on conceptual grounds is **+40.8 %** out while the loosest match of the
+eight is the closest.
+
 ### Sheet `scenarios` — how many answers you want
 
 | scenario_id | label | description | internal_block_alpha |
