@@ -64,8 +64,12 @@ away for anyone — Huang & Koutroumpis, Zenodo record 7875024 — and the URL,
 byte count and SHA-256 are in `data/mrio/_provenance.json`.
 With the workbook in `data/mrio/`, all six run and reproduce what they report.
 `run_reachability` reads a record taken by a tool that lives in the private
-tree. Each of them, run without its instrument, reports **which instrument it
-does not have** and exits without asserting anything.
+tree, and seven more — `run_automation_limits`, `run_core082_acquisition`,
+`run_eurostat_negatives`, `run_h_approach`, `run_topdown_procedure`,
+`run_type_ii_multipliers` and `run_tolerance_absent` — quote chapter text from
+the methodological library, which is the first group's reason applied to a file
+rather than to a validator: the chapter cannot travel, so here they read
+nothing.
 
 `run_mrio_axis_scale` was in the private group until 2026-09-06, on the
 reasoning that a validator with nothing to run against should be removed rather
@@ -75,8 +79,48 @@ state in which they worked — without the workbook they returned early, and wit
 it they died on the missing import. All six read the same file, so all six
 ship.
 
-That is not the same as passing vacuously and the distinction is the point: a
-check that quietly returns success on evidence it never saw is the failure this
-project keeps finding in itself, so each of these names the missing file and
-what it would have established. A validator that could not run and could not
-say so was removed instead — the rule for the two groups above.
+### And until 2026-09-06 they said it and then passed anyway
+
+The paragraph above used to end by claiming that each of them "exits without
+asserting anything", and that a check quietly returning success on evidence it
+never saw is the failure this project keeps finding in itself. The first half
+was true and the second was not honoured. They named the missing file, printed
+`All checks passed.`, and exited 0 — so `./check.sh` counted all thirteen among
+its passing validators, and its summary line could not distinguish a validator
+that had measured 2,720 region-sectors from one that had opened no file. The
+sentence describing the fault was three lines from the code committing it.
+
+The fix is that **a validator which read nothing exits 3**, prints
+`Nothing was checked: <file> is absent.` in place of a verdict, and is counted
+apart:
+
+```
+2 validator(s) CHECKED NOTHING. They are not counted as passing:
+    run_mrio_spillovers.py           data/mrio/MRIO_2018_272regions.xlsx is absent.
+    run_reachability.py              library/tools/sweep_reachability.py is absent.
+
+106 validators passed in 121s; 2 checked nothing.
+```
+
+Exit 3 is **not** a failure, and making it one would be the opposite error. A
+checkout that does not hold the workbook is the normal, supported state of this
+repository; `./check.sh` still exits 0 on it and CI runs on exactly such a tree.
+The distinction being drawn is between *checked and passed* and *did not
+check* — a statement about what evidence was in front of the validator, not
+about whether the code is correct.
+
+Two neighbouring cases are deliberately **not** in this group, because the
+difference is the whole point. `run_grit_cell_ranking` skips one source-text
+check when GRIT II's private extraction is absent and then runs its entire
+arithmetic battery on two economies instead of three: it measured something, so
+it passes and says how much it had. `run_mrio_nuts_join` has both shapes in one
+file — without the NUTS correspondence tables it checks nothing and exits 3,
+while with the tables and without the workbook it verifies the correspondence,
+reports that the composition against the archive is what it could not reach, and
+passes on the five checks it actually ran. A partial run is a result. A run with
+no inputs is not.
+
+A validator that could not run and could not say so is still removed instead —
+the rule for the two groups above, and the reason this third group exists at all
+is that these can say so, and can name the one download that would make them
+run.

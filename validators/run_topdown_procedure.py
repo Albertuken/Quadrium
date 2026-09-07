@@ -61,6 +61,12 @@ sys.path.insert(0, str(ROOT / "src"))
 EXTRACTED = ROOT / "library" / "extracted"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -72,8 +78,13 @@ def main() -> int:
     c14 = EXTRACTED / "CORE_014_OECD_EU2025_CH03_Compiling_Extended_SUTs.txt"
     c15 = EXTRACTED / "CORE_015_OECD_EU2025_CH04_Data_Scarce_ESUT_EIOT.txt"
     if not (c14.exists() and c15.exists()):
-        print("extraction(s) absent")
-        return 0
+        missing = ", ".join(p.name for p in (c14, c15) if not p.exists())
+        print(__doc__.strip().split("Run:")[0].rstrip())
+        print("\n" + "=" * 78)
+        print(f"    -- absent from this tree: {missing}")
+        print("\n" + "=" * 78)
+        print(f"Nothing was checked: library/extracted/{missing} is absent.")
+        return NOTHING_CHECKED
     t14 = re.sub(r"\s+", " ", c14.read_text())
     t15 = re.sub(r"\s+", " ", c15.read_text())
 

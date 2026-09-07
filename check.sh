@@ -17,9 +17,11 @@
 #     ./check.sh --tests    unit tests only
 #     ./check.sh --quick    skip the slowest validators
 #
-# Exit code 0 means every check passed. Anything else prints the output of the
-# ones that did not, in full, because a failure you have to go and look up is a
-# failure you will not look up.
+# Exit code 0 means every check that RAN passed. Anything else prints the
+# output of the ones that did not, in full, because a failure you have to go
+# and look up is a failure you will not look up. Validators whose evidence is
+# not in this tree are listed separately and counted apart from the passes --
+# they exit 0 as a suite and 3 as a validator, and the summary says how many.
 
 set -uo pipefail
 
@@ -134,11 +136,25 @@ fi
 # published, and each prints what it measured. Their output is kept and shown
 # only for the ones that fail: 70 passing validators are 4,000 lines nobody
 # reads, and one failing validator is the only thing that matters.
+#
+# THREE OUTCOMES, NOT TWO. A validator whose evidence is not in this tree --
+# the 33 MB MRIO workbook, an extracted chapter, a record taken by a private
+# tool -- exits 3 and is counted SKIPPED. Until 2026-09-06 it exited 0 having
+# measured nothing, so this line counted it among the validators that had, and
+# the output could not distinguish one that measured 2,720 regions from one
+# that opened no file. That is the vacuous success the project keeps finding
+# in itself, printed by the script written to catch it.
+#
+# Exit 3 is NOT a failure and must not become one: a tree that legitimately
+# does not hold the workbook still exits 0 here, and CI runs on such a tree.
+# The distinction is between "checked and passed" and "did not check", which
+# is a statement about evidence, not about correctness.
 echo
 echo "-- validators"
 LOGS=$(mktemp -d)
 trap 'rm -rf "$LOGS"' EXIT
 FAILED=()
+SKIPPED=()
 COUNT=0
 START=$(date +%s)
 
@@ -159,23 +175,41 @@ for v in "$VDIR"/*.py; do
         esac
     fi
     COUNT=$((COUNT + 1))
-    if $PY "$v" > "$LOGS/$name.log" 2>&1; then
-        printf '.'
-    else
-        printf 'F'
-        FAILED+=("$name")
-    fi
+    $PY "$v" > "$LOGS/$name.log" 2>&1
+    case $? in
+        0) printf '.' ;;
+        3) printf 's'; SKIPPED+=("$name") ;;
+        *) printf 'F'; FAILED+=("$name") ;;
+    esac
 done
 echo
 ELAPSED=$(( $(date +%s) - START ))
 
+PASSED=$(( COUNT - ${#FAILED[@]} - ${#SKIPPED[@]} ))
+
 echo
+# Named, not just counted. "3 checked nothing" tells you the summary is short
+# of what you expected; it does not tell you WHICH instrument is missing, and
+# the whole point of the skip is that the validator already knows and said so.
+if [ ${#SKIPPED[@]} -ne 0 ]; then
+    echo "${#SKIPPED[@]} validator(s) CHECKED NOTHING. They are not counted as passing:"
+    for name in "${SKIPPED[@]}"; do
+        why=$(sed -n 's/^Nothing was checked: //p' "$LOGS/$name.log" | tail -1)
+        printf '    %-32s %s\n' "$name" "$why"
+    done
+    echo
+fi
+
 if [ ${#FAILED[@]} -eq 0 ]; then
-    echo "$COUNT validators passed in ${ELAPSED}s."
+    if [ ${#SKIPPED[@]} -eq 0 ]; then
+        echo "$COUNT validators passed in ${ELAPSED}s."
+    else
+        echo "$PASSED validators passed in ${ELAPSED}s; ${#SKIPPED[@]} checked nothing."
+    fi
     exit 0
 fi
 
-echo "$COUNT validators ran in ${ELAPSED}s; ${#FAILED[@]} FAILED."
+echo "$COUNT validators ran in ${ELAPSED}s; $PASSED passed, ${#SKIPPED[@]} checked nothing, ${#FAILED[@]} FAILED."
 for name in "${FAILED[@]}"; do
     echo
     echo "================================================================"

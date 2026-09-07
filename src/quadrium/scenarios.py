@@ -11,11 +11,14 @@ No step mutates the original IOTable.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 
 from . import diagnostics
 from .balancing import balance, solver_margin_tolerance
-from .disaggregation import feasibility, split_sectors, targets
+from .disaggregation import (DisaggregationError, feasibility,
+                             split_sectors, targets)
 from .precision import assertable_tolerance
 from .models import (CellLabel, DisaggregationResult, IOTable, Scenario,
                      SplitSpec)
@@ -356,8 +359,17 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
 
 
 def run_project(table: IOTable, splits: list[SplitSpec],
-                scenarios: list[Scenario], keys: dict):
-    """Validate the original table, then run every scenario and compare."""
+                scenarios: list[Scenario], keys: dict,
+                *, key_alternatives_on: bool = False):
+    """Validate the original table, then run every scenario and compare.
+
+    `key_alternatives_on` re-runs the split under every other registered key
+    (`OQ-E-02`). It is OFF by default and the default is not timidity: it costs
+    one full run per candidate key, so a project with eight of them takes nine
+    times as long. Wired in unconditionally on 2026-09-06 it turned a four
+    minute validator suite into one still running at thirty-five, which is how
+    the cost stopped being an estimate.
+    """
     original = validate_original(table)
     if not original.passed:
         failed = [c.name for c in original.checks
@@ -392,7 +404,209 @@ def run_project(table: IOTable, splits: list[SplitSpec],
         {r.scenario_id: r.table.Z for r in results},
         results[0].table.sector_codes)
 
+    # OQ-E-02, and only when asked. Computed on the FIRST scenario alone, and
+    # said so rather than left to be inferred: what a key decides is the SIZE
+    # of each subsector, which is the same question in every scenario, and
+    # running it once per scenario would multiply an already large cost for an
+    # answer that barely moves.
+    alternatives = (key_alternatives(table, splits, scenarios[0], keys, results[0])
+                   if key_alternatives_on else None)
+
     return results, {"original_report": original, "original_table": table,
                      "comparison": comparison,
                      "driver": driver, "driver_spread": spread,
-                     "infeasible": infeasible}
+                     "infeasible": infeasible,
+                     "key_alternatives": alternatives,
+                     "key_alternatives_scenario": (results[0].scenario_id
+                                                  if alternatives else None)}
+
+
+# ---------------------------------------------------------------------------
+# Key sensitivity -- OQ-E-02
+# ---------------------------------------------------------------------------
+
+def key_alternatives(table: IOTable, splits: list[SplitSpec],
+                    scenario: Scenario, keys: dict,
+                    actual: DisaggregationResult) -> dict:
+    """What the split would have been under each of the other registered keys.
+
+    WHY THIS EXISTS
+    ----------------
+    `corroborate_keys` already compares the SHARES an unused key implies
+    against the shares the split produced. That is the composition, and it is
+    not what anybody publishes. What gets published is the multiplier, and
+    until now nothing in this engine said how far the multiplier moves when the
+    proxy changes.
+
+    The engine already treats this as the honest way to present a result --
+    across SCENARIOS. `compare_scenarios` computes the spread and the guide
+    calls it *"the honest measure of how much your answer depends on your own
+    choices"*. A choice of allocation key is a choice of exactly that kind, and
+    it was the one variable exempt from the treatment.
+
+    Opened as `OQ-E-02` by the owner on 2026-09-06, after running the engine
+    himself and finding that the workbook demands a proxy and never says where
+    to get one, still less what turns on the answer.
+
+    WHAT COUNTS AS A CANDIDATE, AND WHY THE RULE IS THE ENGINE'S OWN
+    -----------------------------------------------------------------
+    A key registered for exactly these subsectors, declared for the `output`
+    block, and not already driving. Driving the whole split from an output key
+    is not a new liberty: `_block_key` already falls back to the output key for
+    every block that has none of its own, so a candidate run is the engine's
+    existing default behaviour with one substitution.
+
+    WEAK KEYS ARE INCLUDED HERE, AND ARE EXCLUDED FROM CORROBORATION
+    -----------------------------------------------------------------
+    Deliberately different, and the difference is the point. `corroborate_keys`
+    skips a weak key because a number its own author calls a last resort cannot
+    be EVIDENCE about anything. This is not evidence: it is a statement of what
+    the answer would have been. A weak key that moves the multiplier by thirty
+    per cent is worth seeing precisely because it is weak, and its strength
+    travels with it so nothing here reads as endorsement.
+
+    WHAT THIS DOES NOT DO
+    ----------------------
+    It does not rank them, and `OQ-E-03` records why at length. Briefly: on
+    `examples/es_hosteleria.py`, the one split in this project where the INE
+    publishes the truth, the key an economist would pick on conceptual grounds
+    was the third worst of seven and the best was the loosest match of all. An
+    engine that ranked by plausibility would have chosen wrong and called it
+    founded.
+
+    THE MULTIPLIER DOES NOT MOVE, AND THE PROJECT ALREADY KNEW
+    -----------------------------------------------------------
+    The first run of this returned a multiplier spread of **0.00 %** across
+    eight keys whose weights for accommodation ran from 10.54 % to 55.19 % -- a
+    factor of five in the size of a subsector, and not one decimal of movement.
+
+    That is not news here. `library/validators/run_key_sensitivity.py` measured
+    it long before, on the UK fixture, and states it in as many words: the
+    weight scales `Z_ij` and `X_j` together and cancels in `a_ij = Z_ij / X_j`,
+    so *"a perturbation study would have reported a spread of zero and been
+    mistaken for a finding about robustness"*. That warning is why the levels
+    are carried here rather than the multiplier alone -- had it not existed the
+    zero would have shipped as a robustness figure.
+
+    So both are carried: `multiplier_gap`, which in an unprofiled split is zero
+    by construction and is labelled as such, and `level_gap` -- the subsector
+    OUTPUTS, which is what the key actually decides and where the disagreement
+    between proxies is enormous.
+
+    Returns `{sector_code: {...}}` per split, carrying for each candidate its
+    identity, weights, multipliers, subsector levels, and both gaps against the
+    run that actually happened.
+    """
+    by_code = {s["sector_code"]: s for s in actual.splits}
+    out: dict = {}
+
+    for spec in splits:
+        got = by_code.get(spec.sector_code)
+        if got is None:
+            continue
+        driving = set(got["keys_used"].values())
+        actual_mult = actual.diagnostics["multipliers"][got["positions"]]
+        actual_lvl = actual.table.X[got["positions"]]
+
+        runs, skipped = [], []
+        for key_id, key in sorted(keys.items()):
+            if key_id in driving:
+                continue
+            if list(key.new_sector_codes) != list(spec.new_codes):
+                continue                   # a key belonging to another split
+            if key.applies_to != "output":
+                # A key declared for one block cannot be made to drive the
+                # whole split without contradicting its author. Named rather
+                # than dropped, because a candidate that silently disappears
+                # is indistinguishable from one that was never registered.
+                skipped.append({
+                    "key_id": key_id, "applies_to": key.applies_to,
+                    "source": key.source,
+                    "reason": f"declared for the {key.applies_to!r} block "
+                              f"only, so it cannot drive the whole split"})
+                continue
+
+            variant = [
+                replace(s, keys_by_block={**s.keys_by_block, "output": key_id},
+                        va_row_keys={}, va_residual_row=None)
+                if s.sector_code == spec.sector_code else s
+                for s in splits]
+            try:
+                alt = run_scenario(table, variant, scenario, keys)
+            except (ScenarioInfeasible, DisaggregationError) as exc:
+                # A key that describes no possible economy is a finding about
+                # that key, and one the user should see BEFORE choosing it.
+                skipped.append({
+                    "key_id": key_id, "source": key.source,
+                    "reason": f"the split is infeasible under this key: {exc}"})
+                continue
+
+            alt_split = next(s for s in alt.splits
+                             if s["sector_code"] == spec.sector_code)
+            alt_mult = alt.diagnostics["multipliers"][alt_split["positions"]]
+            alt_lvl = alt.table.X[alt_split["positions"]]
+            gaps = [float((a - b) / b) if b else float("nan")
+                    for a, b in zip(alt_mult, actual_mult)]
+            lvl_gaps = [float((a - b) / b) if b else float("nan")
+                        for a, b in zip(alt_lvl, actual_lvl)]
+            finite = [abs(g) for g in gaps if g == g]
+            finite_lvl = [abs(g) for g in lvl_gaps if g == g]
+            runs.append({
+                "key_id": key_id,
+                "source": key.source,
+                "source_year": key.source_year,
+                "strength": getattr(key.strength, "value", str(key.strength)),
+                "weights": [float(w) for w in key.weights],
+                "multipliers": [float(m) for m in alt_mult],
+                "multiplier_gap": gaps,
+                "max_abs_multiplier_gap": max(finite) if finite else float("nan"),
+                "levels": [float(x) for x in alt_lvl],
+                "level_gap": lvl_gaps,
+                "max_abs_level_gap": (max(finite_lvl) if finite_lvl
+                                      else float("nan")),
+            })
+
+        out[spec.sector_code] = {
+            "new_codes": list(spec.new_codes),
+            "driving": sorted(driving),
+            "actual_multipliers": [float(m) for m in actual_mult],
+            "actual_levels": [float(x) for x in actual_lvl],
+            "runs": runs,
+            "skipped": skipped,
+            # The two numbers a reader wants first, and they answer different
+            # questions. Computed over the actual run AND every candidate,
+            # because the actual one is a candidate too -- it was just chosen
+            # first.
+            "multiplier_spread_pct": _spread_pct(
+                [[float(m) for m in actual_mult]]
+                + [r["multipliers"] for r in runs]),
+            "level_spread_pct": _spread_pct(
+                [[float(x) for x in actual_lvl]]
+                + [r["levels"] for r in runs]),
+            # Said here rather than left to the reader. An unprofiled split
+            # gives every subsector a scaled copy of the parent's input
+            # structure and the scale cancels out of a_ij = Z_ij / X_j, so the
+            # multiplier CANNOT move whatever the key says -- established by
+            # run_key_sensitivity.py, not by this. A zero there is arithmetic,
+            # not agreement, and a reader who takes it for agreement has been
+            # misled by this engine.
+            "multiplier_invariant_by_construction": not got.get("profiled"),
+        }
+    return out
+
+
+def _spread_pct(sets: list[list[float]]) -> float:
+    """Widest disagreement between any two runs, as a percentage.
+
+    Per subsector, the range across runs over the smallest of them; the worst
+    subsector is reported. Relative rather than absolute because a multiplier
+    of 1.3 and one of 2.6 are not comparable in points.
+    """
+    if len(sets) < 2:
+        return 0.0
+    worst = 0.0
+    for col in zip(*sets):
+        lo, hi = min(col), max(col)
+        if lo > 0:
+            worst = max(worst, (hi - lo) / lo * 100.0)
+    return worst

@@ -109,6 +109,12 @@ EXTRACTED = ROOT / "library" / "extracted"
 FIXTURE = ROOT / "UK_IOAT_2023_domestic_ixi.xlsx"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 # Box 20.4, Germany 2009, billion euros: the intermediate block and industry
 # output. Printed to whole units, which is the point of the bound below.
 DE_Z = np.array([
@@ -136,8 +142,10 @@ def main() -> int:
     # ---- the source says it ----------------------------------------------
     ch20 = EXTRACTED / "UNH_20_UN2018_CH20_Modelling_Applications_of_IOTs.txt"
     if not ch20.exists():
-        print("UNH_20 absent")
-        return 0
+        print(f"    -- {ch20.name} is not in this tree.")
+        print("\n" + "=" * 78)
+        print(f"Nothing was checked: library/extracted/{ch20.name} is absent.")
+        return NOTHING_CHECKED
     flat = re.sub(r"\s+", " ", ch20.read_text())
 
     check("¶20.90 makes the output multiplier the column sum of the Leontief "

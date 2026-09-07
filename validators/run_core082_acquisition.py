@@ -65,6 +65,12 @@ EXPECTED_SHA256 = "dd8597416a0f071a36c351dfef301101330257ff2f2b3dd2447c7baa56367
 
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -77,8 +83,10 @@ def main() -> int:
     print("\n" + "=" * 78)
 
     if not PDF.exists():
-        print("CORE_082 PDF absent")
-        return 0
+        print(f"    -- {PDF.name} is not in this tree.")
+        print("\n" + "=" * 78)
+        print(f"Nothing was checked: {PDF.name} is absent.")
+        return NOTHING_CHECKED
 
     digest = hashlib.sha256(PDF.read_bytes()).hexdigest()
     check("the acquired PDF matches the hash recorded at download time",

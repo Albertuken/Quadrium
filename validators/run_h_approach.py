@@ -58,6 +58,12 @@ SRC = (ROOT / "library" / "extracted"
 CARDS = ROOT / "library" / "specs" / "B_method_cards"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -67,8 +73,12 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 def main() -> int:
     if not SRC.exists():
-        print("extraction absent")
-        return 0
+        print(__doc__.strip().split("Run:")[0].rstrip())
+        print("\n" + "=" * 78)
+        print(f"    -- {SRC.name} is not in this tree.")
+        print("\n" + "=" * 78)
+        print(f"Nothing was checked: library/extracted/{SRC.name} is absent.")
+        return NOTHING_CHECKED
     text = re.sub(r"\s+", " ", SRC.read_text())
 
     print(__doc__.strip().split("Run:")[0].rstrip())

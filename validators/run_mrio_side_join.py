@@ -74,6 +74,12 @@ sys.path.insert(0, str(ROOT / "src"))
 MRIO = ROOT / "data" / "mrio"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass:
+# this validator opened no file and measured nothing, and a run that says
+# "All checks passed" on evidence it never saw is the fault the suite exists
+# to catch. It is not a failure -- a tree without the workbook still exits 0.
+NOTHING_CHECKED = 3
+
 COMPONENTS = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "EX")
 
 
@@ -92,8 +98,10 @@ def main() -> int:
             or (MRIO / "MRIO_2018_272regions.xlsx").exists()):
         print(f"    -- {MRIO.name}'s block is absent; it is 33 MB and "
               f"gitignored. The URL and SHA-256 are in _provenance.json.")
-        print("\n" + "=" * 78 + "\nAll checks passed.")
-        return 0
+        print("\n" + "=" * 78)
+        print("Nothing was checked: data/mrio/MRIO_2018_272regions.xlsx "
+              "is absent.")
+        return NOTHING_CHECKED
 
     spec = importlib.util.spec_from_file_location(
         "axis", ROOT / "validators" / "run_mrio_axis_scale.py")

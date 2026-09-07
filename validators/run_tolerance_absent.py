@@ -75,6 +75,12 @@ sys.path.insert(0, str(ROOT / "src"))
 EXTRACTED = ROOT / "library" / "extracted"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 # Recorded from the full 735-page PDF on 2026-08-11. The PDF is not kept in the
 # repository, so these are the measured counts and the checks below re-verify
 # what the extracted corpus can support.
@@ -105,8 +111,10 @@ def main() -> int:
             corpus.append(p)
 
     if not corpus:
-        print("no extractions")
-        return 0
+        print(f"    -- {EXTRACTED} holds none of the chapters this sweeps.")
+        print("\n" + "=" * 78)
+        print("Nothing was checked: library/extracted/ is absent.")
+        return NOTHING_CHECKED
 
     total_chars = 0
     hits: dict[str, list[str]] = {}

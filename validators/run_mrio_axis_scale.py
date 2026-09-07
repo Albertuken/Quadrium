@@ -97,6 +97,12 @@ VA = ROOT / "data" / "mrio" / "TAXSUB_VA_2018.xlsx"
 CACHE = ROOT / "data" / "mrio" / "_mrio2018_cache.npz"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass:
+# this validator opened no file and measured nothing, and a run that says
+# "All checks passed" on evidence it never saw is the fault the suite exists
+# to catch. It is not a failure -- a tree without the workbook still exits 0.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -159,7 +165,10 @@ def main() -> int:
     if not (MRIO.exists() or CACHE.exists()):
         print(f"    -- {MRIO.name} absent; it is 33 MB and gitignored. The URL")
         print( "       and SHA-256 of the archive are in data/mrio/_provenance.json.")
-        return 0
+        print("\n" + "=" * 78)
+        print("Nothing was checked: data/mrio/MRIO_2018_272regions.xlsx "
+              "is absent.")
+        return NOTHING_CHECKED
 
     Z, labels = load_Z()
     check("the interregional block loads at full size",

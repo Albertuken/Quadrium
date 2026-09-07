@@ -77,6 +77,12 @@ sys.path.insert(0, str(ROOT / "validators"))
 EXTRACTED = ROOT / "library" / "extracted"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass.
+# The source text this reads lives in `library/extracted/`, which does not
+# travel to the public tree -- so there this file opened nothing, measured
+# nothing, exited 0, and was counted among the validators that had.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -95,8 +101,11 @@ def main() -> int:
     eu = EXTRACTED / "CORE_021_Eurostat2008_CH08_Balancing_Supply_and_Use.txt"
     sna = EXTRACTED / "CORE_004_SNA2025_CH19_Summarizing_Integrating_Balancing.txt"
     if not (eu.exists() and sna.exists()):
-        print("extraction(s) absent")
-        return 0
+        missing = ", ".join(p.name for p in (eu, sna) if not p.exists())
+        print(f"    -- absent from this tree: {missing}")
+        print("\n" + "=" * 78)
+        print(f"Nothing was checked: library/extracted/{missing} is absent.")
+        return NOTHING_CHECKED
     eu_t, sna_t = _norm(eu), _norm(sna)
 
     check("Eurostat records that full automation was tried and abandoned",

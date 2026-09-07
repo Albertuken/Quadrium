@@ -110,6 +110,12 @@ TOOLS = ROOT / "library" / "tools"
 RECORD = ROOT / "data" / "_reachability.json"
 FAIL: list[str] = []
 
+# Exit code 3, not 0. `check.sh` counts it as SKIPPED rather than as a pass:
+# without the sweep tool this file can read the record but cannot compare it
+# against the code, which is the only check it makes. Not a failure -- the
+# public tree is meant to be in exactly that state.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -136,15 +142,25 @@ def main() -> int:
         # The same rule as the Catalan workbook and the NUTS tables: a tree
         # without the instrument reports that it cannot run the check, and
         # does not pretend the check passed on evidence it never saw.
+        #
+        # It said exactly that and then did it anyway. `check(..., True)` and
+        # "All checks passed" put an `ok` line and a pass in `check.sh`'s
+        # count, for a run in which the one thing this file exists to do --
+        # compare the static function list against the record -- did not
+        # happen. The record's contents are printed because they are worth
+        # reading; they are not a result, because nothing here tested them.
         rec = json.loads(RECORD.read_text())
-        check("the sweep tool is not in this tree, so the record is read here "
-              "and re-taken in the private one", True,
-              f"{rec.get('n_functions')} functions, "
+        print(f"    -- library/tools/sweep_reachability.py is not in this "
+              f"tree, so the")
+        print( "       record can be read here but not checked against the "
+               "code.")
+        print(f"       The record holds {rec.get('n_functions')} functions, "
               f"{len(rec.get('entered', []))} entered, taken "
-              f"{rec.get('taken')}. library/tools/sweep_reachability.py does "
-              f"not travel to the public tree")
-        print("\n" + "=" * 78 + "\nAll checks passed.")
-        return 0
+              f"{rec.get('taken')}.")
+        print("\n" + "=" * 78)
+        print("Nothing was checked: library/tools/sweep_reachability.py "
+              "is absent.")
+        return NOTHING_CHECKED
 
     src = ROOT / "src" / "quadrium"
     static = static_functions(src)

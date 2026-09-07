@@ -1113,6 +1113,53 @@ def test_a_sector_cannot_be_split_twice():
             check(f"rejects: {name}", False, "it was accepted")
 
 
+def test_the_template_run_unchanged_says_what_is_wrong():
+    """The commonest first failure there is, and it had no case.
+
+    On 2026-09-06 the first person to take the documented route without
+    having written the engine generated a template, ran it, and got:
+
+        table_path points at /Users/.../UK_IOAT_2023_domestic_ixi.xlsx,
+        which does not exist. Paths may be absolute or relative to the
+        configuration file.
+
+    Every word true, and it reads as a typo in a path the user chose. The
+    user chose nothing: the workbook still held the value `--template`
+    seeded, and that value resolves only inside a source checkout. Anyone
+    who installed the package cannot have that file.
+
+    The explanation existed -- in grey, at the foot of the sheet, put there
+    on the belief that it would be read before the command was run. It was
+    not, and a note that only works on someone who has already succeeded is
+    not a note. It is said in the refusal now.
+    """
+    import tempfile
+    from quadrium.config import (ConfigError, TEMPLATE_TABLE_PATH,
+                                 load_config, write_template)
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = write_template(Path(td) / "cfg.xlsx")
+        try:
+            load_config(cfg_path)
+        except ConfigError as exc:
+            msg = str(exc)
+            check("running the template unchanged is refused", True)
+            check("and the refusal says the value is the one it seeded",
+                  "still holds the value --template wrote" in msg, msg[:160])
+            check("and that the file ships with the checkout, not the package",
+                  "SOURCE CHECKOUT" in msg and "installed the package" in msg,
+                  msg[:160])
+            check("and sends them somewhere that works from where they are",
+                  "--sources" in msg and "--find" in msg, msg[:160])
+        else:
+            check("running the template unchanged is refused", False,
+                  "it loaded -- only possible inside a checkout, where this "
+                  "test says nothing about what a user gets")
+
+    check("the seed and the message that explains it are one constant",
+          TEMPLATE_TABLE_PATH == "../UK_IOAT_2023_domestic_ixi.xlsx",
+          TEMPLATE_TABLE_PATH)
+
+
 def test_config_workbook_round_trip():
     """The template must be loadable, and loading it must build a real run.
 

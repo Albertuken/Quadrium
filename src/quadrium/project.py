@@ -64,9 +64,13 @@ class IOProject:
     def dir(self) -> Path:
         return Path(self.root) / self.project_id
 
-    def run(self) -> "IOProject":
+    def run(self, *, key_alternatives: bool = False) -> "IOProject":
+        """`key_alternatives` re-runs each split under every other registered
+        key (OQ-E-02). Off by default because it costs one full run per
+        candidate: nine keys make the project nine times as slow."""
         self.results, self.meta = run_project(
-            self.table, self.splits, self.scenarios, self.keys)
+            self.table, self.splits, self.scenarios, self.keys,
+            key_alternatives_on=key_alternatives)
         return self
 
     # -- the reproducibility record ----------------------------------------

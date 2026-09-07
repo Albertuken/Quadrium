@@ -76,6 +76,12 @@ C1013 = NUTS / "NUTS2010-NUTS2013.xls"
 MRIO = ROOT / "data" / "mrio"
 FAIL: list[str] = []
 
+# Exit code 3, not 0, on the path where NOTHING was read -- `check.sh` counts
+# it as SKIPPED rather than as a pass. The path below it, where the
+# correspondence tables are here and only the MRIO block is not, is a PARTIAL
+# run and stays a pass: it measured the correspondence, which is a result.
+NOTHING_CHECKED = 3
+
 
 def check(name: str, ok: bool, detail: str = "") -> None:
     print(f"  {'ok  ' if ok else 'FAIL'} {name}" + (f" — {detail}" if detail else ""))
@@ -132,14 +138,19 @@ def main() -> int:
         # open Eurostat data with provenance sidecars, so they travel; but a
         # tree without them cannot run this, and saying so is the honest
         # report. The same rule as the Catalan workbook in tests/.
-        check("the correspondence tables are not in this tree, so the join "
-              "cannot be checked here", True,
-              f"{C1316.name} is absent. It is acquired by "
-              f"quadrium.acquire(); the URL and SHA-256 are in "
-              f"SOURCE_REGISTER.md section 7")
+        #
+        # It used to say so through `check(..., True)`, which put an `ok` line
+        # in the output and a pass in the count for a proposition nothing
+        # tested -- the absence of a file asserted as though it were a result.
+        # It is a statement about this tree, so it is printed as one.
+        print(f"    -- {C1316.name} is absent, so the join cannot be checked "
+              f"here. It is")
+        print( "       acquired by quadrium.acquire(); the URL and SHA-256 are "
+               "in")
+        print( "       SOURCE_REGISTER.md section 7.")
         print("\n" + "=" * 78)
-        print("All checks passed.")
-        return 0
+        print(f"Nothing was checked: {C1316.name} is absent.")
+        return NOTHING_CHECKED
     for p in (C1316, C1013):
         check(f"{p.name} is on disk", p.exists(),
               "acquired through quadrium.acquire; URL and SHA-256 in "

@@ -112,6 +112,13 @@ ONE_OF_SHEETS = ("splits", "regionalise", "targets")
 TABLE_KINDS = ("uk_analytical", "interchange",
                "ine_interior", "ine_total", "eurostat", "eurostat_sut")
 
+# What `--template` seeds into `table_path`. Named here because the refusal
+# below has to recognise it: the first thing a new user does is run the
+# template unchanged, and the file it points at ships with the SOURCE
+# CHECKOUT, so anyone who installed the package cannot have it. Kept as one
+# constant so the seed and the message that explains it cannot drift.
+TEMPLATE_TABLE_PATH = "../UK_IOAT_2023_domestic_ixi.xlsx"
+
 
 class ConfigError(ValueError):
     """Something in the workbook is wrong, said in the analyst's terms."""
@@ -790,11 +797,34 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
     elif kind == "eurostat":
         table_path, fetch_note = _eurostat_cache_path(meta, base_dir)
     else:
-        table_path = Path(str(_need(meta, "table_path", "project", 0)).strip())
+        raw = str(_need(meta, "table_path", "project", 0)).strip()
+        table_path = Path(raw)
         if not table_path.is_absolute():
             table_path = (Path(base_dir) / table_path).resolve()
         fetch_note = None
         if not table_path.exists():
+            # The commonest first failure there is, and until 2026-09-06 the
+            # message treated it as a typo. It is not: the workbook still
+            # holds the value `--template` seeded, and that value resolves
+            # ONLY inside a source checkout. The note explaining that sits in
+            # grey at the foot of the sheet, which is where it was put on the
+            # belief that a user would read it before running. The project's
+            # first outside tester did not, and neither will anyone else --
+            # so it is said HERE, where they are actually looking.
+            if raw == TEMPLATE_TABLE_PATH:
+                raise ConfigError(
+                    f"table_path still holds the value --template wrote:\n"
+                    f"    {raw}\n"
+                    f"which resolves to {table_path} and is not there.\n"
+                    f"\nThat is not a broken install. The seeded table ships "
+                    f"with the SOURCE CHECKOUT of this project, and you "
+                    f"installed the package, so you do not have it. Nothing "
+                    f"in the workbook has been filled in yet.\n"
+                    f"\nTo see which tables you DO have:\n"
+                    f"    quadrium --sources\n"
+                    f"and if you know the sector but not the table:\n"
+                    f"    quadrium --find <CODE> --geo <XX>\n"
+                    f"Either one prints the `project` rows to paste in.")
             raise ConfigError(f"table_path points at {table_path}, which does "
                               f"not exist. Paths may be absolute or relative "
                               f"to the config file.")
@@ -1112,7 +1142,7 @@ def write_template(path: Path | str) -> Path:
             # workbook was written inside a checkout. Someone who installed the
             # package does not have that file; the note beside the field says
             # so and sends them to --sources, which lists what they do have.
-            ("table_path", "../UK_IOAT_2023_domestic_ixi.xlsx"),
+            ("table_path", TEMPLATE_TABLE_PATH),
             ("table_kind", "uk_analytical"),
             ("title", "My sector split"),
             ("notes", "")], start=1):
