@@ -696,6 +696,28 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                   f"`{meta.get('key_alternatives_scenario')}`. Not a "
                   f"perturbation: these are the proxies actually registered, "
                   f"and each row is a complete run.", ""]
+
+        # ASKED FOR AND EMPTY IS THE ONE OUTCOME THAT MUST BE SPOKEN.
+        #
+        # With a single key registered there is nothing to compare against, and
+        # the first version printed the heading, the paragraph above, and then
+        # stopped. A reader who asked for this section and met a blank one
+        # reads it as agreement, or as a switch that did not work. Both are
+        # worse than not printing it. Found on 2026-09-07 running the engine
+        # from a fresh clone the way a stranger would.
+        if not any(a["runs"] for a in alts.values()):
+            lines += ["> **Nothing to compare against: only one allocation key "
+                      "is registered.** That is not a clean result, it is an "
+                      "absent test. This section can only say what a DIFFERENT "
+                      "proxy would have given, and there is no different proxy "
+                      "here.",
+                      ">",
+                      "> Registering a second key you do not intend to use is "
+                      "the only external check this engine can make, and it "
+                      "costs one row per subsector in the `keys` sheet. On the "
+                      "one split where the answer is published, eight proxies "
+                      "of the same two subsectors spanned **423.8 %** — see "
+                      "`validators/run_key_alternatives.py`.", ""]
         for code, a in sorted(alts.items()):
             if not a["runs"]:
                 continue

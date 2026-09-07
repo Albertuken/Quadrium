@@ -123,12 +123,33 @@ def main():
     check("and asks the user to choose and record why",
           "assumption ledger" in body)
 
-    # 5 -- the key that cannot drive the split is named, not dropped.
+    # 5 -- ASKED FOR AND EMPTY. The one outcome that must be spoken.
+    solo = IOProject(
+        project_id="e03solo", table=table,
+        splits=[SplitSpec("36", ex.NEW, ex.LBL,
+                          keys_by_block={"output": "k_tod_produccion"})],
+        scenarios=[Scenario(scenario_id="S1", label="size only",
+                            description="base")],
+        keys={"k_tod_produccion": keys["k_tod_produccion"]},
+        ledger=ex.build_ledger())
+    solo.run(key_alternatives=True)
+    solo_md = build_report(solo.results, solo.meta, solo.ledger)
+    solo_body = solo_md[solo_md.find(HEAD):]
+    solo_body = solo_body[:solo_body.find("\n### ", 10)]
+    check("with one key registered the section says there was nothing to "
+          "compare against",
+          "only one allocation key is registered" in solo_body,
+          "it printed the heading and a paragraph and then stopped, which a "
+          "reader takes for agreement or for a switch that did not work")
+    check("and calls it an absent test rather than a clean result",
+          "absent test" in solo_body)
+
+    # 6 -- the key that cannot drive the split is named, not dropped.
     check("a key declared for one block is named, not silently omitted",
           "k_vab" in body,
           "a candidate that disappears looks like one never registered")
 
-    # 6 -- the workbook door, which is the one the guide promises.
+    # 7 -- the workbook door, which is the one the guide promises.
     with tempfile.TemporaryDirectory() as td:
         cfg = write_template(Path(td) / "t.xlsx")
         import openpyxl
