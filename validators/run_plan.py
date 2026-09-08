@@ -127,7 +127,49 @@ def main():
               "reported beside 'no allocation key is registered' this "
               "contradicted it in the same screen")
 
-        # 4 -- a file that is not a workbook is described, not crashed on.
+        # 4 -- THE THIRD JOB. A planner that covers two of three is worse
+        #      than none for whoever runs the third: it says the workbook is
+        #      fine and load_config then refuses it.
+        cfg2 = write_template(td / "p.xlsx")
+        wb = openpyxl.load_workbook(cfg2)
+        wb["project"]["B3"] = "eurostat"
+        ws = (wb["targets"] if "targets" in wb.sheetnames
+              else wb.create_sheet("targets"))
+        if ws.max_row < 1 or ws["A1"].value is None:
+            ws["A1"], ws["B1"], ws["C1"] = "kind", "code", "value"
+        ws["A2"], ws["B2"], ws["C2"] = "gva", "A01", 1000
+        ws["A3"], ws["B3"], ws["C3"] = "industry_output", "A01", 1200
+        ws["A4"], ws["B4"], ws["C4"] = "gvaa", "A02", 900
+        # `final_use` too, because the price-base warning is about THAT row:
+        # it is at purchasers' prices where `gva` is at basic prices, and the
+        # first version of this check asserted on a fixture that never had it.
+        ws["A5"], ws["B5"], ws["C5"] = "final_use", "P3", 5000
+        wb.save(cfg2)
+
+        rep = plan_workbook(cfg2)
+        found = " | ".join(g["what"] for g in rep["gaps"])
+        check("a projection is recognised as its own job",
+              rep["have"]["job"] == "project", str(rep["have"]))
+        check("and a symmetric table is refused for it",
+              "no pair to move" in " ".join(g["why"] for g in rep["gaps"]),
+              "a projection moves a supply-use PAIR onto later totals")
+        check("and the missing target year is named",
+              "`project_to_year` is empty" in found)
+        check("and a misspelt target kind is named with the legal set",
+              "'gvaa'" in found
+              and any("use_column_totals" in g["fix"] for g in rep["gaps"]))
+        check("and mixing the two methods' targets is refused, because the "
+              "sheet is what chooses the method",
+              "mixes the two methods" in found,
+              "gva belongs to SUT-EURO and industry_output to SUT-RAS; "
+              "naming both chooses neither")
+        check("and the price bases are raised as a weakness, not an error",
+              any("PURCHASERS" in g["what"] and g["severity"] == "weak"
+                  for g in rep["gaps"]),
+              "get them wrong and it does not fail loudly — it runs to its "
+              "ceiling and reports every deviation as 1.00009")
+
+        # 5 -- a file that is not a workbook is described, not crashed on.
         bad = td / "notaworkbook.xlsx"
         bad.write_text("this is not a spreadsheet")
         rep = plan_workbook(bad)
@@ -136,7 +178,7 @@ def main():
               and "cannot be opened" in rep["gaps"][0]["what"],
               "the one thing --plan cannot survive, and it says so")
 
-        # 5 -- the machine-readable half, through the command line, and the
+        # 6 -- the machine-readable half, through the command line, and the
         #      exit code that says advice rather than verdict.
         run = subprocess.run(
             [sys.executable, str(ROOT / "run_quadrium.py"), str(cfg),
@@ -158,7 +200,7 @@ def main():
               "every gap carries where it is, what it is, why it matters and "
               "what to put — which is what a model needs to fill the sheet")
 
-        # 6 -- the PROSE path, which is the one a person actually meets.
+        # 7 -- the PROSE path, which is the one a person actually meets.
         #      Checking only --json would leave the human printer entered by
         #      nothing, which is how this project keeps finding features that
         #      were built, verified and unreachable.
@@ -173,7 +215,7 @@ def main():
         check("and it says plainly that it touched nothing",
               "Nothing was computed, fetched or written" in human.stdout)
 
-        # 7 -- it reads and does nothing else.
+        # 8 -- it reads and does nothing else.
         before = {p.name: p.stat().st_mtime_ns for p in td.iterdir()}
         plan_workbook(cfg)
         after = {p.name: p.stat().st_mtime_ns for p in td.iterdir()}

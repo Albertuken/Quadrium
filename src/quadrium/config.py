@@ -1641,6 +1641,75 @@ def plan_workbook(path: Path | str) -> dict:
                 "leave it empty if sizes are all you need; the report says so "
                 "either way", severity="weak")
 
+    if job == "project":
+        # The third job, and it had nothing here until 2026-09-08 -- so a
+        # projection was the one workbook `--plan` said was fine while
+        # `load_config` still refused it. A planner that covers two jobs of
+        # three is worse than none for whoever runs the third.
+        if kind != "eurostat_sut":
+            gap("project", f"there are `targets` rows and table_kind is "
+                           f"{kind or 'empty'!r}",
+                "a projection moves a supply-use PAIR onto later totals; "
+                "there is no pair to move in a symmetric table",
+                "`table_kind: eurostat_sut`, with the same geo and year")
+        if not str(meta.get("project_to_year") or "").strip():
+            gap("project", "`project_to_year` is empty",
+                "the targets say what the later year looks like and nothing "
+                "says which year that is",
+                "the year you are projecting TO, as a number")
+        else:
+            try:
+                int(str(meta.get("project_to_year")).strip())
+            except ValueError:
+                gap("project",
+                    f"`project_to_year` is "
+                    f"{str(meta.get('project_to_year'))!r}, not a year",
+                    "it is read as a number and compared against the pair's "
+                    "own year", "four digits")
+
+        VOCAB = {"gva", "final_use", "taxes", "imports", "industry_output",
+                 "use_column_totals"}
+        EURO, RAS = {"gva", "final_use"}, {"industry_output",
+                                           "use_column_totals"}
+        seen = set()
+        for n, r in enumerate(rows["targets"], start=2):
+            k = str(r.get("kind") or "").strip().lower()
+            if not k:
+                gap("targets", f"row {n} has no `kind`",
+                    "the kind is what says which aggregate this row pins",
+                    f"one of {', '.join(sorted(VOCAB))}")
+            elif k not in VOCAB:
+                gap("targets", f"row {n}: `kind` is {k!r}",
+                    "an unknown kind is a target the method never applies, "
+                    "and the run would approach totals you did not set",
+                    f"one of {', '.join(sorted(VOCAB))}")
+            else:
+                seen.add(k)
+        if seen & EURO and seen & RAS:
+            gap("targets", "the sheet mixes the two methods' targets",
+                f"`{', '.join(sorted(seen & EURO))}` belong to SUT-EURO and "
+                f"`{', '.join(sorted(seen & RAS))}` to SUT-RAS; the sheet is "
+                f"what chooses the method, so naming both chooses neither",
+                "keep the pair that matches what you actually know")
+        if seen and not (seen & EURO or seen & RAS):
+            gap("targets", "only shared targets are given",
+                "`taxes` and `imports` belong to both methods and settle "
+                "nothing on their own, so nothing here picks a method",
+                "add `gva` and `final_use`, or `industry_output` and "
+                "`use_column_totals`")
+        if "final_use" in seen:
+            gap("targets", "`final_use` is at PURCHASERS' prices and `gva` at "
+                           "BASIC prices",
+                "the price bases are not decoration: the method carries taxes "
+                "as a row of the use table, so a final-use target must include "
+                "them. Get it wrong and it does not fail loudly — it runs to "
+                "its iteration ceiling and reports every deviation as 1.00009, "
+                "which reads like success",
+                "check the basis of the totals you pasted. Projecting a pair "
+                "onto its OWN totals returns that pair exactly, in one "
+                "iteration, and is the test to run if you doubt them",
+                severity="weak")
+
     if job == "regionalise":
         for need, why, fix in (
                 ("activity_path",
