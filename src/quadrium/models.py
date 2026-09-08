@@ -199,6 +199,19 @@ class IOTable:
     # silently wrong blocks.
     region_codes: Optional[list[str]] = None
 
+    # SATELLITE ACCOUNTS: employment, emissions, anything measured per sector
+    # in units the table does not use. Keyed by name.
+    #
+    # Held as TOTALS and not as coefficients, and the choice is not cosmetic.
+    # A total is what an office publishes and it is what a split has to
+    # divide; a coefficient is derived from it and the table's own output. Keep
+    # coefficients here instead and a disaggregation has nothing to allocate.
+    #
+    # `UNH_20` eq. (46) `Z = B(I - A)^-1` is the method and it is normative
+    # rather than observed practice: the chapter names wages as the case in
+    # point and `M-067` already carried the general form.
+    satellites: dict = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)
@@ -999,6 +1012,56 @@ class SupplyUseTables:
 
 VALID_BLOCKS = ("output", "value_added", "final_demand",
                 "intermediate_rows", "intermediate_cols")
+
+
+@dataclass
+class Satellite:
+    """One quantity measured per sector in units the table does not use.
+
+    Employment in persons, emissions in tonnes, water in cubic metres. The
+    table is in money; this is not, and that is the whole point of a satellite
+    account -- `UNH_20` chapter 20 is the source and eq. (46) the method.
+
+    HELD AS TOTALS, NEVER AS COEFFICIENTS
+    ---------------------------------------
+    `values[j]` is the whole quantity for sector `j`, not the quantity per unit
+    of output. Offices publish totals; a split has to divide a total; and the
+    coefficient is one division away whenever it is wanted. Store coefficients
+    instead and a disaggregation has nothing to allocate and no way to check
+    that the parts sum to the parent.
+
+    `unit` is free text and is printed everywhere the numbers are, because a
+    multiplier of 1.4 is meaningless without it and this engine has already
+    been bitten once by a figure whose units nobody wrote down.
+    """
+    name: str
+    unit: str
+    values: list[float]
+    source: str
+    source_year: int
+    notes: Optional[str] = None
+    # How each value came to exist. "observed" is the office's own figure;
+    # "estimated" is one this engine produced by splitting a parent, and the
+    # report must never present the two the same way.
+    origin: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.values = [float(v) for v in self.values]
+        if not self.origin:
+            self.origin = ["observed"] * len(self.values)
+        if len(self.origin) != len(self.values):
+            raise ValueError(
+                f"satellite {self.name!r}: {len(self.origin)} origins for "
+                f"{len(self.values)} values")
+        bad = [i for i, v in enumerate(self.values) if v < 0]
+        if bad:
+            raise ValueError(
+                f"satellite {self.name!r} has negative values at positions "
+                f"{bad[:5]}. Employment and emissions are quantities, and a "
+                f"negative one is a sign error upstream, not a datum. If the "
+                f"source really publishes a negative -- some environmental "
+                f"accounts carry removals -- say so and this refusal is the "
+                f"thing to change, deliberately.")
 
 
 @dataclass

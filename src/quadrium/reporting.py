@@ -276,6 +276,64 @@ def scenario_section(res: DisaggregationResult) -> str:
                       f"asks whether an independent measurement agrees. "
                       f"Source: {c['source']}"]
 
+        # SATELLITE ACCOUNTS. Employment, emissions, anything per sector in
+        # units the table does not use. `UNH_20` eq. (46) `Z = B(I - A)^-1`.
+        #
+        # Placed inside the split's own section rather than at the end,
+        # because the number a reader wants is beside the sector it belongs to
+        # -- and because the warning underneath is about THIS split.
+        sats = d.get("satellites") or {}
+        if sats:
+            lines += ["", f"*Satellite accounts, per unit of final demand "
+                          f"delivered ({len(sats)} registered):*", ""]
+            for name, s in sorted(sats.items()):
+                lines += [f"| {name} ({s['unit']}) | direct | total | "
+                          f"indirect share |", "|---|---:|---:|---:|"]
+                for i, code in zip(sp["positions"], sp["new_codes"]):
+                    dir_, tot = s["direct"][i], s["total"][i]
+                    share = (1 - dir_ / tot) if tot else float("nan")
+                    mark = " *(estimated)*" if code in s["estimated"] else ""
+                    lines.append(f"| {code}{mark} | {dir_:,.4f} | "
+                                 f"{tot:,.4f} | {share:.1%} |")
+                lines += ["", f"Source: {s['source']} ({s['source_year']}). "
+                              f"`UNH_20` eq. (46): the total is the direct "
+                              f"coefficient carried through the Leontief "
+                              f"inverse, so it counts what this sector's "
+                              f"suppliers use too."]
+                if s["undefined"]:
+                    lines += ["",
+                              f"> {s['undefined']} sector(s) have zero output "
+                              f"and therefore no intensity. They are NOT "
+                              f"counted as zero — a sector that produced "
+                              f"nothing is undefined here, not clean — and "
+                              f"they contribute nothing to the totals above, "
+                              f"which is the one reading that is safe."]
+
+            # THE ASSUMPTION, WHERE THE NUMBERS ARE.
+            eq = [a for a in (d.get("equal_intensity_assumed") or [])
+                  if a["sector_code"] == sp["sector_code"]]
+            if eq:
+                got = sorted({a["satellite"] for a in eq})
+                names = ", ".join(got)
+                verb = "was" if len(got) == 1 else "were"
+                keyname = ", ".join(sorted({k for a in eq for k in a["key"]}))
+                lines += ["",
+                          f"> **Those subsectors have the SAME intensity as "
+                          f"each other, and that is an assumption rather than "
+                          f"a finding.** {names} {verb} divided by `{keyname}`, "
+                          f"the key that split the output, which says the "
+                          f"parts use the same amount per unit of money. For "
+                          f"hotels against restaurants that is known to be "
+                          f"false: a restaurant employs far more people per "
+                          f"euro of turnover than a hotel does.",
+                          ">",
+                          f"> The parts add to the parent exactly, so the "
+                          f"account's own total is untouched. What is "
+                          f"estimated is how it divides. **If you have this "
+                          f"quantity BY SUBSECTOR, that is the number to "
+                          f"use** — the split cannot invent a difference "
+                          f"nobody measured."]
+
         # WHAT THE CORROBORATION DOES NOT COVER. An allocation key describes how
         # big each subsector is. Input profiles describe what each one BUYS, and
         # no key backs them — they are intensities the analyst typed. So a

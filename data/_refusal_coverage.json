@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
- "taken": "2026-09-07",
- "n_sites": 179,
+ "taken": "2026-09-08",
+ "n_sites": 186,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -59,6 +59,9 @@
   "config.py::build_regionalisation::delta is not a number",
   "config.py::build_regionalisation::method on the `regionalise` sheet must be SLQ, CILQ,",
   "config.py::build_regionalisation::the `regionalise` sheet needs `activity_path`: a CSV",
+  "config.py::build_satellites::satellite covers of the table's sectors. are absent:",
+  "config.py::build_satellites::satellite has no `unit`. A multiplier of 1.4 means n",
+  "config.py::build_satellites::satellites: gives twice. Two figures for one sector ",
   "config.py::load_config::is missing the sheet(s) . Run `python3 run_quadrium.",
   "config.py::load_config::says which table to use and then nothing to do with ",
   "config.py::read_activity::activity_path points at , which does not exist. Path",
@@ -283,6 +286,13 @@
   "config.py::build_regionalisation::delta is not a number": "workbook",
   "config.py::build_regionalisation::method on the `regionalise` sheet must be SLQ, CILQ,": "workbook",
   "config.py::build_regionalisation::the `regionalise` sheet needs `activity_path`: a CSV": "workbook",
+  "config.py::build_satellites::satellite covers of the table's sectors. are absent:": "workbook",
+  "config.py::build_satellites::satellite gives values for code(s) the table does no": "workbook",
+  "config.py::build_satellites::satellite has no `unit`. A multiplier of 1.4 means n": "workbook",
+  "config.py::build_satellites::satellites row ( ) has no `sector_code`.": "workbook",
+  "config.py::build_satellites::satellites row ( , ): `value` is , not a number. val": "workbook",
+  "config.py::build_satellites::satellites row has no `name`. The sheet holds severa": "workbook",
+  "config.py::build_satellites::satellites: gives twice. Two figures for one sector ": "workbook",
   "config.py::load_config::is missing the sheet(s) . Run `python3 run_quadrium.": "workbook",
   "config.py::load_config::says which table to use and then nothing to do with ": "workbook",
   "config.py::read_activity::activity_path points at , which does not exist. Path": "workbook",
@@ -409,5 +419,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 172
+ "floor": 175
 }

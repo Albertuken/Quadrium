@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 from .classification import check_split
-from .models import CellLabel, IOTable, Scenario, SplitSpec
+from .models import CellLabel, IOTable, Satellite, Scenario, SplitSpec
 
 
 class DisaggregationError(ValueError):
@@ -750,3 +750,59 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
         "touched_positions": touched,
         "new_positions": [q for s in splits for q in s["positions"]],
     }
+
+
+def split_satellites(table: IOTable, seed: dict, splits: list[dict]) -> dict:
+    """Divide every satellite account the table carries, along with its sectors.
+
+    THE ASSUMPTION THIS MAKES, WHICH IS THE POINT OF THE FUNCTION
+    ---------------------------------------------------------------
+    A satellite total has to be split by something, and unless the analyst
+    registered a key for the satellite itself the only thing available is the
+    key that drove the OUTPUT split. Using it says: **the subsectors have the
+    same intensity as each other.** Same jobs per euro, same tonnes per euro.
+
+    For hotels against restaurants that is false and known to be false -- a
+    restaurant employs far more people per euro of turnover than a hotel does
+    -- so a split done this way divides employment in proportion to money and
+    reports the two subsectors as equally labour-intensive by construction.
+
+    The engine does it anyway, because refusing would leave the user with
+    nothing where they had a parent total, and it is exactly the same bargain
+    the intermediate block already makes. What it does NOT do is stay quiet:
+    every value produced this way is marked `estimated` rather than `observed`,
+    and `equal_intensity_assumed` names the satellites and the parents it
+    happened on so the report can say it where the numbers are.
+
+    Sums are preserved exactly -- the parts add to the parent, so the
+    satellite's own total is unchanged by the split, which is the only property
+    of it worth guaranteeing.
+    """
+    if not table.satellites:
+        return {}
+
+    mapping = seed["mapping"]
+    out, assumed = {}, []
+    for name, sat in table.satellites.items():
+        values = [float(sat.values[mapping[i]]) for i in range(len(mapping))]
+        origin = [sat.origin[mapping[i]] for i in range(len(mapping))]
+
+        for split in splits:
+            parent_total = float(sat.values[split["original_index"]])
+            w = np.asarray(split["weights"]["output"], float)
+            for pos, share in zip(split["positions"], w):
+                values[pos] = parent_total * float(share)
+                origin[pos] = "estimated"
+            assumed.append({"satellite": name,
+                            "sector_code": split["sector_code"],
+                            "new_codes": list(split["new_codes"]),
+                            "key": sorted(set(split["keys_used"].values()))})
+
+        out[name] = Satellite(
+            name=sat.name, unit=sat.unit, values=values,
+            source=sat.source, source_year=sat.source_year,
+            origin=origin,
+            notes=((sat.notes + " · " if sat.notes else "")
+                   + "split along with the table; the estimated positions "
+                     "assume the subsectors share the parent's intensity"))
+    return {"satellites": out, "equal_intensity_assumed": assumed}

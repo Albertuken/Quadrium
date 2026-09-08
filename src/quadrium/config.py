@@ -97,7 +97,7 @@ import numpy as np
 from .io_loader import LoaderError, _open_workbook, load_ine_tio, \
     load_io_table, load_uk_analytical_iot
 from .models import (AllocationKey, Assumption, AssumptionLedger,
-                     ProxyStrength, Scenario, SplitSpec)
+                     ProxyStrength, Satellite, Scenario, SplitSpec)
 
 REQUIRED_SHEETS = ("project",)
 # A workbook describes ONE of two jobs: dividing a sector or estimating a
@@ -768,7 +768,7 @@ def load_config(path: Path | str, *, offline: bool = False,
             meta[k.lower()] = r[1] if len(r) > 1 else None
     tables = {name: _rows(sheets, name)
               for name in ("splits", "keys", "scenarios", "profiles",
-                           "targets")}
+                           "targets", "satellites")}
 
     # `regionalise` is key/value like `project`, not a table of rows: the job
     # has one set of parameters, not one per sector.
@@ -929,6 +929,12 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     project_id = str(_need(meta, "project_id", "project", 0)).strip()
     table, table_path, kind = _load_declared_table(
         meta, base_dir, tables, offline, refresh, defaults_taken)
+
+    # ---- satellite accounts -------------------------------------------
+    # Attached to the TABLE and not carried beside it, because they follow its
+    # sectors: a split has to divide them, an export has to write them, and a
+    # reader who has the table has the accounts.
+    table.satellites = build_satellites(tables.get("satellites", []), table)
 
     # ---- keys ---------------------------------------------------------
     grouped: dict[str, list[dict]] = {}
@@ -1260,6 +1266,28 @@ def write_template(path: Path | str) -> Path:
            "Two or more scenarios let you see how much the answer depends on",
            "your choices, which is the honest way to present it."])
 
+    sheet("satellites", ["name", "unit", "sector_code", "value", "source",
+                         "source_year"],
+          [],
+          ["Employment, emissions, water -- anything measured per sector in",
+           "units the table does not use. UNH_20 eq. (46). Optional: leave",
+           "the sheet empty and nothing changes.",
+           "",
+           "One row per (account, sector). Several accounts live here at",
+           "once, told apart by `name`.",
+           "",
+           "VALUES ARE TOTALS, not per unit of output: the whole quantity",
+           "for that sector. The coefficient is derived for you.",
+           "",
+           "It must cover EVERY sector of your table. A sector left out is",
+           "refused rather than taken as zero -- zero says the sector has",
+           "none of this, and an absent row says only that nobody wrote it",
+           "down. Write an explicit 0 where you mean zero.",
+           "",
+           "When a sector is split, its account is split by the SAME key,",
+           "which assumes the subsectors have equal intensity. That is",
+           "false for hotels against restaurants and the report says so."])
+
     sheet("profiles", ["scenario_id", "subsector_code", "supplier_code",
                        "intensity"],
           [["S2_profiled", "I563", "C1101T1106 & C12", 2.1],
@@ -1486,7 +1514,8 @@ def plan_workbook(path: Path | str) -> dict:
             meta[k.lower()] = r[1] if len(r) > 1 else None
 
     rows = {name: _rows(sheets, name)
-            for name in ("splits", "keys", "scenarios", "profiles", "targets")}
+            for name in ("splits", "keys", "scenarios", "profiles", "targets",
+                         "satellites")}
     reg = {}
     for r in sheets.get("regionalise", []):
         if r and r[0] is not None and str(r[0]).strip():
@@ -1633,6 +1662,34 @@ def plan_workbook(path: Path | str) -> dict:
                 "register a second, with a different source, and leave it "
                 "undriven", severity="weak")
 
+        # Satellites are optional, so an empty sheet is not a gap. What IS
+        # a gap is a sheet with rows in it that cannot become an account.
+        if rows["satellites"]:
+            names = {str(r.get("name") or "").strip()
+                     for r in rows["satellites"]}
+            if "" in names:
+                gap("satellites", "a row has no `name`",
+                    "several accounts share this sheet and the name is what "
+                    "tells them apart",
+                    "employment, co2, water — whatever you are measuring")
+            for r in rows["satellites"]:
+                if not str(r.get("unit") or "").strip():
+                    gap("satellites",
+                        f"{str(r.get('name') or '?')} has a row with no `unit`",
+                        "a multiplier of 1.4 means nothing without one, and it "
+                        "is printed everywhere the numbers are",
+                        "persons, kt CO2e, cubic metres")
+                    break
+            gap("satellites",
+                f"{len(names - {''})} account(s) will be split by the same key "
+                f"as the output",
+                "which says the subsectors have equal intensity — the same "
+                "jobs per euro, the same tonnes per euro. For hotels against "
+                "restaurants that is known to be false",
+                "if you hold this quantity BY SUBSECTOR, that is the number "
+                "to use; the split cannot invent a difference nobody measured",
+                severity="weak")
+
         if not rows["profiles"]:
             gap("profiles", "no input profiles",
                 "without them every subsector gets a scaled copy of the "
@@ -1736,3 +1793,95 @@ def plan_workbook(path: Path | str) -> dict:
                      "splits": len(rows["splits"]), "keys": len(rows["keys"]),
                      "scenarios": len(rows["scenarios"]),
                      "profiles": len(rows["profiles"])}}
+
+
+def build_satellites(rows: list[dict], table) -> dict:
+    """Turn the `satellites` sheet into accounts aligned to the table's sectors.
+
+    One row per (account, sector): `name | unit | sector_code | value |
+    source | source_year`. Several accounts live in one sheet, told apart by
+    `name`, because employment and emissions are the same shape and a sheet
+    each would be four sheets before anyone had two accounts.
+
+    A SECTOR THE SHEET DOES NOT MENTION IS REFUSED, NOT TAKEN AS ZERO
+    -------------------------------------------------------------------
+    Zero is a measurement. "This industry emits nothing" and "nobody wrote
+    down what this industry emits" are different statements and only one of
+    them is in the data. Filling the gap silently would put the first in a
+    report on the strength of the second, and every multiplier below it would
+    inherit that.
+
+    So the sheet has to cover every sector of the table, and writing an
+    explicit `0` is how you say you mean zero. That is the opt-in, and it lives
+    in the sheet where a reader can see it rather than in a flag they cannot.
+    """
+    if not rows:
+        return {}
+
+    by_name: dict = {}
+    for n, r in enumerate(rows, start=2):
+        name = str(r.get("name") or "").strip()
+        if not name:
+            raise ConfigError(
+                f"satellites row {n} has no `name`. The sheet holds several "
+                f"accounts and the name is what tells them apart.")
+        code = str(r.get("sector_code") or "").strip()
+        if not code:
+            raise ConfigError(f"satellites row {n} ({name}) has no "
+                              f"`sector_code`.")
+        try:
+            value = float(r.get("value"))
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"satellites row {n} ({name}, {code}): `value` is "
+                f"{r.get('value')!r}, not a number.") from None
+        acc = by_name.setdefault(name, {"values": {}, "unit": "",
+                                        "source": "", "source_year": 0})
+        if code in acc["values"]:
+            raise ConfigError(
+                f"satellites: {name!r} gives {code} twice. Two figures for one "
+                f"sector is a choice somebody has to make, and it is not this.")
+        acc["values"][code] = value
+        for field_, key in (("unit", "unit"), ("source", "source"),
+                            ("source_year", "source_year")):
+            got = r.get(key)
+            if got not in (None, ""):
+                acc[field_] = got
+
+    out = {}
+    for name, acc in by_name.items():
+        missing = [c for c in table.sector_codes if c not in acc["values"]]
+        if missing:
+            raise ConfigError(
+                f"satellite {name!r} covers {len(acc['values'])} of the "
+                f"table's {table.n} sectors. {len(missing)} are absent: "
+                f"{', '.join(missing[:8])}"
+                f"{' …' if len(missing) > 8 else ''}.\n\n"
+                f"They are not taken as zero. Zero is a measurement — it says "
+                f"the sector has none of this — and an absent row says only "
+                f"that nobody wrote it down. Filling the gap here would put "
+                f"the first in your report on the strength of the second, and "
+                f"every multiplier below it would carry that.\n\n"
+                f"Write an explicit 0 for the sectors you mean to be zero.")
+        extra = [c for c in acc["values"] if c not in set(table.sector_codes)]
+        if extra:
+            raise ConfigError(
+                f"satellite {name!r} gives values for {len(extra)} code(s) the "
+                f"table does not have: {', '.join(extra[:8])}"
+                f"{' …' if len(extra) > 8 else ''}. Check them against the "
+                f"table's own classification ({table.classification}).")
+        if not str(acc["unit"]).strip():
+            raise ConfigError(
+                f"satellite {name!r} has no `unit`. A multiplier of 1.4 means "
+                f"nothing without one, and it is printed everywhere the "
+                f"numbers are.")
+        try:
+            year = int(str(acc["source_year"]).strip() or 0)
+        except ValueError:
+            year = 0
+        out[name] = Satellite(
+            name=name, unit=str(acc["unit"]).strip(),
+            values=[acc["values"][c] for c in table.sector_codes],
+            source=str(acc["source"]).strip() or "not stated",
+            source_year=year)
+    return out

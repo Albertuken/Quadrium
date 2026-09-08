@@ -608,6 +608,43 @@ Run at least two scenarios. The spread between them is the honest measure of
 how much your answer depends on your own choices, and the report computes it
 for you.
 
+### Sheet `satellites` — employment, emissions, anything not in money
+
+Optional. Leave it empty and nothing changes.
+
+| name | unit | sector_code | value | source | source_year |
+|---|---|---|---|---|---|
+| employment | persons | I | 1539198 | INE, EEE | 2022 |
+| co2 | kt CO2e | I | 4870.2 | INE, cuentas ambientales | 2022 |
+
+One row per account per sector. Several accounts share the sheet, told apart by
+`name`. You get, for every sector, the **direct** coefficient — the quantity it
+uses to make one unit of its own output — and the **total**, which adds what its
+suppliers use, and their suppliers. That is `UNH_20` eq. (46),
+`Z = B(I − A)⁻¹`.
+
+**Values are totals, not intensities.** The whole quantity for that sector; the
+coefficient is derived for you. Totals are what offices publish and what a split
+has to divide.
+
+**It must cover every sector of your table.** A sector left out is refused, not
+taken as zero — *"this industry emits nothing"* and *"nobody wrote down what
+this industry emits"* are different statements and only one of them is in your
+data. Write an explicit `0` where you mean zero.
+
+**And the thing to understand before you use the result.** When you split a
+sector, its satellite account is split by the same key that split the output.
+That says the subsectors have **equal intensity**: the same jobs per euro, the
+same tonnes per euro. For hotels against restaurants that is false and known to
+be false — a restaurant employs far more people per euro of turnover than a
+hotel does — so the two come out with identical coefficients by construction.
+
+The parts add to the parent exactly, so the account's own total is untouched.
+What is estimated is how it divides, every such value is labelled `estimated`,
+and the report says all of this under the numbers. **If you hold the quantity by
+subsector, that is the number to use**: the split cannot invent a difference
+nobody measured.
+
 ### Sheet `profiles` — making the subsectors genuinely different
 
 | scenario_id | subsector_code | supplier_code | intensity |

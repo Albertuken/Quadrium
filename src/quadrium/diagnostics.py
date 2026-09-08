@@ -131,3 +131,41 @@ def input_structure_divergence(A: np.ndarray, new_positions: list[int],
         "by_subsector": {codes[k]: float(np.nansum(cols[k]))
                          for k in range(len(cols))},
     }
+
+
+def satellite_effects(values, X, L) -> dict:
+    """Direct and total effect of one satellite account per unit of final demand.
+
+    `UNH_20` ¶20.94 eq. (46): `Z = B(I - A)^-1`, with `B` the vector of
+    coefficients for the quantity in question. The chapter names wages as the
+    case in point; employment, emissions and water are the same arithmetic with
+    a different numerator, which is what makes a satellite account a satellite
+    account rather than a new method.
+
+    Returns the direct coefficient `e_j = E_j / X_j` -- the quantity a sector
+    uses to make one unit of its own output -- and the total `e' L`, which adds
+    what its suppliers use, and their suppliers, to the limit.
+
+    A SECTOR WITH NO OUTPUT HAS NO COEFFICIENT, AND IT IS NOT ZERO
+    ----------------------------------------------------------------
+    Dividing by `X_j = 0` is not an arithmetic accident to be papered over with
+    a small epsilon: a sector that produced nothing has an undefined intensity,
+    and calling it zero says it is perfectly clean or perfectly jobless. Those
+    positions come back as NaN and the total is computed with them treated as
+    zero CONTRIBUTION, which is the one reading that is safe -- a sector with no
+    output supplies nothing to anybody -- with the count returned so the report
+    can say how many there were.
+    """
+    e = np.asarray(values, float)
+    X = np.asarray(X, float).ravel()
+    L = np.asarray(L, float)
+    if e.shape != X.shape:
+        raise ValueError(f"satellite has {e.shape[0]} values for "
+                         f"{X.shape[0]} sectors")
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        direct = np.where(X != 0, e / np.where(X == 0, 1.0, X), np.nan)
+    undefined = int((X == 0).sum())
+    total = np.nan_to_num(direct, nan=0.0) @ L
+    return {"direct": direct, "total": total, "undefined": undefined,
+            "sum": float(np.nansum(e))}
