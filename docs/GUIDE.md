@@ -638,7 +638,42 @@ value added, and how much of it is trade within the sector at all.
 
 ## 5. Run it
 
-Check first, without running anything:
+**First, ask what it still needs.** This reads the workbook and lists
+everything missing or wrong in one pass — nothing is computed, fetched or
+written:
+
+```bash
+quadrium my_config.xlsx --plan
+```
+
+```
+  6 thing(s) stop it running:
+
+  1. [project] `table_kind` is 'ine_interor', which is not a kind
+     why: a typo here reads as a format nobody publishes
+     put: one of uk_analytical, interchange, ine_interior, …
+
+  4. [splits] `36` has 1 subsector
+     why: dividing something into one piece is not a disaggregation
+     put: at least two rows sharing this `sector_code`
+
+  2 thing(s) it will run WITHOUT, and the report will say so:
+  …
+```
+
+`--check` below stops at the **first** problem, which is right for a gate and
+costs a sitting per gap when you are filling a sheet for the first time.
+`--plan` is the list.
+
+**And if you would rather describe the job than fill the sheet**, add `--json`.
+That prints the same report machine-readable — every gap with where it is, what
+it is, why it matters and what to put — which is what an assistant needs to
+fill the workbook for you. **You** then read it and approve it, and the numbers
+still come out of the same deterministic engine. There is no language model
+inside Quadrium and there will not be: the run has to give the same answer on
+any day.
+
+Then check, which loads the table:
 
 ```bash
 quadrium my_config.xlsx --check

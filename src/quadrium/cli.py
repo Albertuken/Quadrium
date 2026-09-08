@@ -227,6 +227,64 @@ def _catalogue(args) -> int:
     return 0
 
 
+def _gap_lines(i: int, g: dict) -> None:
+    """One gap, wrapped so a paragraph of reasoning stays readable."""
+    import textwrap
+    print(f"  {i}. [{g['sheet']}] {g['what']}")
+    for tag, body in (("why", g["why"]), ("put", g["fix"])):
+        for j, line in enumerate(textwrap.wrap(body, 66) or [""]):
+            print(f"     {tag + ':' if j == 0 else '    '} {line}")
+    print()
+
+
+def _plan(rep: dict, as_json: bool) -> int:
+    """Print what the workbook still needs — all of it, once.
+
+    Exit code is 0 whether or not the workbook is ready, and that is
+    deliberate. `--check` is the gate; this is advice, and advice that exits
+    non-zero is the defect `--sources` carried until v1.85, printing "Nothing
+    is wrong" while telling the shell otherwise. The REPORT says whether it is
+    ready; the exit code says whether the report could be produced.
+    """
+    if as_json:
+        import json
+        print(json.dumps(rep, indent=2, ensure_ascii=False))
+        return 0
+
+    blocking = [g for g in rep["gaps"] if g["severity"] == "blocking"]
+    weak = [g for g in rep["gaps"] if g["severity"] == "weak"]
+    have = rep["have"]
+
+    print(f"\n  {Path(rep['path']).name}")
+    print(f"  job: {have.get('job') or 'none named'} · "
+          f"table_kind: {have.get('table_kind') or 'not set'} · "
+          f"{have.get('splits', 0)} split row(s), {have.get('keys', 0)} key "
+          f"row(s), {have.get('profiles', 0)} profile row(s)")
+
+    if blocking:
+        print(f"\n  {len(blocking)} thing(s) stop it running:\n")
+        for i, g in enumerate(blocking, 1):
+            _gap_lines(i, g)
+    else:
+        print("\n  Nothing stops it running.\n")
+
+    if weak:
+        print(f"  {len(weak)} thing(s) it will run WITHOUT, and the report "
+              f"will say so:\n")
+        for i, g in enumerate(weak, 1):
+            _gap_lines(i, g)
+
+    if rep["ready"]:
+        print("  Ready. `quadrium <this file> --check` loads the table and "
+              "says what it would do;\n  without --check it runs.")
+    else:
+        print("  Not ready yet. Everything above is listed at once on "
+              "purpose: --check\n  stops at the first problem, which costs a "
+              "sitting per gap.")
+    print("\n  Nothing was computed, fetched or written.")
+    return 0
+
+
 def _print_key_rows(pr, geo: str, measure: str | None = None) -> None:
     """The `keys` sheet, filled in, for a proxy that tiles the sector.
 
@@ -490,6 +548,16 @@ def main(argv=None) -> int:
                     help="the .xlsx configuration workbook")
     ap.add_argument("--template", type=Path, metavar="PATH",
                     help="write a blank workbook to PATH and exit")
+    ap.add_argument("--plan", action="store_true",
+                    help="say what a configuration workbook still needs — ALL "
+                         "of it, in one pass, in plain language. `--check` "
+                         "stops at the first problem, which is right for a "
+                         "gate and wrong for a person. Add `--json` for the "
+                         "same thing machine-readable.")
+    ap.add_argument("--json", action="store_true",
+                    help="with `--plan`, print the report as JSON instead of "
+                         "prose, so an assistant can fill the workbook in and "
+                         "hand it back for you to approve.")
     ap.add_argument("--measure", metavar="CODE",
                     help="which measurement of a proxy cube to read, when it "
                          "carries several — employment, turnover, wages. "
@@ -604,6 +672,13 @@ def main(argv=None) -> int:
         print("--offline and --refresh contradict each other: one forbids the "
               "network, the other requires it.", file=sys.stderr)
         return 2
+
+    # `--plan` runs BEFORE load_config, and that ordering is the whole point:
+    # a workbook load_config cannot read is exactly the workbook --plan exists
+    # for. Nothing here computes, fetches or writes.
+    if args.plan:
+        from quadrium.config import plan_workbook
+        return _plan(plan_workbook(args.config), args.json)
 
     try:
         cfg = load_config(args.config, offline=args.offline,

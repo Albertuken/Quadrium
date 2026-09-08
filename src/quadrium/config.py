@@ -1412,3 +1412,258 @@ def build_regionalisation(meta: dict, reg: dict, base_dir: Path = Path("."),
             "activity_file": ap,
             "notes": str(meta.get("notes") or ""),
             "defaults_taken": defaults_taken}
+
+
+# ---------------------------------------------------------------------------
+# What this workbook still needs, ALL of it, in one pass
+# ---------------------------------------------------------------------------
+
+def plan_workbook(path: Path | str) -> dict:
+    """Every gap in a configuration workbook at once, in plain language.
+
+    WHY THIS EXISTS, AND IT IS A DEFECT BEFORE IT IS A FEATURE
+    ------------------------------------------------------------
+    `load_config` raises on the FIRST problem, which is right for a gate and
+    wrong for a person. The owner ran a fresh template on 2026-09-06 and was
+    told the table file did not exist. Fix that and the next run says there is
+    no split; fix that and it says there is no key. Three sittings to learn
+    what one screen could have said, and he is an economist who does not use a
+    terminal -- which is the user `docs/GUIDE.md` opens by promising to serve.
+
+    So this reads the workbook LENIENTLY and reports everything: what is
+    missing, what is inconsistent, and what still holds the value `--template`
+    seeded. It never raises on the content it is describing. A workbook so
+    broken it cannot be opened at all is the one thing it cannot survive, and
+    it says so rather than pretending.
+
+    AND IT IS THE HALF OF THE CONTRACT THE ENGINE OWES AN ASSISTANT
+    ----------------------------------------------------------------
+    A language model cannot be inside this engine: `pyproject.toml` promises
+    numpy and openpyxl, the run has to be deterministic, and a workbook must
+    give the same numbers on any day for the DOI to mean anything. So the
+    understanding of *"divide Spanish hospitality into hotels and
+    restaurants"* happens OUTSIDE, and what the engine owes in return is an
+    exact statement of what it needs. That is this, and `--plan --json` is the
+    same statement for a machine.
+
+    Nothing here computes, fetches or writes. It reads a file and describes it.
+
+    Returns `{"ready": bool, "gaps": [...], "have": {...}, "path": str}`.
+    Each gap carries `sheet`, `what`, `why` and `fix`, and `severity` is
+    `"blocking"` -- the run cannot start -- or `"weak"`, which is a run that
+    starts and produces something nobody should publish.
+    """
+    path = Path(path)
+    gaps: list[dict] = []
+
+    def gap(sheet, what, why, fix, severity="blocking"):
+        gaps.append({"sheet": sheet, "what": what, "why": why, "fix": fix,
+                     "severity": severity})
+
+    try:
+        sheets = _open_workbook(path)
+    except Exception as exc:                              # noqa: BLE001
+        return {"ready": False, "path": str(path), "have": {},
+                "gaps": [{"sheet": "-", "what": "the file cannot be opened",
+                          "why": str(exc), "fix": "quadrium --template "
+                                                  "my_config.xlsx writes a "
+                                                  "fresh one",
+                          "severity": "blocking"}]}
+
+    for s in REQUIRED_SHEETS:
+        if s not in sheets:
+            gap(s, f"the sheet `{s}` is not in the workbook",
+                "every configuration says which table to use, and that is "
+                "where it says it",
+                "start from `quadrium --template my_config.xlsx`")
+
+    meta = {}
+    for r in sheets.get("project", []):
+        if r and r[0] is not None and str(r[0]).strip():
+            k = str(r[0]).strip()
+            if k.startswith("#"):
+                continue
+            meta[k.lower()] = r[1] if len(r) > 1 else None
+
+    rows = {name: _rows(sheets, name)
+            for name in ("splits", "keys", "scenarios", "profiles", "targets")}
+    reg = {}
+    for r in sheets.get("regionalise", []):
+        if r and r[0] is not None and str(r[0]).strip():
+            k = str(r[0]).strip()
+            if k.startswith("#") or k.lower() in ("key", "sector_code"):
+                continue
+            reg[k.lower()] = r[1] if len(r) > 1 else None
+
+    kind = str(meta.get("table_kind") or "").strip().lower()
+    job = ("regionalise" if reg else
+           "project" if rows["targets"] else
+           "split" if rows["splits"] else None)
+
+    # ---- the table -------------------------------------------------------
+    if not kind:
+        gap("project", "`table_kind` is empty",
+            "the engine cannot read a file without being told whose format it "
+            "is; every office writes its own",
+            f"one of {', '.join(TABLE_KINDS)}")
+    elif kind not in TABLE_KINDS:
+        gap("project", f"`table_kind` is {kind!r}, which is not a kind",
+            "a typo here reads as a format nobody publishes",
+            f"one of {', '.join(TABLE_KINDS)}")
+
+    raw_path = str(meta.get("table_path") or "").strip()
+    if kind in ("eurostat", "eurostat_sut"):
+        for need in ("eurostat_geo", "eurostat_year"):
+            if not str(meta.get(need) or "").strip():
+                gap("project", f"`{need}` is empty",
+                    "the engine downloads the table by country and year, and "
+                    "cannot guess either",
+                    "`quadrium --find <CODE> --geo <XX>` prints the rows to "
+                    "paste, including the years that country populates")
+    elif not raw_path:
+        gap("project", "`table_path` is empty",
+            "nothing says which file holds the table",
+            "an absolute path, or one relative to this workbook. "
+            "`quadrium --sources` lists what is loadable on this machine")
+    elif raw_path == TEMPLATE_TABLE_PATH:
+        gap("project", "`table_path` still holds the value --template wrote",
+            "that file ships with the SOURCE CHECKOUT of this project; if you "
+            "installed the package you do not have it, and nothing in this "
+            "workbook has been filled in yet",
+            "`quadrium --sources` to see what you do have, or "
+            "`quadrium --find <CODE> --geo <XX>` if you know the sector")
+    else:
+        p = Path(raw_path)
+        if not p.is_absolute():
+            p = (path.parent / p).resolve()
+        if not p.exists():
+            gap("project", f"`table_path` points at {p}, which is not there",
+                "paths are absolute, or relative to THIS workbook — not to "
+                "where you run the command",
+                "`quadrium --sources` lists what is loadable here")
+
+    unb = str(meta.get("table_unbalanced") or "refuse").strip().lower()
+    if unb not in ("refuse", "residual_column"):
+        gap("project", f"`table_unbalanced` is {unb!r}",
+            "it has two legal values and a third reads as a setting that was "
+            "ignored", "`refuse` (the default) or `residual_column`")
+    elif unb != "refuse" and kind != "ine_interior":
+        gap("project", f"`table_unbalanced` is set with table_kind {kind!r}",
+            "it applies to `ine_interior` alone, whose published table does "
+            "not balance for one product",
+            "remove the row, or change the kind")
+
+    # ---- the job ---------------------------------------------------------
+    if job is None:
+        gap("splits", "the workbook says which table to use and nothing to "
+                      "do with it",
+            "`splits` divides a sector, `regionalise` estimates a region, "
+            "`targets` projects a supply-use pair. A workbook with none of "
+            "the three describes no job",
+            "fill in ONE of them")
+
+    if job == "split":
+        by_parent: dict = {}
+        for r in rows["splits"]:
+            by_parent.setdefault(str(r.get("sector_code") or "").strip(),
+                                 []).append(r)
+        for parent, rs in by_parent.items():
+            if not parent:
+                gap("splits", "a row has no `sector_code`",
+                    "the rows of one split are the rows that share a parent",
+                    "the code of the sector being divided, as the TABLE "
+                    "writes it")
+                continue
+            if len(rs) < 2:
+                gap("splits", f"`{parent}` has {len(rs)} subsector",
+                    "dividing something into one piece is not a "
+                    "disaggregation",
+                    "at least two rows sharing this `sector_code`")
+            for r in rs:
+                if not str(r.get("new_code") or "").strip():
+                    gap("splits", f"a row of `{parent}` has no `new_code`",
+                        "the new subsector needs a name to be reported under",
+                        "any code you choose; it does not have to exist "
+                        "anywhere")
+
+        named = {str(r.get("key_id") or "").strip()
+                 for r in rows["splits"] if str(r.get("key_id") or "").strip()}
+        have_keys = {str(r.get("key_id") or "").strip()
+                     for r in rows["keys"] if str(r.get("key_id") or "").strip()}
+        if not rows["keys"]:
+            gap("keys", "no allocation key is registered",
+                "the key decides how big each subsector is, and it is the "
+                "sheet the result lives or dies by",
+                "one row per subsector: key_id, new_sector_code, value, "
+                "source, source_year, strength. `quadrium --find <CODE> "
+                "--geo <XX>` prints them filled in where a source exists")
+        for k in sorted(named - have_keys):
+            gap("keys", f"`splits` names the key `{k}` and `keys` does not "
+                        f"define it",
+                "the split would have nothing to divide by",
+                f"add rows with key_id `{k}`")
+
+        illustrative = [r for r in rows["keys"]
+                        if "REPLACE" in str(r.get("source") or "").upper()]
+        if illustrative:
+            gap("keys", f"{len(illustrative)} key row(s) still say REPLACE in "
+                        f"their source",
+                "those are the template's invented numbers; a split driven by "
+                "them is a demonstration and the report will say so",
+                "your own figures, with the real source written beside them",
+                severity="weak")
+
+        for r in rows["keys"]:
+            s = str(r.get("strength") or "").strip().lower()
+            if s and s not in ("strong", "medium", "weak"):
+                gap("keys", f"`strength` is {s!r}",
+                    "strength travels into the report and the ledger, so it "
+                    "cannot be free text",
+                    "strong, medium or weak")
+
+        # Only when there IS one. Reported beside "no allocation key is
+        # registered" it contradicted it in the same screen, which is the
+        # kind of thing that makes a reader stop trusting the whole report.
+        if rows["keys"] and len({k for k in have_keys if k}) < 2:
+            gap("keys", "only one allocation key is registered",
+                "a second key you do NOT use is the only external check this "
+                "engine can make. On the one split where the answer is "
+                "published, eight proxies of the same two subsectors spanned "
+                "423.8 %",
+                "register a second, with a different source, and leave it "
+                "undriven", severity="weak")
+
+        if not rows["profiles"]:
+            gap("profiles", "no input profiles",
+                "without them every subsector gets a scaled copy of the "
+                "parent's purchasing pattern, so they all come out with the "
+                "SAME multiplier — arithmetic, not economics",
+                "leave it empty if sizes are all you need; the report says so "
+                "either way", severity="weak")
+
+    if job == "regionalise":
+        for need, why, fix in (
+                ("activity_path",
+                 "the method needs one thing about the region: its output or "
+                 "employment by sector",
+                 "a CSV with `sector_code,regional`"),
+                ("method",
+                 "which location quotient is a methodological choice with "
+                 "measured consequences",
+                 "SLQ, CILQ, RLQ or FLQ")):
+            if not str(reg.get(need) or "").strip():
+                gap("regionalise", f"`{need}` is empty", why, fix)
+        if str(reg.get("method") or "FLQ").strip().upper() == "FLQ" \
+                and not str(reg.get("delta") or "").strip():
+            gap("regionalise", "`delta` is empty and the method is FLQ",
+                "measured across ten regions in two countries it runs from "
+                "0.14 to 0.60, so a default would be a guess wearing a number",
+                "a value in [0, 1). The report prints what a blind choice "
+                "costs")
+
+    blocking = [g for g in gaps if g["severity"] == "blocking"]
+    return {"ready": not blocking, "path": str(path), "gaps": gaps,
+            "have": {"table_kind": kind or None, "job": job,
+                     "splits": len(rows["splits"]), "keys": len(rows["keys"]),
+                     "scenarios": len(rows["scenarios"]),
+                     "profiles": len(rows["profiles"])}}
