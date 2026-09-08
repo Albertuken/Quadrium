@@ -308,6 +308,23 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
         expanded.satellites = sat["satellites"]
 
     diag = diagnostics.compute(Z_bal, seed["X"])
+
+    # Type II, when the workbook asked for it. Computed on the SPLIT table, so
+    # the subsectors get their own income coefficients -- which, like the
+    # satellite accounts, they inherit from the parent unless a key said
+    # otherwise, and the report says so.
+    expanded.type_ii = dict(table.type_ii)
+    if expanded.type_ii:
+        va_idx = [list(expanded.VA_labels).index(r)
+                  for r in expanded.type_ii["income_rows"]]
+        y_idx = list(expanded.Y_labels).index(expanded.type_ii["household"])
+        income = expanded.VA[va_idx, :].sum(axis=0)
+        diag["type_ii"] = {
+            **diagnostics.type_ii_multipliers(
+                diag["A"], income, expanded.Y[:, y_idx], seed["X"]),
+            "income_rows": list(expanded.type_ii["income_rows"]),
+            "household": expanded.type_ii["household"]}
+
     if expanded.satellites:
         diag["satellites"] = {
             name: {**diagnostics.satellite_effects(s.values, seed["X"],

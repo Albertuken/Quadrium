@@ -169,3 +169,70 @@ def satellite_effects(values, X, L) -> dict:
     total = np.nan_to_num(direct, nan=0.0) @ L
     return {"direct": direct, "total": total, "undefined": undefined,
             "sum": float(np.nansum(e))}
+
+
+def type_ii_multipliers(A, income, household, X) -> dict:
+    """Close the model on households: `UNH_20` ¶20.88.
+
+    Type I stops at the supply chain. A sector that hires people pays wages,
+    the wages are spent, the spending is somebody's output, and that output
+    hires more people. Type II counts that loop by making households an
+    industry: one more row for the income each sector pays per unit of output,
+    one more column for what households buy, and the same inverse.
+
+    WHAT THE SOURCE SETTLES AND WHAT IT DOES NOT
+    ----------------------------------------------
+    ¶20.88 names the concept -- **wages and salaries** -- the spending and the
+    mechanism. It does not say what to divide the consumption column by when
+    household consumption is not funded by wages alone, and it usually is not:
+    on the UK 2023 table household consumption is 89 % of wage income.
+
+    `run_type_ii_multipliers.py` measured what that choice costs. Closed three
+    ways -- on wages alone, on wages plus surplus and mixed income, on all of
+    value added -- the economy-wide uplift barely moves (1.573, 1.614, 1.612)
+    and **the industry spread nearly halves** (1.02-3.10 against 1.20-2.31).
+
+    So the aggregate stands on firm ground and **an industry ranking does
+    not**, and this returns `propensity` -- what the consumption column sums
+    to -- so the report can say which closure produced the numbers instead of
+    presenting them as the type II multiplier.
+
+    A CLOSURE WITH NO INCOME IS REFUSED, NOT SILENTLY SKIPPED
+    -----------------------------------------------------------
+    If the named rows sum to zero there is no loop to close and the augmented
+    matrix is the type I one with a row of zeros: the answer would come back
+    identical to type I and look like a finding about an economy where
+    spending does not circulate.
+    """
+    A = np.asarray(A, float)
+    income = np.asarray(income, float).ravel()
+    household = np.asarray(household, float).ravel()
+    X = np.asarray(X, float).ravel()
+    n = A.shape[0]
+    if income.shape != (n,) or household.shape != (n,) or X.shape != (n,):
+        raise ValueError(
+            f"type II needs one income and one household value per sector: "
+            f"got {income.shape[0]} and {household.shape[0]} for {n} sectors")
+
+    total_income = float(income.sum())
+    if total_income <= 0:
+        raise ValueError(
+            "the rows named as income sum to zero or less, so there is no "
+            "loop to close. Closing on nothing returns the type I multipliers "
+            "unchanged, which would read as a finding about an economy where "
+            "spending does not circulate rather than as a configuration that "
+            "named the wrong rows.")
+
+    safe = np.where(X > 0, X, 1.0)
+    star = np.zeros((n + 1, n + 1))
+    star[:n, :n] = A
+    star[n, :n] = np.where(X > 0, income / safe, 0.0)
+    star[:n, n] = household / total_income
+
+    L2, info = leontief_inverse(star)
+    m2 = L2[:n, :n].sum(axis=0)
+    return {"multipliers": m2,
+            "propensity": float(household.sum() / total_income),
+            "income_total": total_income,
+            "household_total": float(household.sum()),
+            **{f"closure_{k}": v for k, v in info.items()}}

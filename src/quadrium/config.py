@@ -930,6 +930,9 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     table, table_path, kind = _load_declared_table(
         meta, base_dir, tables, offline, refresh, defaults_taken)
 
+    # ---- type II closure ----------------------------------------------
+    table.type_ii = _type_ii_spec(meta, table)
+
     # ---- satellite accounts -------------------------------------------
     # Attached to the TABLE and not carried beside it, because they follow its
     # sectors: a split has to divide them, an export has to write them, and a
@@ -1220,6 +1223,11 @@ def write_template(path: Path | str) -> Path:
             "#             each one would have given. Off by default: it",
             "#             costs one full run per key. It never says which",
             "#             is right -- see OQ-E-03.",
+            "# type_ii_income_rows / type_ii_household_column: close the",
+            "#             model on households and get the INDUCED effect",
+            "#             too (UNH_20 20.88). Name the value-added row(s)",
+            "#             that hold wages, and the final-demand column",
+            "#             households spend. Both or neither. Optional.",
             "# table_unbalanced: refuse (default) or residual_column.",
             "#             Only for ine_interior, which does not balance for",
             "#             one product -- see OQ-D-04. Anywhere else it is an error.",
@@ -1571,6 +1579,25 @@ def plan_workbook(path: Path | str) -> dict:
                 "where you run the command",
                 "`quadrium --sources` lists what is loadable here")
 
+    t2_rows = str(meta.get("type_ii_income_rows") or "").strip()
+    t2_col = str(meta.get("type_ii_household_column") or "").strip()
+    if bool(t2_rows) != bool(t2_col):
+        gap("project",
+            f"`type_ii_{'household_column' if t2_rows else 'income_rows'}` is "
+            f"empty and the other is not",
+            "a type II closure needs both: income that is never spent, or "
+            "spending funded by nothing, is half a loop",
+            "name the value-added row(s) holding wages AND the final-demand "
+            "column households spend, or remove both")
+    elif t2_rows:
+        gap("project", "a type II closure is configured",
+            "the aggregate uplift is solid but RANKING subsectors by their "
+            "type II multiplier is not: closed three ways on the UK table the "
+            "economy-wide ratio moves 1.573 to 1.612 while the spread between "
+            "industries nearly halves",
+            "read the uplift, not the order. The report says which closure "
+            "produced the numbers", severity="weak")
+
     unb = str(meta.get("table_unbalanced") or "refuse").strip().lower()
     if unb not in ("refuse", "residual_column"):
         gap("project", f"`table_unbalanced` is {unb!r}",
@@ -1885,3 +1912,43 @@ def build_satellites(rows: list[dict], table) -> dict:
             source=str(acc["source"]).strip() or "not stated",
             source_year=year)
     return out
+
+
+def _type_ii_spec(meta: dict, table) -> dict:
+    """Which value-added rows are income and which final-demand column is
+    household spending, resolved against this table's own labels.
+
+    `UNH_20` ¶20.88 names the concept — wages and salaries — and no more. Which
+    row of a particular table holds them is a fact about that table, so the
+    workbook says it and this checks it. Nothing is guessed: a label the table
+    does not have is refused with the labels it does have, because the
+    alternative is closing the model on the wrong row and reporting the result
+    as an induced effect.
+    """
+    rows = str(meta.get("type_ii_income_rows") or "").strip()
+    col = str(meta.get("type_ii_household_column") or "").strip()
+    if not rows and not col:
+        return {}
+    if not rows or not col:
+        raise ConfigError(
+            "a type II closure needs BOTH `type_ii_income_rows` and "
+            "`type_ii_household_column`. One without the other describes half "
+            "a loop: income that is never spent, or spending funded by "
+            "nothing.")
+
+    want = [r.strip() for r in rows.split(";") if r.strip()]
+    have_va = list(table.VA_labels)
+    missing = [r for r in want if r not in have_va]
+    if missing:
+        raise ConfigError(
+            f"`type_ii_income_rows` names {', '.join(missing)}, which this "
+            f"table does not have. Its value-added rows are: "
+            f"{'; '.join(have_va)}.\n\n"
+            f"Closing on the wrong row does not fail — it returns a number "
+            f"that looks like an induced effect and is not one.")
+    if col not in list(table.Y_labels):
+        raise ConfigError(
+            f"`type_ii_household_column` is {col!r}, which this table does "
+            f"not have. Its final-demand columns are: "
+            f"{'; '.join(table.Y_labels)}.")
+    return {"income_rows": want, "household": col}

@@ -608,6 +608,37 @@ Run at least two scenarios. The spread between them is the honest measure of
 how much your answer depends on your own choices, and the report computes it
 for you.
 
+### Type II — counting the wages that get spent
+
+Optional, and it lives in the `project` sheet rather than a sheet of its own,
+because it is two settings and not a table:
+
+| key | value |
+|---|---|
+| `type_ii_income_rows` | `Compensation of employees` |
+| `type_ii_household_column` | `P3 S14` |
+
+Both or neither. Name the value-added row or rows that hold wages, and the
+final-demand column households spend, **using this table's own labels** — a
+label it does not have is refused, with the ones it does have listed, because
+closing on the wrong row does not fail: it returns a number that looks like an
+induced effect and is not one.
+
+What you get is the supply-chain multiplier you already had, beside the one that
+also counts the loop: wages paid, wages spent, that spending produced by
+somebody, more wages. On the UK 2023 table the average multiplier goes from
+**1.72 to 2.67**.
+
+**Read the uplift; do not read the order.** `UNH_20` ¶20.88 names the income
+concept — wages and salaries — and says nothing about what to divide the
+consumption column by when household consumption is not funded by wages alone,
+which it usually is not. Closed three ways on that table the economy-wide ratio
+moves only from **1.573 to 1.614 to 1.612**, and the spread between industries
+**nearly halves** — 1.02–3.10 against 1.20–2.31. So the aggregate stands and a
+ranking of industries by their type II multiplier rests on a choice the Handbook
+declines to make. The report prints the closure it used and says this under the
+numbers. See `validators/run_type_ii_multipliers.py`.
+
 ### Sheet `satellites` — employment, emissions, anything not in money
 
 Optional. Leave it empty and nothing changes.

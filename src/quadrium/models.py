@@ -212,6 +212,13 @@ class IOTable:
     # point and `M-067` already carried the general form.
     satellites: dict = field(default_factory=dict)
 
+    # WHICH ROWS ARE INCOME AND WHICH COLUMN IS HOUSEHOLD SPENDING, when the
+    # user has asked for a type II closure. Held as LABELS and not indices, so
+    # that splitting a sector -- which changes neither axis -- carries them
+    # forward without bookkeeping. `{"income_rows": [...], "household": "..."}`
+    # or empty for type I only.
+    type_ii: dict = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)

@@ -276,6 +276,54 @@ def scenario_section(res: DisaggregationResult) -> str:
                       f"asks whether an independent measurement agrees. "
                       f"Source: {c['source']}"]
 
+        # TYPE II. The induced effect: wages spent, spending produced, more
+        # wages. `UNH_20` para 20.88.
+        #
+        # Printed as a RATIO beside the type I number rather than as a column
+        # of its own, and that is the finding rather than a layout choice.
+        # `run_type_ii_multipliers.py` closed the same table three ways: the
+        # economy-wide uplift barely moved (1.573, 1.614, 1.612) and the
+        # industry spread nearly halved (1.02-3.10 against 1.20-2.31). So the
+        # aggregate is firm and a ranking of industries by their type II
+        # multiplier rests on a choice the Handbook does not make.
+        t2 = d.get("type_ii")
+        if t2:
+            lines += ["", "*Type II — with households endogenous:*", "",
+                      "| Subsector | type I | type II | induced uplift |",
+                      "|---|---:|---:|---:|"]
+            for i, code in zip(sp["positions"], sp["new_codes"]):
+                a, b = d["multipliers"][i], t2["multipliers"][i]
+                lines.append(f"| {code} | {a:,.4f} | {b:,.4f} | "
+                             f"{(b / a - 1) if a else float('nan'):+.1%} |")
+            lines += ["",
+                      f"Closed on {', '.join(t2['income_rows'])}, spent as "
+                      f"`{t2['household']}`. `UNH_20` ¶20.88: income earned "
+                      f"from wages and salaries is spent as household final "
+                      f"consumption, which induces more income, and so on to "
+                      f"a new equilibrium.",
+                      "",
+                      f"That column of spending sums to "
+                      f"**{t2['propensity']:.3f}** of the income you named — "
+                      f"household consumption is not funded by wages alone, "
+                      f"and the ratio is the closure this run used.",
+                      "",
+                      "> **The aggregate uplift is solid; ranking the "
+                      "subsectors by it is not.** ¶20.88 names the income "
+                      "concept and says nothing about what to divide the "
+                      "consumption column by. Closed three ways on the UK "
+                      "table — wages alone, wages plus surplus, all of value "
+                      "added — the economy-wide ratio moves from 1.573 to "
+                      "1.614 to 1.612, and the spread between industries "
+                      "nearly halves, from 1.02–3.10 to 1.20–2.31. Read the "
+                      "uplift; do not read the order. See "
+                      "`validators/run_type_ii_multipliers.py`.",
+                      ">",
+                      "> **And these subsectors inherit the parent's income "
+                      "coefficient**, for the same reason the satellite "
+                      "accounts do: the split divided value added by the "
+                      "allocation key, so nothing here says one of them pays "
+                      "more wages per unit of output than the other."]
+
         # SATELLITE ACCOUNTS. Employment, emissions, anything per sector in
         # units the table does not use. `UNH_20` eq. (46) `Z = B(I - A)^-1`.
         #

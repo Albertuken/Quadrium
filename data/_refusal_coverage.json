@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
- "taken": "2026-09-08",
- "n_sites": 186,
+ "taken": "2026-09-09",
+ "n_sites": 189,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -46,6 +46,9 @@
   "config.py::_project::targets row : value is not a number. value",
   "config.py::_project::the `targets` sheet has no row(s). A ` ` projection ",
   "config.py::_strength",
+  "config.py::_type_ii_spec::`type_ii_household_column` is , which this table doe",
+  "config.py::_type_ii_spec::`type_ii_income_rows` names , which this table does ",
+  "config.py::_type_ii_spec::a type II closure needs BOTH `type_ii_income_rows` a",
   "config.py::build_config::sheet 'keys', row : value is not a number value",
   "config.py::build_config::sheet 'profiles' names scenario(s) that the 'scenari",
   "config.py::build_config::sheet 'profiles', row : intensity is not a number in",
@@ -273,6 +276,9 @@
   "config.py::_project::targets row : value is not a number. value": "workbook",
   "config.py::_project::the `targets` sheet has no row(s). A ` ` projection ": "workbook",
   "config.py::_strength": "workbook",
+  "config.py::_type_ii_spec::`type_ii_household_column` is , which this table doe": "workbook",
+  "config.py::_type_ii_spec::`type_ii_income_rows` names , which this table does ": "workbook",
+  "config.py::_type_ii_spec::a type II closure needs BOTH `type_ii_income_rows` a": "workbook",
   "config.py::build_config::sheet 'keys', row : value is not a number value": "workbook",
   "config.py::build_config::sheet 'profiles' names scenario(s) that the 'scenari": "workbook",
   "config.py::build_config::sheet 'profiles', row : intensity is not a number in": "workbook",
@@ -419,5 +425,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 175
+ "floor": 178
 }
