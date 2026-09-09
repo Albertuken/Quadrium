@@ -329,6 +329,31 @@ def _write_interchange_sheets(wb, t, *, table_id: str,
             c.alignment = Alignment(horizontal="center")
     ws.freeze_panes = "B2"
 
+    # SATELLITE ACCOUNTS ARE PART OF THIS FORMAT TOO, and for the same reason
+    # the Provenance sheet is. Written on 2026-09-08 and not carried here, an
+    # employment account survived a split -- 368,612 persons for 36A -- and
+    # came back from its own file GONE. No error, no warning: the sheet the
+    # loader reads simply had no column for it.
+    #
+    # That is the identical failure v1.86 recorded for --regionalise, made
+    # again by the next feature, which is the argument for writing the round
+    # trip check the same day as the feature and not the day after.
+    #
+    # `origin` travels beside every value because it is the whole point: a
+    # split's estimate that comes back labelled `observed` is worse than one
+    # that comes back missing.
+    if t.satellites:
+        ws = wb.create_sheet("Satellites")
+        ws.append(["name", "unit", "source", "source_year", "sector_code",
+                   "value", "origin"])
+        for c in ws[1]:
+            c.font = bold
+        for name, s in sorted(t.satellites.items()):
+            for code, v, o in zip(t.sector_codes, s.values, s.origin):
+                ws.append([s.name, s.unit, s.source, s.source_year,
+                           code, float(v), o])
+        ws.freeze_panes = "A2"
+
     ws = wb.create_sheet("metadata")
     meta = [("table_id", table_id),
             ("country", t.country), ("year", t.year), ("unit", t.unit),
@@ -343,6 +368,10 @@ def _write_interchange_sheets(wb, t, *, table_id: str,
         "derived_from",
         f"{derived_from} {estimated} of {total} intermediate cells "
         f"({100 * estimated / total:.1f} %) are not observations."))
+    if t.type_ii:
+        meta.append(("type_ii_income_rows",
+                     "; ".join(t.type_ii.get("income_rows", []))))
+        meta.append(("type_ii_household_column", t.type_ii.get("household")))
     for i, line in enumerate(t.lineage, start=1):
         meta.append((f"lineage_{i}", line))
     meta.append((

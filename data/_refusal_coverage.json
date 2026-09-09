@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
  "taken": "2026-09-09",
- "n_sites": 189,
+ "n_sites": 191,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -134,6 +134,7 @@
   "io_loader.py::_open_workbook",
   "io_loader.py::_read_provenance::Provenance cell ( , ) reads ; expected one of . ,",
   "io_loader.py::_read_provenance::the Provenance sheet has data row(s) for sectors. A ",
+  "io_loader.py::_read_satellites::: satellite covers of sectors and is missing . A par",
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w",
   "io_loader.py::_tod_need",
@@ -369,6 +370,8 @@
   "io_loader.py::_open_workbook": "workbook",
   "io_loader.py::_read_provenance::Provenance cell ( , ) reads ; expected one of . ,": "workbook",
   "io_loader.py::_read_provenance::the Provenance sheet has data row(s) for sectors. A ": "workbook",
+  "io_loader.py::_read_satellites::: satellite covers of sectors and is missing . A par": "source",
+  "io_loader.py::_read_satellites::: the Satellites sheet is missing the column(s) . It": "source",
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu": "source",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w": "source",
   "io_loader.py::_tod_need": "source",
@@ -425,5 +428,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 178
+ "floor": 179
 }

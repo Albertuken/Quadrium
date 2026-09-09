@@ -67,7 +67,7 @@ import numpy as np
 from .precision import (assertable_tolerance,
                         assertable_tolerance_mixed,
                         printed_decimals)
-from .models import (AllocationKey, IOTable, ProxyStrength,
+from .models import (AllocationKey, IOTable, ProxyStrength, Satellite,
                      SupplyUseTables)
 
 
@@ -1470,9 +1470,94 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
         source=str(meta["source"]), retrieved_at=datetime.now(timezone.utc),
         notes=str(meta.get("notes") or "") or None,
         provenance=_read_provenance(sheets, sector_codes),
+        satellites=_read_satellites(sheets, sector_codes, Path(path).name),
+        type_ii=_read_type_ii(meta),
         lineage=_read_lineage(meta))
     _assert_balances(table, Path(path).name)
     return table
+
+
+def _read_satellites(sheets: dict, sector_codes: list[str], name: str) -> dict:
+    """Read the `Satellites` sheet back, with each value's origin.
+
+    Written on 2026-09-08 and not read until 2026-09-09, so an employment
+    account survived a split -- 368,612 persons for one subsector -- and came
+    back from its own file GONE. Silently: no error, because the loader simply
+    had no column for it.
+
+    The origin matters more than the number. A value the engine estimated by
+    dividing a parent, read back as `observed`, is the failure `IOTable`'s own
+    docstring calls the one thing an audit trail may not do -- and it is worse
+    than losing the account, because losing it is visible.
+    """
+    # By case-insensitive NAME, the way `_read_provenance` does it. Keying on
+    # the literal lowercase string found the sheet in no file this engine has
+    # ever written, because it writes `Satellites`.
+    key = next((s for s in sheets if s.strip().lower() == "satellites"), None)
+    rows = [r for r in sheets[key] if r and any(c is not None for c in r)] \
+        if key else None
+    if not rows:
+        return {}
+    head = [str(c or "").strip().lower() for c in rows[0]]
+    need = ("name", "unit", "source", "source_year", "sector_code", "value",
+            "origin")
+    missing = [c for c in need if c not in head]
+    if missing:
+        raise LoaderError(
+            f"{name}: the Satellites sheet is missing the column(s) "
+            f"{', '.join(missing)}. It is written by this engine, so a file "
+            f"without them was edited by hand or produced by an older "
+            f"version.")
+    at = {c: head.index(c) for c in need}
+
+    acc: dict = {}
+    for r in rows[1:]:
+        if not r or r[at["name"]] in (None, ""):
+            continue
+        key = str(r[at["name"]]).strip()
+        a = acc.setdefault(key, {"unit": str(r[at["unit"]] or ""),
+                                 "source": str(r[at["source"]] or ""),
+                                 "year": r[at["source_year"]],
+                                 "values": {}, "origin": {}})
+        code = str(r[at["sector_code"]]).strip()
+        a["values"][code] = float(r[at["value"]])
+        a["origin"][code] = str(r[at["origin"]] or "observed").strip()
+
+    out = {}
+    for key, a in acc.items():
+        missing = [c for c in sector_codes if c not in a["values"]]
+        if missing:
+            raise LoaderError(
+                f"{name}: satellite {key!r} covers "
+                f"{len(a['values'])} of {len(sector_codes)} sectors and is "
+                f"missing {', '.join(missing[:6])}"
+                f"{' …' if len(missing) > 6 else ''}. A partial account read "
+                f"as a whole one would put zeros where nothing was measured.")
+        try:
+            year = int(str(a["year"]).strip() or 0)
+        except (TypeError, ValueError):
+            year = 0
+        out[key] = Satellite(
+            name=key, unit=a["unit"], source=a["source"], source_year=year,
+            values=[a["values"][c] for c in sector_codes],
+            origin=[a["origin"][c] for c in sector_codes])
+    return out
+
+
+def _read_type_ii(meta: dict) -> dict:
+    """The two labels that name a type II closure, if the file carries them.
+
+    Kept in `metadata` rather than a sheet of its own because it is two
+    strings, and carried at all so that a table exported and read back does
+    not silently become type I -- which would show up as multipliers a third
+    smaller with nothing saying why.
+    """
+    rows = str(meta.get("type_ii_income_rows") or "").strip()
+    col = str(meta.get("type_ii_household_column") or "").strip()
+    if not rows or not col:
+        return {}
+    return {"income_rows": [r.strip() for r in rows.split(";") if r.strip()],
+            "household": col}
 
 
 def _read_provenance(sheets: dict, sector_codes: list[str]):
