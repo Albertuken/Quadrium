@@ -1164,6 +1164,19 @@ Catalan table, which is **not** redistributed here — `PROVENANCE.md` says why 
 so what this repository can verify about it is that the engine states it, not
 that it is true. That distinction is the reason it is phrased this way.
 
+**If your national table carries satellite accounts, they come with the region
+— scaled.** Each is multiplied by the region's share of national output, sector
+by sector, and every value comes out marked as an estimate. That assumes **the
+region has the country's intensity**: the same jobs per euro, the same tonnes
+per euro. If you hold the quantity for your region, that is the number to use.
+
+**The type II closure does not come.** It names a wages row and a household
+column of the national table, and a regionalised table has one value-added row
+and one final-demand column, both residuals — the quotient says nothing about
+how a region's value added splits between labour and capital. There is no wages
+row to close on. The run says so rather than leaving you with type I
+multipliers and no explanation.
+
 **This is not a multi-region table, and the fourth line above says what that
 costs.** It estimates one region at a time from a national table. The engine can
 hold an interregional table — sectors are (region, sector) pairs and the blocks

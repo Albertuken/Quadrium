@@ -68,8 +68,74 @@ class Regionalisation:
     X: np.ndarray                       # the regional output the scaling used
     caveats: list[str] = field(default_factory=list)
 
+    def _regional_satellites(self, national) -> tuple[dict, list]:
+        """Carry the national accounts down to the region, scaled by output.
+
+        WHY SCALED AND NOT DROPPED
+        ----------------------------
+        Dropping is safer and it is also silent, and silence is the failure
+        this project keeps finding in itself: a user loads an employment
+        account, regionalises, and the account vanishes with nothing saying
+        so. Carrying it unchanged would be worse -- it would give the region
+        the whole country's employment.
+
+        So it is scaled by the region's share of national output, sector by
+        sector, which is the same bargain a split makes: **the region is
+        assumed to have the country's intensity**, the same jobs per euro, the
+        same tonnes per euro. Every value comes out `estimated` and the caveat
+        travels with the run.
+
+        AND THE ASSUMPTION IS OF THE KIND THIS PROJECT HAS SEEN FAIL
+        -------------------------------------------------------------
+        Not for employment -- nothing here measured that. But there is one
+        measurement of an intensity transported from a nation to one of its
+        regions, and it went the wrong way.
+        `run_charm_heterogeneity.py`: Spain against Catalonia, rank
+        correlation **0.886**, so the ORDERING carries, while Catalonia's mean
+        is **1.40x** Spain's and the national value under-predicts in **47 of
+        63** products. A region trades more than its country, and nothing says
+        it employs or emits exactly like it either.
+
+        A different quantity, so this is the nearest measured case and not
+        evidence about employment. What it establishes is that "carry the
+        national intensity" is an assumption with a track record.
+        """
+        if national is None or not getattr(national, "satellites", None):
+            return {}, []
+        from .models import Satellite
+
+        nat_X = np.asarray(national.X, float).ravel()
+        share = np.where(nat_X > 0,
+                         self.X / np.where(nat_X == 0, 1.0, nat_X), 0.0)
+        undefined = int((nat_X <= 0).sum())
+
+        out = {}
+        for name, sat in national.satellites.items():
+            vals = (np.asarray(sat.values, float) * share).tolist()
+            out[name] = Satellite(
+                name=sat.name, unit=sat.unit, values=vals,
+                source=sat.source, source_year=sat.source_year,
+                origin=["estimated"] * len(vals),
+                notes=((sat.notes + " · " if sat.notes else "")
+                       + "scaled from the national account by this region's "
+                         "share of national output: the region is assumed to "
+                         "have the country's intensity"))
+        notes = [
+            f"- the {len(out)} satellite account(s) are the national ones "
+            f"scaled by this region's share of output, which assumes the "
+            f"region has the country's intensity. Every value is an estimate; "
+            f"if you hold the quantity FOR THIS REGION, that is the number to "
+            f"use"]
+        if undefined:
+            notes.append(
+                f"- {undefined} sector(s) have no national output, so their "
+                f"share is undefined and their accounts come out zero rather "
+                f"than scaled")
+        return out, notes
+
     def to_table(self, *, sector_codes, sector_labels=None, country="XX-region",
-                 year=0, unit="", classification="", source="") -> "object":
+                 year=0, unit="", classification="", source="",
+                 national=None) -> "object":
         """The estimated region as an `IOTable`, so the rest of the engine can
         take it.
 
@@ -106,8 +172,29 @@ class Regionalisation:
                     f"({float(Y[k, 0]):,.4f}): its estimated intermediate sales "
                     f"exceed its output, which a row of A summing above 1 can "
                     f"do. Carried rather than clipped")
+        sats, sat_notes = self._regional_satellites(national)
+
+        # THE TYPE II CLOSURE CANNOT COME, and that is a fact about the object
+        # rather than a limitation of the code. Its two settings name a
+        # value-added ROW and a final-demand COLUMN of the national table; this
+        # table has one of each and both are residuals, because the quotient
+        # says nothing about how a region's value added splits between labour
+        # and capital. There is no wages row to close on.
+        #
+        # Said, not dropped. A table that comes back type I where the user
+        # configured type II shows multipliers a third smaller with nothing
+        # explaining why -- the same silence the satellites had until today.
+        if national is not None and getattr(national, "type_ii", None):
+            sat_notes.append(
+                "- the type II closure did NOT come with the region: it names "
+                "a wages row and a household column of the national table, "
+                "and a regionalised table has one value-added row and one "
+                "final-demand column, both residuals. These multipliers are "
+                "type I")
+
         return IOTable(
             table_id=f"regionalised_{self.method.lower()}",
+            satellites=sats,
             country=country, year=year, unit=unit,
             classification=classification,
             sector_codes=list(sector_codes),
@@ -131,7 +218,8 @@ class Regionalisation:
             lineage=[f"regionalised from a national table with {self.method}"
                      + (f", delta = {self.delta:g}" if self.delta is not None
                         else "")]
-            + [c.strip() for c in self.caveats if c.strip().startswith("-")])
+            + [c.strip() for c in self.caveats if c.strip().startswith("-")]
+            + sat_notes)
 
     def report(self) -> str:
         """The costs, as a block a caller can print beside the numbers."""

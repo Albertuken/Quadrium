@@ -798,7 +798,11 @@ def _write_regionalisation(res, table, out_root, name, national_name,
         classification=table.classification,
         source=f"regionalised from {national_name} with "
                f"{res.method}" + (f", delta={res.delta:g}"
-                                  if res.delta is not None else ""))
+                                  if res.delta is not None else ""),
+        # The national table, so its satellite accounts can come down to the
+        # region scaled rather than vanish, and so what CANNOT come -- the type
+        # II closure -- is said rather than left to be noticed.
+        national=table)
     wrote_table = write_interchange_xlsx(
         regional, out / "regional_table.xlsx",
         derived_from=f"Quadrium regionalisation with {res.method}"
