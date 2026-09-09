@@ -661,6 +661,9 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
     current = table
     mapping = list(range(table.n))          # current index -> ORIGINAL index
     splits: list[dict] = []
+    # What each division of a satellite account assumed, collected as the loop
+    # goes so a run with two splits records two entries rather than one.
+    assumed: list[dict] = []
 
     for spec in specs:
         seed = split_sector(current, spec.sector_code, spec.new_codes,
@@ -708,6 +711,26 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
             table_id=current.table_id, country=current.country,
             year=current.year, unit=current.unit,
             classification=current.classification,
+            # THE FIELDS THAT RIDE ON A TABLE, carried even though nothing in
+            # this loop reads them -- and that is the reason to carry them.
+            # This was the only place in the engine where a table holding them
+            # was rebuilt without them, and the first person to read
+            # `current.satellites` between two splits would have found an
+            # empty dict with nothing saying why. Four instances of that shape
+            # turned up in three days; `run_table_composition.py` now refuses
+            # an IOTable construction that does not say what it does about
+            # them.
+            #
+            # DIVIDED HERE, not at the end. Carrying the parent's values
+            # into a table that now has one more sector leaves an account of
+            # 64 figures on 65 sectors, which `IOTable.__post_init__` refuses
+            # -- rightly, since every coefficient below it would be aligned to
+            # the wrong sector. So each account is divided as its sector is,
+            # and the object is well formed after every iteration rather than
+            # only at the end.
+            satellites=_divide_satellites(
+                current.satellites, seed, splits[-1], assumed),
+            type_ii=current.type_ii,
             sector_codes=seed["codes"], sector_labels=seed["labels"],
             Z=seed["Z"], Y=seed["Y"], Y_labels=current.Y_labels,
             VA=seed["VA"], VA_labels=current.VA_labels, X=seed["X"],
@@ -749,11 +772,14 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
         "code_checks": code_checks,
         "touched_positions": touched,
         "new_positions": [q for s in splits for q in s["positions"]],
+        "satellites": current.satellites,
+        "equal_intensity_assumed": assumed,
     }
 
 
-def split_satellites(table: IOTable, seed: dict, splits: list[dict]) -> dict:
-    """Divide every satellite account the table carries, along with its sectors.
+def _divide_satellites(satellites: dict, seed: dict, split: dict,
+                       assumed: list) -> dict:
+    """Divide every satellite account as its sector is divided. One split.
 
     THE ASSUMPTION THIS MAKES, WHICH IS THE POINT OF THE FUNCTION
     ---------------------------------------------------------------
@@ -771,32 +797,36 @@ def split_satellites(table: IOTable, seed: dict, splits: list[dict]) -> dict:
     nothing where they had a parent total, and it is exactly the same bargain
     the intermediate block already makes. What it does NOT do is stay quiet:
     every value produced this way is marked `estimated` rather than `observed`,
-    and `equal_intensity_assumed` names the satellites and the parents it
-    happened on so the report can say it where the numbers are.
+    and `assumed` collects the satellites and the parents it happened on so the
+    report can say it where the numbers are.
+
+    CALLED INSIDE THE LOOP, ONCE PER SPLIT
+    ----------------------------------------
+    It used to run once at the end over the original table. That left the loop
+    variable holding an account of the parent's length on a table that had
+    already grown -- 64 figures on 65 sectors -- which `IOTable.__post_init__`
+    now refuses, rightly: every coefficient below such an account is aligned to
+    sectors that are not these. Dividing as we go keeps the object well formed
+    after every iteration.
 
     Sums are preserved exactly -- the parts add to the parent, so the
     satellite's own total is unchanged by the split, which is the only property
     of it worth guaranteeing.
     """
-    if not table.satellites:
+    if not satellites:
         return {}
 
-    mapping = seed["mapping"]
-    out, assumed = {}, []
-    for name, sat in table.satellites.items():
+    mapping = seed["mapping"]        # new index -> index in the table it split
+    out = {}
+    for name, sat in satellites.items():
         values = [float(sat.values[mapping[i]]) for i in range(len(mapping))]
         origin = [sat.origin[mapping[i]] for i in range(len(mapping))]
 
-        for split in splits:
-            parent_total = float(sat.values[split["original_index"]])
-            w = np.asarray(split["weights"]["output"], float)
-            for pos, share in zip(split["positions"], w):
-                values[pos] = parent_total * float(share)
-                origin[pos] = "estimated"
-            assumed.append({"satellite": name,
-                            "sector_code": split["sector_code"],
-                            "new_codes": list(split["new_codes"]),
-                            "key": sorted(set(split["keys_used"].values()))})
+        parent_total = float(sat.values[seed["split_index"]])
+        w = np.asarray(split["weights"]["output"], float)
+        for pos, share in zip(seed["new_positions"], w):
+            values[pos] = parent_total * float(share)
+            origin[pos] = "estimated"
 
         out[name] = Satellite(
             name=sat.name, unit=sat.unit, values=values,
@@ -805,4 +835,8 @@ def split_satellites(table: IOTable, seed: dict, splits: list[dict]) -> dict:
             notes=((sat.notes + " · " if sat.notes else "")
                    + "split along with the table; the estimated positions "
                      "assume the subsectors share the parent's intensity"))
-    return {"satellites": out, "equal_intensity_assumed": assumed}
+        assumed.append({"satellite": name,
+                        "sector_code": split["sector_code"],
+                        "new_codes": list(split["new_codes"]),
+                        "key": sorted(set(split["keys_used"].values()))})
+    return out

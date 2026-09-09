@@ -76,6 +76,20 @@ def main() -> int:
     try:
         # ---- 1. regionalise
         national = load_ine_tio(ES, variant="interior")
+        # THE FIELDS THAT RIDE ON A TABLE, put on the chain deliberately.
+        # This is the longest chain in the repository -- regionalise, write,
+        # read, split -- and until 2026-09-09 it carried neither, so the one
+        # job where an account is SCALED and a closure is DELIBERATELY DROPPED
+        # went four steps without either being looked at.
+        from quadrium.models import Satellite
+        national.satellites = {"employment": Satellite(
+            name="employment", unit="persons",
+            values=[float(x) * 12.0 for x in national.X],
+            source="synthetic, to put the fields on the chain",
+            source_year=national.year)}
+        national.type_ii = {
+            "income_rows": ["Remuneración de los asalariados"],
+            "household": "Gasto en consumo final de los hogares"}
         rng = np.random.default_rng(11)
         share = np.clip(0.20 * np.exp(rng.normal(0, 0.5, national.n)), 0.02, 0.85)
         A_nat = np.nan_to_num(
@@ -86,7 +100,22 @@ def main() -> int:
             sector_codes=national.sector_codes,
             sector_labels=national.sector_labels, country="ES-region",
             year=national.year, unit=national.unit,
-            classification=national.classification)
+            classification=national.classification, national=national)
+
+        # THE ACCOUNT COMES DOWN SCALED, and the closure does not come at all.
+        check("the account reaches the region, scaled and marked estimated",
+              "employment" in region.satellites
+              and set(region.satellites["employment"].origin) == {"estimated"},
+              "carried whole it would hand the region the whole country's "
+              "employment; dropped it would vanish in silence")
+        check("and the type II closure is refused with its reason in the "
+              "lineage",
+              not region.type_ii
+              and any("type II closure did NOT come" in c
+                      for c in region.lineage),
+              "a regionalised table has one value-added row and one "
+              "final-demand column, both residuals: there is no wages row to "
+              "close on")
 
         counts = region.provenance_counts()
         check("the regionalised table says every cell of it is an estimate",
@@ -115,6 +144,13 @@ def main() -> int:
               f"back {region.n ** 2} OBSERVED — the audit trail resetting at "
               f"the file boundary, which is what the field exists to prevent")
 
+        check("and so does the account, with its unit and its origins",
+              "employment" in back.satellites
+              and back.satellites["employment"].unit == "persons"
+              and set(back.satellites["employment"].origin) == {"estimated"},
+              "on 2026-09-08 it came back gone; the values are meaningless "
+              "without the unit and dangerous without the origins")
+
         check("and so does what the table is",
               back.lineage and any("regionalised" in line for line in back.lineage),
               f"{len(back.lineage)} lines of lineage survive, the first being "
@@ -140,6 +176,20 @@ def main() -> int:
               and out.provenance_counts().get("OBSERVED", 0) == 0,
               f"{out.n} sectors, {out.provenance_counts()}. Nothing in this "
               f"table was ever measured and nothing in it claims to be")
+
+        # FOUR STEPS, AND THE ACCOUNT IS STILL ONE FIGURE PER SECTOR.
+        emp = out.satellites.get("employment")
+        check("the account survives the second derivation as well",
+              emp is not None and len(emp.values) == out.n,
+              f"{len(emp.values) if emp else 0} values for {out.n} sectors — "
+              f"an account that loses step with its table is aligned to "
+              f"sectors that are not these, which __post_init__ now refuses")
+        check("and its total is what it was before any of this",
+              emp is not None
+              and abs(sum(emp.values)
+                      - sum(back.satellites["employment"].values)) < 1e-6,
+              "a split divides an account, it does not create or destroy any "
+              "of it; the estimate is how it divides")
 
         # ---- 4. and the cost of the first step is still attached
         lineage = "\n".join(out.lineage)

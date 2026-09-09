@@ -167,6 +167,44 @@ def main() -> int:
           "projected" in iot.table_id and "PROJECTED" in (grown.notes or ""),
           iot.table_id)
 
+    # 4b -- THE FIELDS THAT RIDE ON A TABLE, on the one job that had never
+    #       been asked about them.
+    #
+    # A projection is the only route where they cannot come from the parent:
+    # the parent is a supply-use PAIR, and `SupplyUseTables` has neither field
+    # to lose. So `to_iot` is right to build without them and the workbook
+    # attaches them after, in `build_config`. That is a claim about an order
+    # of operations and nothing had ever run it.
+    from quadrium.config import build_satellites
+    from quadrium.diagnostics import compute, satellite_effects
+
+    check("a projected pair has no accounts to lose, which is why to_iot "
+          "builds without them",
+          not getattr(grown, "satellites", None)
+          and not iot.satellites and not iot.type_ii,
+          "a SupplyUseTables carries neither field; if to_iot passed them it "
+          "would be inventing them")
+
+    rows = [{"name": "employment", "unit": "persons", "sector_code": c,
+             "value": float(x) * 12.0, "source": "synthetic",
+             "source_year": iot.year}
+            for c, x in zip(iot.sector_codes, iot.X)]
+    iot.satellites = build_satellites(rows, iot)
+    check("and an account declared in the workbook attaches to the PROJECTED "
+          "sectors",
+          len(iot.satellites["employment"].values) == iot.n,
+          f"{iot.n} sectors — the sheet is validated against the table that "
+          f"came out of the transformation, not the one that went into the "
+          f"projection, and those can differ in both count and codes")
+
+    d = compute(iot.Z, iot.X)
+    eff = satellite_effects(iot.satellites["employment"].values, iot.X, d["L"])
+    finite = np.isfinite(eff["total"])
+    check("and its multipliers compute on a projected table like any other",
+          bool(finite.any()) and bool((eff["total"][finite] >= 0).all()),
+          f"{int(finite.sum())} of {iot.n} sectors have a finite total effect; "
+          f"the rest have no output, which is undefined and not zero")
+
     # 5 -- SUT-RAS is wired, and it keeps its own target vocabulary.
     #
     # It was refused here until 2026-08-26 with a reasoned message about a

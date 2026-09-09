@@ -18,8 +18,7 @@ import numpy as np
 from . import diagnostics
 from .balancing import balance, solver_margin_tolerance
 from .disaggregation import (DisaggregationError, feasibility,
-                             split_satellites, split_sectors,
-                             targets)
+                             split_sectors, targets)
 from .precision import assertable_tolerance
 from .models import (CellLabel, DisaggregationResult, IOTable, Scenario,
                      SplitSpec)
@@ -303,9 +302,9 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
 
     # Satellite accounts follow their sectors. Done before `diag` is filled so
     # the effects below are computed on the SPLIT accounts and not the parent's.
-    sat = split_satellites(table, seed, seed["splits"])
-    if sat:
-        expanded.satellites = sat["satellites"]
+    # Divided inside `split_sectors`, one split at a time, so the loop
+    # variable is well formed after each. Read back rather than recomputed.
+    expanded.satellites = seed.get("satellites") or {}
 
     diag = diagnostics.compute(Z_bal, seed["X"])
 
@@ -334,7 +333,8 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
                    "estimated": [c for c, o in zip(seed["codes"], s.origin)
                                  if o == "estimated"]}
             for name, s in expanded.satellites.items()}
-        diag["equal_intensity_assumed"] = sat["equal_intensity_assumed"]
+        diag["equal_intensity_assumed"] = seed.get(
+            "equal_intensity_assumed", [])
     diag["balance_info"] = combined
     diag["reaggregation"] = reagg
     diag["user_constraints_overridden"] = overridden

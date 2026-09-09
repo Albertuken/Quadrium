@@ -930,14 +930,47 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     table, table_path, kind = _load_declared_table(
         meta, base_dir, tables, offline, refresh, defaults_taken)
 
-    # ---- type II closure ----------------------------------------------
-    table.type_ii = _type_ii_spec(meta, table)
+    # ---- type II closure and satellite accounts ------------------------
+    #
+    # ADD OR REPLACE, NEVER ERASE. Both of these used to assign
+    # unconditionally, and `build_satellites` returns {} for an empty sheet.
+    # So: split a table with an employment account, export it, point a new
+    # workbook at the file as `table_kind: interchange` to divide a second
+    # sector -- and the account the FILE carried was wiped, because the new
+    # workbook did not repeat the sheet.
+    #
+    # That is the fourth appearance of one shape in three days and the only
+    # one that destroys the user's own work on the route `docs/GUIDE.md`
+    # documents. A workbook that says nothing about an account is not asking
+    # for it to be deleted.
+    #
+    # The workbook still WINS where it speaks: an account it declares replaces
+    # the file's account of that name, because a user who typed a figure means
+    # it. Removing one is a deliberate act and there is no way to do it by
+    # omission -- write the file without it, or say so in the sheet.
+    from_file = dict(getattr(table, "satellites", None) or {})
+    from_book = build_satellites(tables.get("satellites", []), table)
+    kept = sorted(set(from_file) - set(from_book))
+    replaced = sorted(set(from_file) & set(from_book))
+    table.satellites = {**from_file, **from_book}
+    if kept:
+        defaults_taken.append(
+            f"the satellite account(s) {', '.join(kept)} came with the table "
+            f"and this workbook does not mention them; they are kept, not "
+            f"dropped")
+    if replaced:
+        defaults_taken.append(
+            f"the satellite account(s) {', '.join(replaced)} came with the "
+            f"table AND are declared here; the workbook's figures are used")
 
-    # ---- satellite accounts -------------------------------------------
-    # Attached to the TABLE and not carried beside it, because they follow its
-    # sectors: a split has to divide them, an export has to write them, and a
-    # reader who has the table has the accounts.
-    table.satellites = build_satellites(tables.get("satellites", []), table)
+    spec = _type_ii_spec(meta, table)
+    if spec:
+        table.type_ii = spec
+    elif getattr(table, "type_ii", None):
+        defaults_taken.append(
+            "the type II closure came with the table and this workbook does "
+            "not mention it; it is kept, and the report says which rows it "
+            "closes on")
 
     # ---- keys ---------------------------------------------------------
     grouped: dict[str, list[dict]] = {}

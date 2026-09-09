@@ -196,6 +196,41 @@ def main():
     check("and names the case where it is known to be false",
           "restaurant employs far more people per euro" in md)
 
+    # ---- TWO SPLITS IN ONE PASS, which nothing had ever run ------------
+    #
+    # `split_sectors` rebuilds its loop variable once per spec. With one spec
+    # the loop runs once and the rebuild never matters; with two it does, and
+    # until 2026-09-09 the accounts were divided ONCE at the end over the
+    # original table, leaving the loop variable holding an account of the
+    # parent's length on a table that had already grown.
+    from quadrium.models import AllocationKey, ProxyStrength
+    keys2 = dict(ex.build_keys())
+    keys2["k_two"] = AllocationKey(
+        key_id="k_two", applies_to="output", new_sector_codes=["1A", "1B"],
+        raw_values=[3.0, 1.0], source="illustrative, for the second split",
+        source_year=2022, strength=ProxyStrength.WEAK)
+    two = run_scenario(
+        tab,
+        [SplitSpec("36", ex.NEW, ex.LBL,
+                   keys_by_block={"output": "k_tod_produccion"}),
+         SplitSpec("1", ["1A", "1B"], ["one", "two"],
+                   keys_by_block={"output": "k_two"})],
+        Scenario(scenario_id="S1", label="size only", description="base"),
+        keys2)
+    s2 = two.table.satellites["employment"]
+    check("two splits in one pass leave the account one figure per sector",
+          len(s2.values) == two.table.n == tab.n + 2,
+          f"{len(s2.values)} values for {two.table.n} sectors")
+    check("and the total is still the parent's, after both",
+          abs(sum(s2.values) - before) < 1e-6,
+          f"{before:,.1f} before, {sum(s2.values):,.1f} after two divisions")
+    check("and BOTH assumptions are recorded, not just the last",
+          len(two.diagnostics["equal_intensity_assumed"]) == 2
+          and {a["sector_code"]
+               for a in two.diagnostics["equal_intensity_assumed"]} == {"36", "1"},
+          str([a["sector_code"]
+               for a in two.diagnostics["equal_intensity_assumed"]]))
+
     print()
     print("    The account divides in proportion to money, so it reports two")
     print("    subsectors as equally labour-intensive by construction. The")

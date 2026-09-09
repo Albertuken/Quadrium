@@ -676,6 +676,16 @@ and the report says all of this under the numbers. **If you hold the quantity by
 subsector, that is the number to use**: the split cannot invent a difference
 nobody measured.
 
+**And if the table you point at already carries accounts, they stay.** A table
+this engine wrote — the result of an earlier split, or a regionalisation —
+carries its satellite accounts and its type II closure in the file. A workbook
+that does not mention them **keeps them**, and says so among the defaults it
+took. A workbook that declares an account of the same name replaces it, because
+a figure you typed is a figure you meant.
+
+There is no way to remove one by saying nothing. Write the file without it, or
+say so in the sheet. Silence is not a request for deletion.
+
 ### Sheet `profiles` — making the subsectors genuinely different
 
 | scenario_id | subsector_code | supplier_code | intensity |

@@ -235,6 +235,19 @@ class IOTable:
             raise ValueError(f"X must have length {n}, got {self.X.shape}")
         if len(self.sector_labels) != n:
             raise ValueError("sector_labels and sector_codes differ in length")
+        # A SATELLITE ACCOUNT IS PER SECTOR, and until 2026-09-09 nothing said
+        # so: a two-sector table accepted an account of three values and every
+        # coefficient below it would have been computed against the wrong
+        # sector. Checked here rather than at each use, because the invariant
+        # belongs to the object -- and because the first thing that tried to
+        # carry an account between two splits produced exactly this mismatch.
+        for name, sat in (self.satellites or {}).items():
+            if len(sat.values) != n:
+                raise ValueError(
+                    f"satellite {name!r} has {len(sat.values)} values for "
+                    f"{n} sectors. An account is one figure per sector of THIS "
+                    f"table; one carried from a table of another shape is "
+                    f"aligned to sectors that are not these.")
         if len(self.Y_labels) != self.Y.shape[1]:
             raise ValueError("Y_labels does not match Y columns")
         if len(self.VA_labels) != self.VA.shape[0]:
