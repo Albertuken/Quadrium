@@ -9,7 +9,7 @@ description = "Scientific software for constructing Supply-Use and Input-Output 
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Albert Roca Florido" }]
+authors = [{ name = "Alberto Roca-Florido" }]
 keywords = ["input-output", "supply-use", "national-accounts", "economics",
             "SNA", "ESA-2010", "GRAS", "RAS"]
 classifiers = [
