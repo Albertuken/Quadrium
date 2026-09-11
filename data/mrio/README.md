@@ -57,7 +57,9 @@ run: `run_mrio_axis_scale`, `run_mrio_spillovers`, `run_spillover_predictability
 `run_eu_mrio_region`, `run_mrio_against_surveys` and `run_spillover_sensitivity`.
 A tenth, `run_mrio_same_year`, also wants `MRIO_2010_272regions.xlsx`,
 `Final_demand_2010.xlsx` and `TAXSUB_VA_2010.xlsx` from the same folder: it
-compares the archive with the Austrian surveys at their own year. The first run reads the 33 MB sheet and caches it as
+compares the archive with the Austrian surveys at their own year. And
+`run_mrio_years` checks every year it finds there, 2008 to 2018, before the
+engine loads one with `mrio_year`. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region

@@ -123,7 +123,8 @@ class Source:
         if self.table_kind == "eu_mrio":
             return ["table_kind      eu_mrio",
                     f"table_path      {self.path}",
-                    f"mrio_region     {self.geo}"]
+                    f"mrio_region     {self.geo}",
+                    f"mrio_year       {self.year}"]
         return [f"table_kind      {self.table_kind}",
                 f"table_path      {self.path}"]
 
@@ -273,40 +274,44 @@ def _mrio_sources(folder: Path) -> list[Source]:
     """
     import openpyxl
 
-    from .io_loader import (LoaderError, _MRIO_S, _MRIO_SECTORS, _mrio_files,
-                            _mrio_side)
-    try:
-        blk, fdf, _ = _mrio_files(folder)
-        wb = openpyxl.load_workbook(blk, read_only=True, data_only=True)
+    from .io_loader import (LoaderError, _MRIO_S, _MRIO_SECTORS, _MRIO_YEARS,
+                            _mrio_files, _mrio_side)
+    out: list[Source] = []
+    # Every year of the deposit that is in the folder, each under its own id.
+    for year in _MRIO_YEARS:
         try:
-            head = next(wb.worksheets[0].iter_rows(values_only=True,
-                                                   max_row=1))
-        finally:
-            wb.close()
-        fd_head, FD = _mrio_side(fdf, "rows")
-    except (LoaderError, OSError, ValueError, StopIteration, KeyError):
-        return []
-    labels = [str(x) for x in head[1:] if x is not None]
-    S = _MRIO_S
-    regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
-    if (len(regions) * S != len(labels) or FD.shape[0] != len(labels)
-            or "TOTAL" not in fd_head):
-        return []
-    sectors = [l.split("-", 1)[1] for l in labels[:S]]
-    output = FD[:, fd_head.index("TOTAL")].reshape(len(regions), S).sum(1)
-    return [Source(
-        source_id=f"mrio:eu2018:{r}", publisher="Huang & Koutroumpis",
-        geo=r, geos=[r], year=2018, dataset=blk.stem, path=blk.parent,
-        table_kind="eu_mrio",
-        classification=("10 sectors, NACE sections grouped as the archive "
-                        "groups them"),
-        codes=list(sectors),
-        labels={c: _MRIO_SECTORS.get(c, c) for c in sectors},
-        note=("a region's own table, cut from an ESTIMATED archive that does "
-              "not balance: the residue is carried and sized in the report, "
-              "and a region that trades with no other region is refused on "
-              "loading"))
-        for r, x in zip(regions, output) if x > 0]
+            blk, fdf, _ = _mrio_files(folder, year)
+            wb = openpyxl.load_workbook(blk, read_only=True, data_only=True)
+            try:
+                head = next(wb.worksheets[0].iter_rows(values_only=True,
+                                                       max_row=1))
+            finally:
+                wb.close()
+            fd_head, FD = _mrio_side(fdf, "rows")
+        except (LoaderError, OSError, ValueError, StopIteration, KeyError):
+            continue
+        labels = [str(x) for x in head[1:] if x is not None]
+        S = _MRIO_S
+        regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
+        if (len(regions) * S != len(labels) or FD.shape[0] != len(labels)
+                or "TOTAL" not in fd_head):
+            continue
+        sectors = [l.split("-", 1)[1] for l in labels[:S]]
+        output = FD[:, fd_head.index("TOTAL")].reshape(len(regions), S).sum(1)
+        out += [Source(
+            source_id=f"mrio:eu{year}:{r}", publisher="Huang & Koutroumpis",
+            geo=r, geos=[r], year=year, dataset=blk.stem, path=blk.parent,
+            table_kind="eu_mrio",
+            classification=("10 sectors, NACE sections grouped as the "
+                            "archive groups them"),
+            codes=list(sectors),
+            labels={c: _MRIO_SECTORS.get(c, c) for c in sectors},
+            note=("a region's own table, cut from an ESTIMATED archive that "
+                  "does not balance: the residue is carried and sized in the "
+                  "report, and a region that trades with no other region is "
+                  "refused on loading"))
+            for r, x in zip(regions, output) if x > 0]
+    return out
 
 
 def scan(root: Path | str) -> list[Source]:

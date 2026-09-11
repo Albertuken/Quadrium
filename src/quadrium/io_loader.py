@@ -2052,8 +2052,11 @@ def read_rokicki_components(path: Path | str, region: str) -> dict:
 # The European MRIO, one region at a time
 # ---------------------------------------------------------------------------
 
-_MRIO_FILES = ("MRIO_2018_272regions.xlsx", "Final_demand_2018.xlsx",
-               "TAXSUB_VA_2018.xlsx")
+# The deposit's years, the same three files for each. Every year is checked on
+# load for what made 2018 loadable -- one output vector, the archive's layout
+# -- and `run_mrio_years.py` checks, year by year, that the side files join the
+# block by position as they do in 2018.
+_MRIO_YEARS = tuple(range(2008, 2019))
 _MRIO_S = 10
 # `NPISH` is not here on purpose: see the docstring.
 _MRIO_FD = (("HFCE", "Household final consumption expenditure (HFCE)"),
@@ -2074,10 +2077,18 @@ _MRIO_UNIT = ("million US dollars, as Huang & Koutroumpis (2023) state it; "
 _MRIO_CACHE: dict = {}
 
 
-def _mrio_files(path: Path | str) -> tuple[Path, Path, Path]:
+def _mrio_files(path: Path | str,
+                year: int = 2018) -> tuple[Path, Path, Path]:
+    if year not in _MRIO_YEARS:
+        raise LoaderError(
+            f"year {year} is not in the archive: the deposit holds "
+            f"{_MRIO_YEARS[0]} to {_MRIO_YEARS[-1]}, the same three files for "
+            f"each year.")
     path = Path(path)
     folder = path if path.is_dir() else path.parent
-    found = tuple(folder / f for f in _MRIO_FILES)
+    found = tuple(folder / f for f in (
+        f"MRIO_{year}_272regions.xlsx", f"Final_demand_{year}.xlsx",
+        f"TAXSUB_VA_{year}.xlsx"))
     missing = [f.name for f in found if not f.exists()]
     if missing:
         raise LoaderError(
@@ -2127,7 +2138,7 @@ def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
     """A side file's headers and values, units always on the first axis.
 
     The label column is deliberately NOT returned: it does not describe the
-    rows it sits beside. See `load_eu_mrio_2018`.
+    rows it sits beside. See `load_eu_mrio`.
     """
     import openpyxl
 
@@ -2185,6 +2196,16 @@ def _mrio_move_to_country(Z: np.ndarray, regions: list[str], factors: dict,
 
 
 def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
+    """`load_eu_mrio` for 2018, the year this project measured the archive on.
+
+    Kept because it was the loader's name while it had no year, and the
+    validators that measure the 2018 file call it so. It adds nothing.
+    """
+    return load_eu_mrio(path, region, 2018)
+
+
+def load_eu_mrio(path: Path | str, region: str,
+                 year: int = 2018) -> IOTable:
     """One region's own table from the European MRIO of Huang & Koutroumpis.
 
     THE SOURCE
@@ -2196,12 +2217,16 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     estimate, not a survey**, so every cell of the returned table is marked
     `ESTIMATED`, and a later split inherits that rather than a measurement.
 
-    `path` is the archive's `Data/` folder, or any of the three files in it:
-    the 2,720 x 2,720 block, `Final_demand_2018.xlsx` and `TAXSUB_VA_2018.xlsx`.
-    The year is the one the publisher's own file names carry inside a
-    checksummed deposit, which is the only place it is stated; the rule
-    against reading years from file names (`OQ-D-01`) is about files a user
-    named.
+    `path` is the archive's `Data/` folder, or any file in it; `year` picks
+    the three files -- `MRIO_{year}_272regions.xlsx`, `Final_demand_{year}.xlsx`
+    and `TAXSUB_VA_{year}.xlsx` -- from 2008 to 2018, default 2018. The year is
+    the one the publisher's own file names carry inside a checksummed deposit,
+    which is the only place it is stated; the rule against reading years from
+    file names (`OQ-D-01`) is about files a user named. Every year is checked
+    on load for what made 2018 loadable, and `run_mrio_years.py` checks that
+    each year's side files join its block by position. The archive-wide
+    figures the notes quote -- the median spillover, the survey comparison,
+    the counterfactual range -- were measured on 2018, and say so.
 
     WHAT IS RETURNED, AND WHY ONE REGION
     --------------------------------------
@@ -2253,7 +2278,8 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     region-major, so it describes nothing and is never read
     (`run_mrio_side_join.py`).
     """
-    blk, fdf, vaf = _mrio_files(path)
+    year = int(year)
+    blk, fdf, vaf = _mrio_files(path, year)
     region = str(region or "").strip().upper()
     S = _MRIO_S
 
@@ -2410,11 +2436,14 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
         "multiplier_full": [float(x) for x in m],
         "to_regions": [[r, float(v)] for r, v in to_regions],
         "archive_median_pct": EVIDENCE["spillover_share_pct"]["median"],
+        "archive_year": 2018,
         "measured_on": f"the archive's full {n:,} x {n:,} inverse",
         "survey_check": {
             **EVIDENCE["mrio_vs_surveys"],
             "spillover_median_if_surveyed":
-                EVIDENCE["spillover_share_pct_survey"]["median"]}}
+                EVIDENCE["spillover_share_pct_survey"]["median"]},
+        "years_check": dict(EVIDENCE["spillover_by_year"]),
+        "year": year}
 
     total = float(X.sum())
     neg = [sectors[j] for j in range(S) if X[j] - Z_all[s][j].sum() < 0]
@@ -2433,16 +2462,20 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
           f"output multipliers ({100 * per[lo]:.1f} % in {sectors[lo]} to "
           f"{100 * per[hi]:.1f} % in {sectors[hi]}; median "
           f"{EVIDENCE['spillover_share_pct']['median']} % across the "
-          f"archive): the part that travels through other regions and comes "
+          f"2018 archive): the part that travels through other regions and comes "
           f"back, measured on the full {n:,} x {n:,} inverse. Where surveys "
-          f"can check the archive, it records "
+          f"can check the archive (2018, and 2010 for Austria), it records "
           f"{EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} times "
           f"the purchases a region makes from the rest of its country, so "
           f"this share is more likely too low than too high: across the "
-          f"archive, moving that trade up to the surveys' level takes the "
+          f"2018 archive, moving that trade up to the surveys' level takes the "
           f"median from {EVIDENCE['spillover_share_pct']['median']} % to "
           f"{EVIDENCE['spillover_share_pct_survey']['median']} %, and this "
-          f"region's from {100 * agg:.1f} % to {100 * agg4:.1f} %. Trade with the "
+          f"region's from {100 * agg:.1f} % to {100 * agg4:.1f} %. These "
+          f"region figures are for {year}: across the deposit's eleven years "
+          f"a region's own figure moves a median "
+          f"{EVIDENCE['spillover_by_year']['region_range_median_pts']} points "
+          f"between its highest and lowest year. Trade with the "
           f"other regions is kept as a final-demand column (sales) and a "
           f"not-value-added row (purchases). "
         + ("NPISH is identical to GGFC on every row of the final-demand file "
@@ -2462,7 +2495,7 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     prov = np.empty((S, S), dtype=object)
     prov[:] = CellLabel.PROXY_ESTIMATED
     table = IOTable(
-        table_id=f"EU_MRIO_2018_{region}", country=region, year=2018,
+        table_id=f"EU_MRIO_{year}_{region}", country=region, year=year,
         unit=_MRIO_UNIT,
         classification=("10 sectors, NACE Rev. 2 sections grouped as the "
                         "archive groups them; NUTS-2 as coded in the archive"),

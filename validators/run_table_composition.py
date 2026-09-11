@@ -88,7 +88,7 @@ DECLARED = {
     "io_loader.py::load_ine_tio": ("primary", "the INE workbook."),
     "io_loader.py::load_idescat_mioc": ("primary", "the IDESCAT workbook."),
     "io_loader.py::load_rokicki_austria": ("primary", "the MRIO archive."),
-    "io_loader.py::load_eu_mrio_2018": (
+    "io_loader.py::load_eu_mrio": (
         "constructor",
         "passes `interregional`, the leakage computed on the archive's full "
         "inverse. `satellites` and `type_ii` have no parent here: a table "

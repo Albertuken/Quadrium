@@ -454,13 +454,28 @@ made the right call.
 Koutroumpis (2023) estimated input-output tables for 272 NUTS-2 regions,
 linked by trade. `eu_mrio` gives you one region's own table, 10 sectors, for
 2018. Download `MRIO.zip` from Zenodo record 7875024 (317 MB, CC BY 4.0), unzip
-it, and point `table_path` at its `Data` folder: the loader needs
-`MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx` and `TAXSUB_VA_2018.xlsx`
-side by side. Then name the region by its NUTS-2 code:
+it, and point `table_path` at its `Data` folder: the loader needs the year's
+three files side by side — `MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx`
+and `TAXSUB_VA_2018.xlsx` for 2018. Then name the region by its NUTS-2 code,
+and the year if it is not 2018:
 
     table_kind     eu_mrio
     table_path     /where/you/unzipped/MRIO/Data
     mrio_region    ES51
+    mrio_year      2012
+
+`mrio_year` takes any year from 2008 to 2018; leave the row out for 2018. Every
+year of the deposit was checked to be the same kind of object as 2018 before
+the engine would load it — the same 2,720 units in the same order, one output
+vector, side files that join the block by position
+(`validators/run_mrio_years.py`). The figures below about the archive as a
+whole were measured on 2018, and the report says so.
+
+Across those eleven years the archive's median spillover stays between 10.8 %
+and 12.3 %. A single region's figure moves: a median 5.1 points between its
+highest and lowest year, 9.8 at the 90th percentile, although regions keep
+their order (`validators/run_spillover_years.py`). The figure for your region
+is the one for the year you loaded, and the report says so.
 
 Read three things before you use it:
 

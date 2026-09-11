@@ -307,7 +307,9 @@ def main() -> int:
     from quadrium.catalogue import advise, scan
 
     sources = scan(ROOT)
-    mrio = [s for s in sources if s.table_kind == "eu_mrio"]
+    # The 2018 tables: the catalogue lists every year it finds, and the
+    # counts below are about one year's regions.
+    mrio = [s for s in sources if s.table_kind == "eu_mrio" and s.year == 2018]
     empty = {r for j, r in enumerate(regions)
              if X[j * S:(j + 1) * S].sum() <= 0}
     mine = next((s for s in mrio if s.geo == REGION), None)
@@ -376,6 +378,13 @@ def main() -> int:
           "at the surveys' level" in text and f"{100 * agg4:.1f} %" in text
           and "counterfactual" in text,
           f"{100 * agg4:.1f} % for {REGION}, next to {100 * agg:.1f} %")
+    moves = EVIDENCE["spillover_by_year"]["region_range_median_pts"]
+    check("and says the region's figure is that year's, and how far such "
+          "figures move across the deposit",
+          "Read it as that year's" in text and f"{moves} points" in text,
+          f"the archive's median barely moves across 2008-2018; a region's "
+          f"own figure moves a median {moves} points "
+          f"(run_spillover_years.py)")
     csv_path = tmp / "o" / "eumrio" / "scenarios" / "S1" / "table_disaggregated.csv"
     check("the residual column survives the split",
           csv_path.exists() and "RESIDUAL" in csv_path.read_text(),

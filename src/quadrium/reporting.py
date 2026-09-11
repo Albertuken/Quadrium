@@ -658,7 +658,8 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                    f"country, so these shares are more likely too low than "
                    f"too high.") if sc else ""
             if sc.get("spillover_median_if_surveyed") is not None:
-                low += (f" Moved to what the surveys record, the archive's "
+                low += (f" Moved to what the surveys record, the "
+                        f"{ir.get('archive_year', 2018)} archive's "
                         f"median rises from {ir.get('archive_median_pct')} % "
                         f"to {sc['spillover_median_if_surveyed']} %.")
             cf = ir.get("share_by_sector_if_surveyed")
@@ -669,6 +670,17 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                         f"held; a counterfactual, not a corrected figure — it "
                         f"would lose **{_fmt(100 * ir['share_if_surveyed'])} "
                         f"%**.")
+            yc = ir.get("years_check") or {}
+            if yc:
+                low += (f" It is the figure for {tbl.year}: across the "
+                        f"deposit's eleven years a region's figure moves by a "
+                        f"median of {yc.get('region_range_median_pts')} points "
+                        f"between its highest and lowest year "
+                        f"({yc.get('region_range_p90_pts')} at the 90th "
+                        f"percentile), while the archive's median stays "
+                        f"between {yc.get('median_min')} % and "
+                        f"{yc.get('median_max')} %. Read it as that year's, "
+                        f"not as a constant.")
             prov += [
                 "", "### What a one-region table leaves out", "",
                 f"This table is one region cut from a multiregional archive, so "
@@ -676,7 +688,8 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"through other regions and comes back. Measured on "
                 f"{ir.get('measured_on', 'the archive')}, that part is "
                 f"**{_fmt(100 * ir['share'])} %** of this region's output "
-                f"multipliers; across the archive the median is "
+                f"multipliers; across the {ir.get('archive_year', 2018)} "
+                f"archive the median is "
                 f"{ir.get('archive_median_pct', '—')} %. **The multipliers in "
                 f"this report come from the one-region table and do not "
                 f"contain it.**" + low, "",

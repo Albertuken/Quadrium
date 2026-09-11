@@ -75,6 +75,14 @@ EVIDENCE = {
     # `run_spillover_sensitivity.py`.
     "spillover_share_pct_survey": {"p10": 4.7, "median": 21.6, "p90": 61.4,
                                    "surveyed_higher": 10, "factor": 4.0},
+    # And whether any of it depends on the year. Across the deposit's eleven
+    # years the archive's median stays put while a single region's figure
+    # moves by several points; regions keep their order.
+    # `run_spillover_years.py`.
+    "spillover_by_year": {"median_min": 10.8, "median_max": 12.3,
+                          "region_range_median_pts": 5.1,
+                          "region_range_p90_pts": 9.8,
+                          "rank_2008_2018": 0.86},
 }
 
 

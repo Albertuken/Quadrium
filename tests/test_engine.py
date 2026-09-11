@@ -5184,8 +5184,8 @@ def test_the_functions_the_REACHABILITY_SWEEP_found_UNCALLED():
 
 
 def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
-    """Fourteen refusals of the European MRIO loader, on an archive small
-    enough to write here.
+    """The European MRIO loader's refusals, on an archive small enough to
+    write here -- in any of the deposit's years.
 
     WHY A SYNTHETIC ARCHIVE
     -------------------------
@@ -5232,12 +5232,12 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
                         X])
         return FD, VA
 
-    def write(folder, Z, rows, cols, fd_head, FD, VA):
+    def write(folder, Z, rows, cols, fd_head, FD, VA, year=2018):
         folder.mkdir(parents=True, exist_ok=True)
         for name, head, body, row_labels in (
-                ("MRIO_2018_272regions.xlsx", cols, Z, rows),
-                ("Final_demand_2018.xlsx", fd_head, FD, rows),
-                ("TAXSUB_VA_2018.xlsx", cols, VA, vh)):
+                (f"MRIO_{year}_272regions.xlsx", cols, Z, rows),
+                (f"Final_demand_{year}.xlsx", fd_head, FD, rows),
+                (f"TAXSUB_VA_{year}.xlsx", cols, VA, vh)):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.append([None] + list(head))
@@ -5287,6 +5287,10 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
           and ir.get("share_if_surveyed", -1.0) > ir.get("share", 2.0),
           "the rest of its country is AA12, and raising that trade raises "
           "what leaves")
+    check("and it carries how far a region's figure moves across the years, "
+          "and which year it is",
+          bool(ir.get("years_check")) and ir.get("year") == 2018,
+          "the report reads the figure as the loaded year's")
     import dataclasses
     try:
         dataclasses.replace(t, interregional={"share_by_sector": [0.1]})
@@ -5385,6 +5389,42 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
     ids = sorted(s.source_id for s in scan(tree))
     check("the catalogue lists each region under its own code",
           ids == ["mrio:eu2018:AA11", "mrio:eu2018:AA12"], ", ".join(ids))
+
+    # ---- another year of the same deposit
+    #
+    # The deposit holds 2008 to 2018 under the same three names with the year
+    # changed. Each year is checked on load, never assumed from 2018.
+    try:
+        from quadrium.io_loader import load_eu_mrio
+    except ImportError as exc:
+        check("the loader takes a year", False, str(exc))
+        return
+    y12 = write(tmp / "y2012", Z0, labels, labels, fh, FD, VA, year=2012)
+    t12 = load_eu_mrio(y12, "AA11", 2012)
+    check("a year other than 2018 loads from its own files, and says which "
+          "year it is", t12.year == 2012 and "2012" in t12.table_id
+          and "MRIO_2012_272regions.xlsx" in t12.source,
+          f"{t12.table_id}, {t12.year}")
+    refused("a year the folder does not hold",
+            lambda: load_eu_mrio(good, "AA11", 2012),
+            "MRIO_2012_272regions.xlsx")
+    refused("a year the deposit does not have",
+            lambda: load_eu_mrio(good, "AA11", 2020), "2008 to 2018")
+    refused("a workbook year that is not a year",
+            lambda: build_config({**meta, "mrio_region": "AA11",
+                                  "mrio_year": "last"}, {}, tmp),
+            "is not a year")
+    refused("`mrio_year` on another kind of table",
+            lambda: build_config({**meta, "table_kind": "uk_analytical",
+                                  "mrio_year": 2012}, {}, tmp),
+            "mrio_year")
+    tree12 = tmp / "tree12"
+    shutil.copytree(y12, tree12 / "data" / "mrio")
+    shutil.copytree(good, tree12 / "data" / "mrio", dirs_exist_ok=True)
+    got = sorted(s.source_id for s in scan(tree12))
+    check("and the catalogue lists each year it finds, under its own id",
+          got == ["mrio:eu2012:AA11", "mrio:eu2012:AA12",
+                  "mrio:eu2018:AA11", "mrio:eu2018:AA12"], ", ".join(got))
 
 
 def test_the_refusals_a_SATELLITES_sheet_makes():

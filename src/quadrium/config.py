@@ -26,7 +26,8 @@ Five sheets. Only `project` and `splits` are required.
               `eurostat`       fetched from the Eurostat API by country and
                                year, and cached — see below
               `eu_mrio`        one region of the European MRIO (Huang and
-                               Koutroumpis 2023), named by `mrio_region`.
+                               Koutroumpis 2023), named by `mrio_region`,
+                               for `mrio_year` 2008-2018 (default 2018).
                                The archive does not balance and the residue
                                is carried in a labelled column and row
             `table_unbalanced` (`refuse` by default, or `residual_column`)
@@ -98,7 +99,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .io_loader import LoaderError, _open_workbook, load_eu_mrio_2018, \
+from .io_loader import LoaderError, _open_workbook, load_eu_mrio, \
     load_ine_tio, load_io_table, load_uk_analytical_iot
 from .models import (AllocationKey, Assumption, AssumptionLedger,
                      ProxyStrength, Satellite, Scenario, SplitSpec)
@@ -835,6 +836,27 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
             "\n    mrio_region    ES51\n"
             "\nfor Catalonia. A code the archive does not have is refused with "
             "the list of that country's regions.")
+    # `mrio_year` the same way: one kind only, and a year or nothing. Empty is
+    # 2018, the year this project measured the archive on, and the run says
+    # so; a year outside the deposit is the loader's to refuse.
+    raw_year = meta.get("mrio_year")
+    mrio_year = 2018
+    if raw_year not in (None, ""):
+        if kind != "eu_mrio":
+            raise ConfigError(
+                f"mrio_year={raw_year!r} applies only to table_kind "
+                f"'eu_mrio', not {kind!r}. Refusing rather than ignoring a "
+                f"setting you would never see was ignored.")
+        try:
+            mrio_year = int(float(str(raw_year).strip()))
+        except ValueError:
+            raise ConfigError(
+                f"mrio_year {raw_year!r} is not a year. The archive holds "
+                f"2008 to 2018; leave the row empty for 2018.") from None
+    elif kind == "eu_mrio":
+        defaults_taken.append(
+            "mrio_year is empty: the 2018 table, the year this project "
+            "measured the archive on")
 
     # `eurostat` names a country and a year instead of a file, and `table_path`
     # becomes where the download is KEPT rather than where it already is. So
@@ -897,7 +919,7 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
         "interchange": lambda p: load_io_table(p),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
-        "eu_mrio": lambda p: load_eu_mrio_2018(p, mrio_region),
+        "eu_mrio": lambda p: load_eu_mrio(p, mrio_region, mrio_year),
         "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
         "eurostat_sut": lambda p: _load_eurostat_sut(
             fetch_note, offline, refresh, defaults_taken,
@@ -1278,6 +1300,8 @@ def write_template(path: Path | str) -> Path:
             "#                           (Huang & Koutroumpis 2023). Point",
             "#                           table_path at the archive's Data",
             "#                           folder and add mrio_region, e.g. ES51.",
+            "#                           mrio_year picks 2008-2018 (default",
+            "#                           2018).",
             "#",
             "# For table_kind: eurostat, delete table_path (or use it to say",
             "# where to cache) and add instead:",
@@ -1678,6 +1702,20 @@ def plan_workbook(path: Path | str) -> dict:
         gap("project", f"`mrio_region` is set with table_kind {kind!r}",
             "it names a region of the European MRIO and applies to `eu_mrio` "
             "alone", "remove the row, or change the kind")
+    raw_year = str(meta.get("mrio_year") or "").strip()
+    if raw_year and kind != "eu_mrio":
+        gap("project", f"`mrio_year` is set with table_kind {kind!r}",
+            "it picks a year of the European MRIO and applies to `eu_mrio` "
+            "alone", "remove the row, or change the kind")
+    elif raw_year:
+        try:
+            bad = int(float(raw_year)) not in range(2008, 2019)
+        except ValueError:
+            bad = True
+        if bad:
+            gap("project", f"`mrio_year` is {raw_year!r}",
+                "the archive holds 2008 to 2018, one table per year",
+                "a year in that range, or leave it empty for 2018")
     if kind == "eu_mrio" and job == "regionalise":
         gap("regionalise", "a regionalisation of an `eu_mrio` table",
             "that table already describes one region; a location quotient on "

@@ -143,9 +143,12 @@ def _catalogue(args) -> int:
         # 259 lines would bury everything above them. One paragraph.
         if regional:
             countries = sorted({s.geo[:2] for s in regional})
+            years = sorted({s.year for s in regional})
+            span = (f"{years[0]}" if len(years) == 1 else
+                    f"{years[0]}-{years[-1]} ({len(years)} years)")
             print(f"\n  and {len(regional)} regional tables from the European "
-                  f"MRIO (Huang & Koutroumpis 2023),\n  2018, 10 sectors "
-                  f"each, one per NUTS-2 region in {len(countries)} "
+                  f"MRIO (Huang & Koutroumpis 2023),\n  {span}, 10 sectors "
+                  f"each, one per NUTS-2 region and year in {len(countries)} "
                   f"countries:\n  {', '.join(countries)}.\n  `--find CODE "
                   f"--geo <region>` asks about one, e.g. --geo "
                   f"{min(s.geo for s in regional)}. They are estimates, the "

@@ -222,7 +222,7 @@ class IOTable:
     # WHAT A ONE-REGION TABLE LEAVES OUT, when it was cut from a multiregional
     # archive: the share of each sector's output multiplier that runs through
     # other regions, measured on the archive's full inverse, and where it goes.
-    # Filled by `load_eu_mrio_2018` and by nothing else.
+    # Filled by `load_eu_mrio` and by nothing else.
     #
     # It does NOT travel, and that is why it is a field and not only a sentence
     # in `notes`: it describes the table AS LOADED. A split changes the
