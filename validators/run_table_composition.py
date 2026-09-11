@@ -43,6 +43,7 @@ Three honest answers, and the file says which each site gives:
                              carried, with the reason written at the site.
 """
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -210,8 +211,13 @@ def main():
     #      Checked by reading the source, because a defect this file cannot
     #      see is one it should say it cannot see.
     cfg = (SRC / "config.py").read_text()
+    # The file's accounts spread FIRST and the workbook's LAST, so a sheet
+    # still wins where it speaks and silence erases nothing. Anything between
+    # -- Eurostat's regional employment, since 2026-09-11 -- is allowed.
+    merge = re.search(r"table\.satellites = \{\*\*from_file,"
+                      r"(?: \*\*\w+,)* \*\*from_book\}", cfg)
     check("build_config adds or replaces satellites, it does not erase them",
-          "table.satellites = {**from_file, **from_book}" in cfg,
+          merge is not None,
           "an unconditional assignment wiped the account a file carried the "
           "moment a workbook that did not repeat the sheet ran on it")
     check("and keeps a type II closure the workbook is silent about",

@@ -297,6 +297,29 @@ flagged 48 Spanish industries at up to 284 %, plausibly and wrongly. See
 
 ---
 
+## Regional employment — `nama_10r_3empers`, for `mrio_employment`
+
+**Fetched 2026-09-11 by the engine itself**, the first time a workbook asked for
+it (`config._mrio_employment`). Eurostat's regional accounts: employed persons
+(`wstatus=EMP`), thousand persons (`unit=THS`), one NUTS-2 region and one year
+per file. The URL, byte count and SHA-256 are in the `.provenance` beside it.
+
+| file | bytes | SHA-256 |
+|---|---:|---|
+| `nama_10r_3empers_ES51_2018.json` | 4,200 | `4902ca2721dc…` |
+
+**No mapping is needed.** The European MRIO's ten sectors are this cube's own
+A10 codes — `A`, `B-E`, `F`, `G-I`, `J`, `K`, `L`, `M_N`, `O-Q`, `R-U` — and for
+Catalonia in 2018 they add up to 3,562.6, the `TOTAL` the cube publishes. The
+engine checks that sum for every region it loads.
+
+**The codes are the current NUTS.** The archive codes France on NUTS 2013 and
+Greece on NUTS 2010, so `FR21` and `EL11` return nothing while `FRF2` and
+`EL51` do. The engine refuses those regions rather than translate a code by
+hand. See `run_eu_mrio_employment.py`.
+
+---
+
 ## `naio_10_cp1700_PT_2020.json` — the first source that rounds to two decimals
 
 **What it is.** Portugal's symmetric input-output table for 2020, product by

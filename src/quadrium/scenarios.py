@@ -334,7 +334,7 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
             name: {**diagnostics.satellite_effects(s.values, seed["X"],
                                                    diag["L"]),
                    "unit": s.unit, "source": s.source,
-                   "source_year": s.source_year,
+                   "source_year": s.source_year, "notes": s.notes,
                    "estimated": [c for c, o in zip(seed["codes"], s.origin)
                                  if o == "estimated"]}
             for name, s in expanded.satellites.items()}

@@ -5427,6 +5427,185 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
                   "mrio:eu2018:AA11", "mrio:eu2018:AA12"], ", ".join(got))
 
 
+def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
+    """A region's employment account, from a kept Eurostat download, offline.
+
+    `mrio_employment: yes` attaches Eurostat's employed persons for the region
+    and year loaded (`nama_10r_3empers`, A10, thousand persons) as the account
+    `employment`. The cube here is written by hand in the shape Eurostat
+    serves, so nothing touches the network, and each refusal is fired.
+    """
+    import json
+    import tempfile
+    from unittest.mock import patch
+
+    import openpyxl
+
+    from quadrium import eurostat as E
+    from quadrium.config import ConfigError, build_config
+    from quadrium.io_loader import _MRIO_SECTORS
+
+    sectors = list(_MRIO_SECTORS)
+    labels = [f"{r}-{s}" for r in ("AA11", "AA12") for s in sectors]
+    n = len(labels)
+    i, j = np.indices((n, n))
+    Z = 1.0 + (i * 7 + j * 3) % 5
+    X = Z.sum(1) + 75.0
+    FD = np.column_stack([np.full(n, v) for v in (50, 10, 10, 5, 1, 4)] + [X])
+    VA = np.vstack([np.full(n, 2.0), X - Z.sum(0) - 6.0, np.full(n, 3.0), X])
+    tmp = Path(tempfile.mkdtemp(prefix="quadrium_emp_"))
+    folder = tmp / "mrio"
+    folder.mkdir()
+    for name, head, body, rows in (
+            ("MRIO_2018_272regions.xlsx", labels, Z, labels),
+            ("Final_demand_2018.xlsx", ["HFCE", "NPISH", "GGFC", "GFCF",
+                                        "INVNT", "EX", "TOTAL"], FD, labels),
+            ("TAXSUB_VA_2018.xlsx", labels, VA,
+             ["TAXSUB", "VA", "IM", "INPUT"])):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([None] + list(head))
+        for lab, r in zip(rows, body):
+            ws.append([lab] + [float(x) for x in r])
+        wb.save(folder / name)
+
+    emp = {s: 10.0 + k for k, s in enumerate(sectors)}
+
+    def cube(values, total, status=("EMP",)):
+        codes = ["TOTAL"] + list(values)
+        cells = [total] + list(values.values())
+        dims = {"freq": ["A"], "unit": ["THS"], "wstatus": list(status),
+                "nace_r2": codes, "geo": ["AA11"], "time": ["2018"]}
+        return {"version": "2.0", "class": "dataset",
+                "label": "Employment (thousand persons) by NUTS 3 region",
+                "id": list(dims), "size": [len(v) for v in dims.values()],
+                "dimension": {d: {"category": {
+                    "index": {c: k for k, c in enumerate(v)},
+                    "label": {c: c for c in v}}} for d, v in dims.items()},
+                "value": {str(k): v for k, v in enumerate(cells)
+                          if v is not None}}
+
+    kept = tmp / "data" / "eurostat" / "nama_10r_3empers_AA11_2018.json"
+    kept.parent.mkdir(parents=True)
+
+    def keep(doc):
+        kept.write_text(json.dumps(doc))
+
+    meta = {"project_id": "e", "table_path": str(folder),
+            "table_kind": "eu_mrio", "mrio_region": "AA11",
+            "mrio_employment": "sí"}
+    tables = {"splits": [
+        {"sector_code": "G-I", "new_code": "GI1", "new_label": "a",
+         "key_id": "k1"},
+        {"sector_code": "G-I", "new_code": "GI2", "new_label": "b",
+         "key_id": "k1"}],
+        "keys": [
+        {"key_id": "k1", "new_sector_code": "GI1", "value": 70, "source": "t",
+         "source_year": 2018, "strength": "weak"},
+        {"key_id": "k1", "new_sector_code": "GI2", "value": 30, "source": "t",
+         "source_year": 2018, "strength": "weak"}]}
+
+    def refused(name, fn, fragment):
+        try:
+            fn()
+        except ConfigError as exc:
+            check(f"the engine refuses {name}, and says which",
+                  fragment.lower() in str(exc).lower(), str(exc)[:88])
+        except Exception as exc:                          # noqa: BLE001
+            check(f"the engine refuses {name}, and says which", False,
+                  f"{type(exc).__name__} instead of a refusal: "
+                  f"{str(exc)[:60]}")
+        else:
+            check(f"the engine refuses {name}, and says which", False,
+                  "it built the account")
+
+    keep(cube(emp, sum(emp.values())))
+    try:
+        cfg = build_config(dict(meta), tables, tmp, offline=True)
+    except Exception as exc:                              # noqa: BLE001
+        check("a region's employment arrives from the kept download", False,
+              str(exc)[:88])
+        return
+    sat = cfg["table"].satellites.get("employment")
+    check("a region's employment arrives from the kept download, offline",
+          sat is not None and list(sat.values) == [emp[s] for s in sectors]
+          and "thousand persons" in sat.unit,
+          f"{sat.values if sat else 'no account'}")
+
+    book = {"satellites": [
+        {"name": "employment", "unit": "thousand persons", "sector_code": s,
+         "value": 1.0, "source": "my own survey", "source_year": 2018}
+        for s in sectors]}
+    cfg = build_config(dict(meta), {**tables, **book}, tmp, offline=True)
+    check("and the workbook's own figures win over Eurostat's, and it says so",
+          list(cfg["table"].satellites["employment"].values)
+          == [1.0] * len(sectors)
+          and any("employment" in d for d in cfg["defaults_taken"]),
+          "a user who typed a figure means it")
+
+    missing = {s: v for s, v in emp.items() if s != "L"}
+    keep(cube(missing, sum(emp.values())))
+    refused("a download with no figure for one sector",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "has no figure for")
+    keep(cube(emp, sum(emp.values()) + 100.0))
+    refused("ten sectors that do not add up to the published total",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "do not add up")
+    keep(cube(emp, sum(emp.values()), status=("EMP", "SAL")))
+    refused("a kept download holding two employment statuses",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "more than one category")
+    kept.write_text("{not json")
+    refused("a kept download that is not a Eurostat response",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "could not be read")
+    kept.unlink()
+    refused("an offline run with nothing kept",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "not kept")
+
+    def empty(*a, **k):
+        raise E.EurostatError("nama_10r_3empers returned no values for "
+                              "geo=AA11, time=2018.")
+    with patch.object(E, "fetch", empty):
+        refused("a region Eurostat publishes no employment for",
+                lambda: build_config(dict(meta), tables, tmp),
+                "publishes no employment")
+
+    def broken(*a, **k):
+        raise E.EurostatError("the request returned HTTP 500")
+    with patch.object(E, "fetch", broken):
+        refused("a download that fails for any other reason",
+                lambda: build_config(dict(meta), tables, tmp),
+                "download of employment failed")
+
+    asked = {}
+
+    def served(dataset, geo, year, dest, **kw):
+        asked.update(kw, dataset=dataset)
+        raw = json.dumps(cube(emp, sum(emp.values())))
+        Path(dest).write_text(raw)
+        return {"dataset": dataset, "url": "the request", "geo": geo,
+                "year": year, "bytes": len(raw), "sha256": "0" * 64,
+                "retrieved_at": "2026-09-11T00:00:00+00:00", "n_values": 11}
+    with patch.object(E, "fetch", served):
+        cfg = build_config(dict(meta), tables, tmp)
+    notes = cfg["table"].satellites["employment"].notes or ""
+    check("a first run asks for employed persons in thousands and keeps the "
+          "provenance beside the file",
+          asked.get("dataset") == "nama_10r_3empers"
+          and asked.get("unit") == "THS" and asked.get("wstatus") == "EMP"
+          and kept.with_suffix(".json.provenance").exists()
+          and "downloaded 2026-09-11" in notes, f"{asked}")
+    refused("`mrio_employment` on another kind of table",
+            lambda: build_config({"project_id": "x",
+                                  "table_path": str(folder / labels[0]),
+                                  "table_kind": "uk_analytical",
+                                  "mrio_employment": "sí"}, tables, tmp),
+            "applies only to")
+
+
 def test_the_refusals_a_SATELLITES_sheet_makes():
     """Five refusals about satellite accounts that had no case.
 

@@ -348,6 +348,11 @@ def scenario_section(res: DisaggregationResult) -> str:
                               f"coefficient carried through the Leontief "
                               f"inverse, so it counts what this sector's "
                               f"suppliers use too."]
+                # What the account says about itself -- for Eurostat's
+                # regional employment, that a measured count is divided by an
+                # estimated output. Beside the numbers, not in an appendix.
+                if s.get("notes"):
+                    lines += ["", f"Notes on this account: {s['notes']}"]
                 if s["undefined"]:
                     lines += ["",
                               f"> {s['undefined']} sector(s) have zero output "

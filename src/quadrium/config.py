@@ -29,7 +29,10 @@ Five sheets. Only `project` and `splits` are required.
                                Koutroumpis 2023), named by `mrio_region`,
                                for `mrio_year` 2008-2018 (default 2018).
                                The archive does not balance and the residue
-                               is carried in a labelled column and row
+                               is carried in a labelled column and row.
+                               `mrio_employment: yes` attaches Eurostat's
+                               employed persons for that region and year
+                               as the account `employment`
             `table_unbalanced` (`refuse` by default, or `residual_column`)
             applies to `ine_interior` alone, whose published table does not
             balance for one product — see OQ-D-04. Setting it on any other kind
@@ -713,6 +716,162 @@ def _tag(table, note: str):
     return table
 
 
+# Eurostat's regional employment, on the A10 grouping the European MRIO uses.
+EMPLOYMENT_DATASET = "nama_10r_3empers"
+
+
+def _mrio_employment(meta: dict, table, base_dir, offline: bool,
+                     refresh: bool) -> Satellite:
+    """Employment for one region of the European MRIO, from Eurostat.
+
+    WHY
+    ----
+    The archive's ten sectors are Eurostat's A10 grouping, code for code, and
+    Eurostat's regional accounts publish employed persons by NUTS-2 region on
+    that same grouping: `nama_10r_3empers`, thousand persons, `wstatus=EMP`.
+    So an employment account for an MRIO region does not have to be typed in.
+    Checked on 2026-09-11 for Catalonia in 2018: the ten sectors add up to the
+    3,562.6 Eurostat publishes as the total.
+
+    Cached by the rule `_load_eurostat` states: a kept download is never
+    fetched again, `refresh` fetches it on purpose, `offline` refuses and
+    prints the URL.
+
+    WHAT IT REFUSES
+    ----------------
+    A region Eurostat does not publish under the archive's code. The archive
+    codes France on NUTS 2013 and Greece on NUTS 2010, and Eurostat serves the
+    current codes: FR21 and EL11 come back empty where FRF2 and EL51 do not.
+    Translating a code by hand would pair one region's employment with another
+    region's output, so the refusal points at the `satellites` sheet instead.
+
+    A sector with no figure, because absent is not zero -- the rule
+    `build_satellites` states. And sectors that do not add up to the total
+    Eurostat publishes beside them, beyond the rounding of its own figures.
+    """
+    import json
+
+    from .eurostat import API, EurostatError, _Cube, _rounding_tol, fetch
+
+    region = str(meta.get("mrio_region") or "").strip()
+    year = int(table.year)
+    path = (Path(base_dir) / "data" / "eurostat"
+            / f"{EMPLOYMENT_DATASET}_{region}_{year}.json")
+    side = path.with_suffix(path.suffix + ".provenance")
+    url = (API.format(dataset=EMPLOYMENT_DATASET)
+           + f"&geo={region}&time={year}&unit=THS&wstatus=EMP")
+
+    if path.exists() and not refresh:
+        try:
+            rec = json.loads(side.read_text())
+            how = (f"downloaded {str(rec.get('retrieved_at', ''))[:10]}, "
+                   f"SHA-256 {str(rec.get('sha256', ''))[:16]}…, read from "
+                   f"the local cache without using the network")
+        except (ValueError, OSError):
+            how = (f"read from the local cache ({path.name}) without using "
+                   f"the network. NO PROVENANCE SIDECAR was found beside it, "
+                   f"so when it was downloaded and with what checksum are not "
+                   f"recorded")
+    elif offline:
+        raise ConfigError(
+            f"--offline was given and the employment for {region} {year} is "
+            f"not kept here yet ({path}).\n\n"
+            f"Either drop --offline, or fetch it once by hand:\n"
+            f"    {url}\n"
+            f"and save the response as that file.")
+    else:
+        try:
+            rec = fetch(EMPLOYMENT_DATASET, region, year, path, unit="THS",
+                        wstatus="EMP")
+        except EurostatError as exc:
+            if "returned no values" in str(exc):
+                raise ConfigError(
+                    f"Eurostat publishes no employment for {region} in "
+                    f"{year}: {EMPLOYMENT_DATASET} answered with no values "
+                    f"under that code.\n\n"
+                    f"The likeliest reason is the code. The archive codes "
+                    f"France on NUTS 2013 and Greece on NUTS 2010, and PL12 "
+                    f"was split after it; Eurostat serves the current codes, "
+                    f"so FR21 and EL11 come back empty while FRF2 and EL51 do "
+                    f"not. The code is not translated here: a region that was "
+                    f"redrawn is not the same region, and one region's "
+                    f"employment over another's output is a multiplier of "
+                    f"neither.\n\n"
+                    f"Give the figures yourself in a `satellites` sheet, "
+                    f"account name `employment`, one row per sector. The "
+                    f"sheet's figures are used and nothing is fetched.") \
+                    from None
+            raise ConfigError(
+                f"the Eurostat download of employment failed:\n{exc}\n\n"
+                f"Nothing was written. The cache path was {path}.") from None
+        side.write_text(json.dumps(rec, indent=2))
+        print(f"    Downloaded {EMPLOYMENT_DATASET} {region} {year} — "
+              f"{rec['bytes']:,} bytes")
+        print(f"    cached at {path}")
+        how = (f"downloaded {str(rec.get('retrieved_at', ''))[:10]}, SHA-256 "
+               f"{str(rec.get('sha256', ''))[:16]}…")
+
+    try:
+        cube = _Cube(json.loads(path.read_text()))
+    except (ValueError, OSError) as exc:
+        raise ConfigError(
+            f"{path.name} could not be read as a Eurostat response: "
+            f"{str(exc)[:200]}\n\nFetch it again with --refresh.") from None
+
+    def _employment_cell(code):
+        try:
+            return cube.at(nace_r2=code, geo=region, time=str(year))
+        except EurostatError as exc:
+            raise ConfigError(
+                f"{path.name} holds more than one category of a dimension "
+                f"this reads as fixed ({exc}). The download it expects is "
+                f"employed persons alone, `wstatus=EMP`, in thousands, for one "
+                f"region and one year; fetch it again with --refresh.") \
+                from None
+
+    values = {c: _employment_cell(c) for c in table.sector_codes}
+    missing = [c for c, v in values.items() if v is None]
+    if missing:
+        raise ConfigError(
+            f"{path.name} has no figure for {', '.join(missing)} ({region}, "
+            f"{year}).\n\nAn absent figure is not taken as zero: zero says "
+            f"the sector employs nobody, and an absent cell says only that "
+            f"Eurostat did not publish it. Give the account yourself in a "
+            f"`satellites` sheet, account name `employment`, with a value for "
+            f"every sector; the sheet's figures are used and nothing is "
+            f"fetched.")
+    got = sum(values.values())
+    total = _employment_cell("TOTAL")
+    if total is None:
+        checked = ("Eurostat's total was not in the download, so the sectors "
+                   "were not checked against it.")
+    else:
+        tol = _rounding_tol(len(values) + 1, list(values.values()) + [total])
+        if abs(got - total) > tol:
+            raise ConfigError(
+                f"the {len(values)} sectors of {path.name} do not add up to "
+                f"the total Eurostat publishes beside them: {got:,.1f} against "
+                f"{total:,.1f} thousand persons, {got - total:+,.1f} apart, "
+                f"where the rounding of its own figures allows {tol:,.2f}. "
+                f"They are the archive's own grouping and should tile the "
+                f"total; fetch the file again with --refresh.")
+        checked = (f"The {len(values)} sectors add up to the {total:,.1f} "
+                   f"Eurostat publishes as the total.")
+
+    return Satellite(
+        name="employment", unit="thousand persons",
+        values=[values[c] for c in table.sector_codes],
+        source=f"Eurostat {EMPLOYMENT_DATASET}, employed persons, {region}",
+        source_year=year,
+        notes=(f"Eurostat's employed persons for {region} in {year} "
+               f"(`wstatus=EMP`), {how}. {checked} The employment is "
+               f"measured; the output each multiplier divides it by is the "
+               f"MRIO's, which the archive estimates, so the multiplier pairs "
+               f"a measured figure with an estimated one and is no firmer "
+               f"than the estimate. Per unit of output means per million US "
+               f"dollars, the archive's unit."))
+
+
 def _rows(sheets: dict, name: str) -> list[dict]:
     """Sheet -> list of dicts keyed by the header row, blank rows dropped."""
     if name not in sheets:
@@ -857,6 +1016,23 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
         defaults_taken.append(
             "mrio_year is empty: the 2018 table, the year this project "
             "measured the archive on")
+    # `mrio_employment` too, and checked HERE, before the table is opened, so
+    # the refusal names the setting and not whatever the path turns out to be.
+    # The download itself waits for `build_config`, which knows whether the
+    # workbook already gives the account.
+    raw_emp = str(meta.get("mrio_employment") or "").strip()
+    if raw_emp and kind != "eu_mrio":
+        raise ConfigError(
+            f"mrio_employment={raw_emp!r} applies only to table_kind "
+            f"'eu_mrio', not {kind!r}: it fetches Eurostat's employment for a "
+            f"region of the European MRIO. For another table give the account "
+            f"in a `satellites` sheet. Refusing rather than ignoring a setting "
+            f"you would never see was ignored.")
+    if (raw_emp and not _yes(raw_emp)
+            and raw_emp.lower() not in ("no", "n", "false", "0", "off")):
+        defaults_taken.append(
+            f"mrio_employment is {raw_emp!r}, which is not a yes; no "
+            f"employment account was fetched")
 
     # `eurostat` names a country and a year instead of a file, and `table_path`
     # becomes where the download is KEPT rather than where it already is. So
@@ -1006,9 +1182,22 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
     # omission -- write the file without it, or say so in the sheet.
     from_file = dict(getattr(table, "satellites", None) or {})
     from_book = build_satellites(tables.get("satellites", []), table)
+    # EUROSTAT'S EMPLOYMENT, for a region of the European MRIO, goes between
+    # the two: the archive carries no accounts, and the workbook still wins for
+    # the reason above -- so when it declares the account, nothing is fetched.
+    from_eurostat = {}
+    if kind == "eu_mrio" and _yes(meta.get("mrio_employment")):
+        if "employment" in from_book:
+            defaults_taken.append(
+                "mrio_employment asks for Eurostat's employment and the "
+                "`satellites` sheet declares an `employment` account; the "
+                "sheet's figures are used and nothing was fetched")
+        else:
+            from_eurostat["employment"] = _mrio_employment(
+                meta, table, base_dir, offline, refresh)
     kept = sorted(set(from_file) - set(from_book))
     replaced = sorted(set(from_file) & set(from_book))
-    table.satellites = {**from_file, **from_book}
+    table.satellites = {**from_file, **from_eurostat, **from_book}
     if kept:
         defaults_taken.append(
             f"the satellite account(s) {', '.join(kept)} came with the table "
@@ -1301,7 +1490,9 @@ def write_template(path: Path | str) -> Path:
             "#                           table_path at the archive's Data",
             "#                           folder and add mrio_region, e.g. ES51.",
             "#                           mrio_year picks 2008-2018 (default",
-            "#                           2018).",
+            "#                           2018). mrio_employment sí attaches",
+            "#                           Eurostat's employed persons for that",
+            "#                           region and year.",
             "#",
             "# For table_kind: eurostat, delete table_path (or use it to say",
             "# where to cache) and add instead:",
@@ -1716,6 +1907,12 @@ def plan_workbook(path: Path | str) -> dict:
             gap("project", f"`mrio_year` is {raw_year!r}",
                 "the archive holds 2008 to 2018, one table per year",
                 "a year in that range, or leave it empty for 2018")
+    raw_emp = str(meta.get("mrio_employment") or "").strip()
+    if raw_emp and kind != "eu_mrio":
+        gap("project", f"`mrio_employment` is set with table_kind {kind!r}",
+            "it fetches Eurostat's employment for a region of the European "
+            "MRIO and applies to `eu_mrio` alone",
+            "remove the row, or give the account in a `satellites` sheet")
     if kind == "eu_mrio" and job == "regionalise":
         gap("regionalise", "a regionalisation of an `eu_mrio` table",
             "that table already describes one region; a location quotient on "

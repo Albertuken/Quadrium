@@ -477,6 +477,28 @@ highest and lowest year, 9.8 at the 90th percentile, although regions keep
 their order (`validators/run_spillover_years.py`). The figure for your region
 is the one for the year you loaded, and the report says so.
 
+**Employment for the region, from Eurostat.** The archive's ten sectors are
+Eurostat's A10 grouping, and Eurostat publishes employment for NUTS-2 regions on
+that same grouping. Add
+
+    mrio_employment    sí
+
+and the engine fetches the employed persons for that region and year
+(`nama_10r_3empers`, thousand persons), keeps the download in `data/eurostat/`
+with its provenance, and attaches it as the satellite account `employment`. The
+report then gives employment multipliers, in thousand persons per million
+dollars. For Catalonia in 2018 the ten sectors add up to the 3,562.6 thousand
+Eurostat publishes as the total, and the engine checks that for every region.
+
+Two things to know. The employment is measured and the output it is divided by
+is the archive's estimate, so a multiplier is no firmer than that estimate; the
+report says so beside it. And Eurostat uses the current NUTS codes while the
+archive codes France on NUTS 2013 and Greece on NUTS 2010, so for those regions
+Eurostat returns nothing under the archive's code. The engine refuses rather
+than translate the code by hand: give the figures yourself in the `satellites`
+sheet. If that sheet declares `employment`, its figures win and nothing is
+fetched (`validators/run_eu_mrio_employment.py`).
+
 Read three things before you use it:
 
 - **It is an estimate, not a survey.** Every cell comes out marked
@@ -722,7 +744,9 @@ numbers. See `validators/run_type_ii_multipliers.py`.
 
 ### Sheet `satellites` — employment, emissions, anything not in money
 
-Optional. Leave it empty and nothing changes.
+Optional. Leave it empty and nothing changes. For a region of the European
+MRIO, employment can come from Eurostat instead: see `mrio_employment` in
+Route B.
 
 | name | unit | sector_code | value | source | source_year |
 |---|---|---|---|---|---|
