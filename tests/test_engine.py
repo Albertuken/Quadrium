@@ -5432,8 +5432,11 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
 
     `mrio_employment: yes` attaches Eurostat's employed persons for the region
     and year loaded (`nama_10r_3empers`, A10, thousand persons) as the account
-    `employment`. The cube here is written by hand in the shape Eurostat
-    serves, so nothing touches the network, and each refusal is fired.
+    `employment`, from one file holding every region, and weights the full
+    system's columns by the same file to say how much of the region's
+    employment multipliers runs through other regions. The cube here is
+    written by hand in the shape Eurostat serves, so nothing touches the
+    network, and each refusal is fired.
     """
     import json
     import tempfile
@@ -5470,22 +5473,33 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
         wb.save(folder / name)
 
     emp = {s: 10.0 + k for k, s in enumerate(sectors)}
+    emp2 = {s: 30.0 + 2 * k for k, s in enumerate(sectors)}
 
-    def cube(values, total, status=("EMP",), geo="AA11"):
-        codes = ["TOTAL"] + list(values)
-        cells = [total] + list(values.values())
+    def cube(regions, status=("EMP",)):
+        """Every region's employment in one file, as the engine keeps it.
+        `regions` maps a geo to (its sectors' values, its published total)."""
+        geos = list(regions)
+        codes = ["TOTAL"] + list(sectors)
         dims = {"freq": ["A"], "unit": ["THS"], "wstatus": list(status),
-                "nace_r2": codes, "geo": [geo], "time": ["2018"]}
+                "nace_r2": codes, "geo": geos, "time": ["2018"]}
+        value = {}
+        for ci, code in enumerate(codes):
+            for gi, g in enumerate(geos):
+                vals, total = regions[g]
+                v = total if code == "TOTAL" else vals.get(code)
+                if v is not None:
+                    value[str(ci * len(geos) + gi)] = v
         return {"version": "2.0", "class": "dataset",
                 "label": "Employment (thousand persons) by NUTS 3 region",
                 "id": list(dims), "size": [len(v) for v in dims.values()],
                 "dimension": {d: {"category": {
                     "index": {c: k for k, c in enumerate(v)},
                     "label": {c: c for c in v}}} for d, v in dims.items()},
-                "value": {str(k): v for k, v in enumerate(cells)
-                          if v is not None}}
+                "value": value}
 
-    kept = tmp / "data" / "eurostat" / "nama_10r_3empers_AA11_2018.json"
+    both = {"AA11": (emp, sum(emp.values())),
+            "AA12": (emp2, sum(emp2.values()))}
+    kept = tmp / "data" / "eurostat" / "nama_10r_3empers_ALL_2018.json"
     kept.parent.mkdir(parents=True)
 
     def keep(doc):
@@ -5519,7 +5533,7 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
             check(f"the engine refuses {name}, and says which", False,
                   "it built the account")
 
-    keep(cube(emp, sum(emp.values())))
+    keep(cube(both))
     try:
         cfg = build_config(dict(meta), tables, tmp, offline=True)
     except Exception as exc:                              # noqa: BLE001
@@ -5532,6 +5546,43 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
           and "thousand persons" in sat.unit,
           f"{sat.values if sat else 'no account'}")
 
+    # Where the jobs land: the engine against a direct computation on the
+    # whole synthetic system, as the archive stands and at the surveys' level.
+    from quadrium.io_loader import _mrio_move_to_country
+    from quadrium.regionalise import EVIDENCE
+    jb = cfg["table"].interregional.get("jobs") or {}
+    c = np.array([emp[s] for s in sectors] + [emp2[s] for s in sectors]) / X
+
+    def direct(Zm):
+        L = np.linalg.inv(np.eye(n) - Zm / X)
+        jobs = c @ L[:, :10]
+        return (jobs - c[:10] @ L[:10, :10]) / jobs
+    f = EVIDENCE["spillover_share_pct_survey"]["factor"]
+    want = direct(Z)
+    want4 = direct(_mrio_move_to_country(Z, ["AA11", "AA12"], {0: f, 1: f}))
+    check("the share of each sector's jobs that lands in the other region is "
+          "the one a direct computation gives, as the archive stands and at "
+          "the surveys' level",
+          bool(jb) and np.allclose(jb["share_by_sector"], want, atol=1e-12)
+          and np.allclose(jb["share_by_sector_if_surveyed"], want4,
+                          atol=1e-12)
+          and jb["regions_counted"] == 2
+          and max(jb["unmeasured_by_sector"]) == 0,
+          f"{[round(x, 4) for x in jb.get('share_by_sector', [])[:3]]} "
+          f"against {[round(x, 4) for x in want[:3]]}")
+
+    # A neighbour the release carries nothing for counts nothing, and how
+    # much of each multiplier it holds is said instead of refused.
+    keep(cube({"AA11": both["AA11"]}))
+    cfg = build_config(dict(meta), tables, tmp, offline=True)
+    jb = cfg["table"].interregional.get("jobs") or {}
+    check("a neighbour without employment counts nothing, and the share of "
+          "the multiplier it holds is said, not refused",
+          jb.get("regions_counted") == 1
+          and min(jb.get("unmeasured_by_sector") or [0]) > 0,
+          f"{jb.get('regions_counted')} of {jb.get('regions')} regions")
+
+    keep(cube(both))
     book = {"satellites": [
         {"name": "employment", "unit": "thousand persons", "sector_code": s,
          "value": 1.0, "source": "my own survey", "source_year": 2018}
@@ -5540,22 +5591,28 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     check("and the workbook's own figures win over Eurostat's, and it says so",
           list(cfg["table"].satellites["employment"].values)
           == [1.0] * len(sectors)
-          and any("employment" in d for d in cfg["defaults_taken"]),
-          "a user who typed a figure means it")
+          and any("employment" in d for d in cfg["defaults_taken"])
+          and "jobs" not in cfg["table"].interregional,
+          "a user who typed a figure means it; nothing of Eurostat's is used")
 
     missing = {s: v for s, v in emp.items() if s != "L"}
-    keep(cube(missing, sum(emp.values())))
+    keep(cube({"AA11": (missing, sum(emp.values())), "AA12": both["AA12"]}))
     refused("a download with no figure for one sector",
             lambda: build_config(dict(meta), tables, tmp, offline=True),
             "has no figure for")
-    keep(cube(emp, sum(emp.values()) + 100.0))
+    keep(cube({"AA11": (emp, sum(emp.values()) + 100.0),
+               "AA12": both["AA12"]}))
     refused("ten sectors that do not add up to the published total",
             lambda: build_config(dict(meta), tables, tmp, offline=True),
             "do not add up")
-    keep(cube(emp, sum(emp.values()), status=("EMP", "SAL")))
+    keep(cube(both, status=("EMP", "SAL")))
     refused("a kept download holding two employment statuses",
             lambda: build_config(dict(meta), tables, tmp, offline=True),
             "more than one category")
+    keep(cube({"AA12": both["AA12"]}))
+    refused("a region the kept release carries nothing for",
+            lambda: build_config(dict(meta), tables, tmp, offline=True),
+            "publishes no employment")
     kept.write_text("{not json")
     refused("a kept download that is not a Eurostat response",
             lambda: build_config(dict(meta), tables, tmp, offline=True),
@@ -5567,11 +5624,11 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
 
     def empty(*a, **k):
         raise E.EurostatError("nama_10r_3empers returned no values for "
-                              "geo=AA11, time=2018.")
+                              "geo=None, time=2018.")
     with patch.object(E, "fetch", empty):
-        refused("a region Eurostat publishes no employment for",
+        refused("a year Eurostat publishes no regional employment for",
                 lambda: build_config(dict(meta), tables, tmp),
-                "publishes no employment")
+                "no regional employment")
 
     def broken(*a, **k):
         raise E.EurostatError("the request returned HTTP 500")
@@ -5584,37 +5641,36 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
 
     def served(dataset, geo, year, dest, **kw):
         asked.update(kw, dataset=dataset, geo=geo, dest=Path(dest).name)
-        raw = json.dumps(cube(emp, sum(emp.values()), geo=geo))
+        raw = json.dumps(cube(both))
         Path(dest).write_text(raw)
         return {"dataset": dataset, "url": "the request", "geo": geo,
                 "year": year, "bytes": len(raw), "sha256": "0" * 64,
-                "retrieved_at": "2026-09-11T00:00:00+00:00", "n_values": 11}
+                "retrieved_at": "2026-09-11T00:00:00+00:00", "n_values": 22}
     with patch.object(E, "fetch", served):
         cfg = build_config(dict(meta), tables, tmp)
     notes = cfg["table"].satellites["employment"].notes or ""
-    check("a first run asks for employed persons in thousands and keeps the "
-          "provenance beside the file",
-          asked.get("dataset") == "nama_10r_3empers"
+    check("a first run asks for employed persons in thousands for every "
+          "region at once, and keeps the provenance beside the file",
+          asked.get("dataset") == "nama_10r_3empers" and asked.get("geo") is None
+          and asked.get("dest") == "nama_10r_3empers_ALL_2018.json"
           and asked.get("unit") == "THS" and asked.get("wstatus") == "EMP"
           and kept.with_suffix(".json.provenance").exists()
           and "downloaded 2026-09-11" in notes, f"{asked}")
 
-    # A code Eurostat changed for the same territory is fetched under the
-    # code Eurostat serves, kept under it, and said.
+    # A code Eurostat changed for the same territory is read under the code
+    # Eurostat serves, and said.
     from quadrium import config as Cfg
-    asked.clear()
-    with patch.dict(Cfg.MRIO_EUROSTAT_CODE, {"AA11": "AB11"}), \
-            patch.object(E, "fetch", served):
-        cfg = build_config(dict(meta), tables, tmp)
+    keep(cube({"AB11": both["AA11"], "AA12": both["AA12"]}))
+    with patch.dict(Cfg.MRIO_EUROSTAT_CODE, {"AA11": "AB11"}):
+        cfg = build_config(dict(meta), tables, tmp, offline=True)
     sat = cfg["table"].satellites["employment"]
     check("a region Eurostat serves under a later code for the same territory "
-          "is fetched under that code, and the account says so",
-          asked.get("geo") == "AB11"
-          and asked.get("dest") == "nama_10r_3empers_AB11_2018.json"
-          and list(sat.values) == [emp[s] for s in sectors]
+          "is read under that code, and the account says so",
+          list(sat.values) == [emp[s] for s in sectors]
           and "AB11" in sat.source and "AA11" in (sat.notes or "")
-          and "same territory" in (sat.notes or ""),
-          f"{asked.get('geo')}, {sat.source}")
+          and "same territory" in (sat.notes or "")
+          and cfg["table"].interregional["jobs"]["regions_counted"] == 2,
+          f"{sat.source}")
 
     # A region whose border moved is refused before anything is fetched.
     asked.clear()

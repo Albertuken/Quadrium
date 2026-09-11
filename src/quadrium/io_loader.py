@@ -2195,6 +2195,68 @@ def _mrio_move_to_country(Z: np.ndarray, regions: list[str], factors: dict,
     return Zn
 
 
+# The full system's columns for a loaded region, as the archive stands and at
+# the surveys' level, kept per process like the block itself: `mrio_jobs`
+# weights them by jobs once every region's employment is known, and the two
+# solves `load_eu_mrio` already made are not made again.
+_MRIO_COLUMNS: dict = {}
+
+
+def mrio_jobs(path: Path | str, region: str, year: int,
+              employment_of) -> dict:
+    """Of the jobs each of this region's sectors creates, the share that lands
+    in other regions -- as the archive stands and at the surveys' level.
+
+    `load_eu_mrio` solves the full system for this region's columns. Weighted
+    by jobs per unit of output instead of by output, the same columns say
+    where the JOBS land. `employment_of(code)` gives an archive region's
+    employment for its sectors in the archive's order, or None. A region
+    without it counts nothing, and the share of each multiplier that falls in
+    such regions is returned, so the report can say how much went uncounted
+    instead of letting it pass as zero. `run_employment_spillovers.py`
+    computes the same shares on its own and requires these to match.
+    """
+    blk, _, _ = _mrio_files(path, year)
+    key = (str(Path(blk).resolve()), region, year)
+    if key not in _MRIO_COLUMNS:
+        load_eu_mrio(path, region, year)
+    Ls, Ls4, X_all, regions = _MRIO_COLUMNS[key]
+    S = _MRIO_S
+    c = np.zeros(len(X_all))
+    known = np.zeros(len(X_all), bool)
+    counted = 0
+    for j, r in enumerate(regions):
+        v = employment_of(r)
+        if v is None:
+            continue
+        sl = slice(j * S, (j + 1) * S)
+        x = X_all[sl]
+        c[sl] = np.where(x > 0, np.asarray(v, float) / np.where(x > 0, x, 1.0),
+                         0.0)
+        known[sl] = True
+        counted += 1
+    k = regions.index(region)
+    s = slice(k * S, (k + 1) * S)
+
+    def shares(L):
+        jobs = c @ L
+        own = c[s] @ L[s]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            per = np.where(jobs > 0, (jobs - own) / jobs, np.nan)
+        agg = (float((jobs - own).sum() / jobs.sum()) if jobs.sum() > 0
+               else float("nan"))
+        return per, agg
+
+    per, agg = shares(Ls)
+    per4, agg4 = shares(Ls4)
+    unmeasured = Ls[~known].sum(0) / Ls.sum(0)
+    return {"share": agg, "share_by_sector": [float(x) for x in per],
+            "share_if_surveyed": agg4,
+            "share_by_sector_if_surveyed": [float(x) for x in per4],
+            "unmeasured_by_sector": [float(x) for x in unmeasured],
+            "regions_counted": counted, "regions": len(regions)}
+
+
 def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     """`load_eu_mrio` for 2018, the year this project measured the archive on.
 
@@ -2426,6 +2488,8 @@ def load_eu_mrio(path: Path | str, region: str,
     intra4 = Ls4[s].sum(0)
     agg4 = float((m4 - intra4).sum() / m4.sum())
     per4 = (m4 - intra4) / m4
+    _MRIO_COLUMNS[(str(Path(blk).resolve()), region, year)] = (
+        Ls, Ls4, X_all, regions)
 
     interregional = {
         "share_if_surveyed": agg4,

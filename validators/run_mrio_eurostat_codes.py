@@ -60,7 +60,7 @@ T1013 = NUTS / "NUTS2010-NUTS2013.xls"
 T1316 = NUTS / "NUTS2013-NUTS2016.xlsx"
 T1621 = NUTS / "NUTS2021.xlsx"
 T2124 = NUTS / "NUTS2021-NUTS2024.xlsx"
-RELEASE = ROOT / "data" / "eurostat" / "nama_10r_3empers_TOTAL_2018.json"
+RELEASE = ROOT / "data" / "eurostat" / "nama_10r_3empers_ALL_2018.json"
 MRIO = ROOT / "data" / "mrio"
 FAIL: list[str] = []
 
@@ -178,10 +178,11 @@ def main() -> int:
     first = (revision("NUTS 2013", main1013, corr1013)
              if main1013 is not None else None)
 
-    doc = json.loads(RELEASE.read_text())
-    index = doc["dimension"]["geo"]["category"]["index"]
-    have = {g for g, i in index.items()
-            if len(g) == 4 and str(i) in doc["value"]}
+    from quadrium.eurostat import _Cube
+
+    cube = _Cube(json.loads(RELEASE.read_text()))
+    have = {g for g in cube.index["geo"] if len(g) == 4
+            and cube.at(nace_r2="TOTAL", geo=g, time="2018") is not None}
 
     # ---- the translated codes
     wrong, greek_unread = [], []

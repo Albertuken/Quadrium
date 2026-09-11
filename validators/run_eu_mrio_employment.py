@@ -45,7 +45,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 MRIO = ROOT / "data" / "mrio"
-CUBE = ROOT / "data" / "eurostat" / "nama_10r_3empers_ES51_2018.json"
+CUBE = ROOT / "data" / "eurostat" / "nama_10r_3empers_ALL_2018.json"
 REGION, YEAR = "ES51", 2018
 FAIL: list[str] = []
 
@@ -62,13 +62,14 @@ def check(name: str, ok: bool, detail: str = "") -> None:
         FAIL.append(name)
 
 
-def cube_values(path):
-    """Eurostat's figure per NACE code, read here without the engine."""
-    doc = json.loads(Path(path).read_text())
-    idx = doc["dimension"]["nace_r2"]["category"]["index"]
-    # Every other dimension was fetched with one category, so a cell's
-    # position is its sector's position.
-    return {code: doc["value"].get(str(i)) for code, i in idx.items()}
+def cube_values(path, geo):
+    """Eurostat's figure per NACE code for one region of the kept file, which
+    holds every region the release carries."""
+    from quadrium.eurostat import _Cube
+
+    cube = _Cube(json.loads(Path(path).read_text()))
+    return {code: cube.at(nace_r2=code, geo=geo, time=str(YEAR))
+            for code in cube.index["nace_r2"]}
 
 
 def main() -> int:
@@ -128,7 +129,7 @@ def main() -> int:
         return 1
     table = cfg["table"]
     sat = (table.satellites or {}).get("employment")
-    want = cube_values(CUBE)
+    want = cube_values(CUBE, REGION)
     expected = [want.get(c) for c in table.sector_codes]
     check("the account carries Eurostat's ten figures, in the table's sector "
           "order",
@@ -154,6 +155,9 @@ def main() -> int:
     check("and the report prints employment multipliers for the region",
           code == 0 and "employment" in text and "thousand persons" in text,
           f"exit {code}")
+    check("and says how much of them runs through other regions, sector by "
+          "sector", "jobs through other regions" in text,
+          "the employment version of what a one-region table leaves out")
 
     print("\n" + "=" * 78)
     if FAIL:

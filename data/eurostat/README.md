@@ -306,12 +306,16 @@ per file. The URL, byte count and SHA-256 are in the `.provenance` beside it.
 
 | file | bytes | SHA-256 |
 |---|---:|---|
-| `nama_10r_3empers_ES51_2018.json` | 4,200 | `4902ca2721dc…` |
-| `nama_10r_3empers_TOTAL_2018.json` | 81,820 | `c45b627473a9…` |
+| `nama_10r_3empers_ALL_2018.json` | 326,024 | `e30cca6d2899…` |
 
-The second file is total employment for every region the release carries, in
-one request, fetched with curl because `eurostat.fetch` always names one
-region. It is what `run_mrio_eurostat_codes.py` measures coverage against.
+**One file per year, every region.** The engine keeps it this way since
+2026-09-11: the region's own row is the account, and everyone's rows weight
+the full archive to say how much of the region's employment multipliers runs
+through other regions (`run_employment_spillovers.py`). This one was fetched
+with curl at exactly the URL `eurostat.fetch` builds for `geo=None`, before
+the engine could ask for it; the provenance beside it records that URL. It
+replaced a Catalonia-only file and a totals-only file, which it contains.
+`run_mrio_eurostat_codes.py` measures coverage against it.
 
 **No mapping is needed.** The European MRIO's ten sectors are this cube's own
 A10 codes — `A`, `B-E`, `F`, `G-I`, `J`, `K`, `L`, `M_N`, `O-Q`, `R-U` — and for

@@ -711,6 +711,30 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 prov += ["", "Where it goes, as a share of what leaves: "
                          + ", ".join(f"`{r}` {_fmt(100 * v)} %"
                                      for r, v in ir["to_regions"]) + "."]
+            # THE SAME IN JOBS, when the employment came from Eurostat: the
+            # loader's columns weighted by jobs per unit of output in every
+            # region Eurostat carries (`io_loader.mrio_jobs`).
+            jb = ir.get("jobs") or {}
+            if jb:
+                worst = max(jb.get("unmeasured_by_sector") or [0.0])
+                prov += [
+                    "", f"**In jobs.** Weighted by Eurostat's employment for "
+                    f"{jb['regions_counted']} of the archive's "
+                    f"{jb['regions']} regions, **{_fmt(100 * jb['share'])} %** "
+                    f"of this region's employment multipliers runs through "
+                    f"other regions ({_fmt(100 * jb['share_if_surveyed'])} % "
+                    f"at the surveys' level); across the archive the median "
+                    f"is {jb.get('archive_median_pct', '—')} %. The employment "
+                    f"multipliers in this report come from the one-region "
+                    f"table and do not contain it. Regions without "
+                    f"Eurostat's employment hold at most {_fmt(100 * worst)} % "
+                    f"of any sector's multiplier here, and count nothing.", "",
+                    "| sector | jobs through other regions | at the surveys' "
+                    "level |", "|---|---:|---:|"]
+                for c, a, b in zip(tbl.sector_codes, jb["share_by_sector"],
+                                   jb["share_by_sector_if_surveyed"]):
+                    prov.append(f"| `{c}` | {_fmt(100 * a)} % | "
+                                f"{_fmt(100 * b)} % |")
             prov += ["", "These figures are for the table as loaded, before "
                          "any split. A split changes the region's own block, "
                          "and the archive's inverse is not recomputed for the "

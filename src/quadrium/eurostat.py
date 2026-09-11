@@ -144,7 +144,11 @@ def fetch(dataset: str, geo: str, year: int, dest: Path | str,
     # `data/eurostat/` were downloaded outside this module, which is how the
     # gap went unnoticed: the provenance sidecars record a URL this code
     # cannot produce. Pass `unit=None` for such a dataset.
-    url = API.format(dataset=code) + f"&geo={geo}&time={int(year)}"
+    # `geo=None` asks for every region the dataset carries, in one file: what
+    # `mrio_employment` keeps, since saying how much of one region's
+    # multipliers runs through the others needs everyone's employment.
+    url = (API.format(dataset=code) + (f"&geo={geo}" if geo else "")
+           + f"&time={int(year)}")
     if unit:
         url += f"&unit={unit}"
     if stk_flow:

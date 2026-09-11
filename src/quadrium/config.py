@@ -767,7 +767,8 @@ def _no_employment_reason(region: str, geo: str, year: int) -> str:
     The United Kingdom's regions are not in the release at all: measured on
     2026-09-11, none of its NUTS-2 codes carried a 2018 figure, so no code can
     supply one. Any other code reaching here is the one this engine takes to
-    be Eurostat's for the territory, so the likelier gap is the year.
+    be Eurostat's for the territory, and the release has other regions, so
+    what is missing is that year's figure for it.
     """
     if region.startswith("UK"):
         return ("Eurostat's release carries no region of the United Kingdom: "
@@ -775,13 +776,13 @@ def _no_employment_reason(region: str, geo: str, year: int) -> str:
                 "figure, so no code can supply one.")
     return (f"{geo} is the code this engine takes to be Eurostat's for that "
             f"territory (`run_mrio_eurostat_codes.py` checks every region of "
-            f"the 2018 archive), so the likelier gap is the {year} figure, not "
-            f"the code: Eurostat answers a year it has not published with an "
-            f"empty result.")
+            f"the 2018 archive), and the {year} release carries other regions "
+            f"but no figure under it: what is missing is that year's figure "
+            f"for this territory, not the code.")
 
 
-def _mrio_employment(meta: dict, table, base_dir, offline: bool,
-                     refresh: bool) -> Satellite:
+def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
+                     refresh: bool) -> tuple:
     """Employment for one region of the European MRIO, from Eurostat.
 
     WHY
@@ -792,6 +793,11 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
     So an employment account for an MRIO region does not have to be typed in.
     Checked on 2026-09-11 for Catalonia in 2018: the ten sectors add up to the
     3,562.6 Eurostat publishes as the total.
+
+    ONE FILE PER YEAR, EVERY REGION (326 KB for 2018). This region's row is
+    the account; everyone's rows weight the loader's columns to say how much
+    of the region's employment multipliers runs through other regions
+    (`io_loader.mrio_jobs`). Returns the account and that share.
 
     Cached by the rule `_load_eurostat` states: a kept download is never
     fetched again, `refresh` fetches it on purpose, `offline` refuses and
@@ -834,10 +840,10 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
     # or a later one for the same territory.
     geo = MRIO_EUROSTAT_CODE.get(region, region)
     path = (Path(base_dir) / "data" / "eurostat"
-            / f"{EMPLOYMENT_DATASET}_{geo}_{year}.json")
+            / f"{EMPLOYMENT_DATASET}_ALL_{year}.json")
     side = path.with_suffix(path.suffix + ".provenance")
     url = (API.format(dataset=EMPLOYMENT_DATASET)
-           + f"&geo={geo}&time={year}&unit=THS&wstatus=EMP")
+           + f"&time={year}&unit=THS&wstatus=EMP")
 
     if path.exists() and not refresh:
         try:
@@ -859,23 +865,23 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
             f"and save the response as that file.")
     else:
         try:
-            rec = fetch(EMPLOYMENT_DATASET, geo, year, path, unit="THS",
+            rec = fetch(EMPLOYMENT_DATASET, None, year, path, unit="THS",
                         wstatus="EMP")
         except EurostatError as exc:
             if "returned no values" in str(exc):
                 raise ConfigError(
-                    f"Eurostat publishes no employment for {region} in "
-                    f"{year}: {EMPLOYMENT_DATASET} answered with no values "
-                    f"for {geo}.\n\n{_no_employment_reason(region, geo, year)}"
-                    f"\n\nGive the figures yourself in a `satellites` sheet, "
-                    f"account name `employment`, one row per sector. The "
-                    f"sheet's figures are used and nothing is fetched.") \
-                    from None
+                    f"Eurostat publishes no regional employment for {year}: "
+                    f"{EMPLOYMENT_DATASET} answered with no values for any "
+                    f"region, which is what it does for a year not yet "
+                    f"published.\n\nGive the figures yourself in a "
+                    f"`satellites` sheet, account name `employment`, one row "
+                    f"per sector. The sheet's figures are used and nothing is "
+                    f"fetched.") from None
             raise ConfigError(
                 f"the Eurostat download of employment failed:\n{exc}\n\n"
                 f"Nothing was written. The cache path was {path}.") from None
         side.write_text(json.dumps(rec, indent=2))
-        print(f"    Downloaded {EMPLOYMENT_DATASET} {geo} {year} — "
+        print(f"    Downloaded {EMPLOYMENT_DATASET}, every region, {year} — "
               f"{rec['bytes']:,} bytes")
         print(f"    cached at {path}")
         how = (f"downloaded {str(rec.get('retrieved_at', ''))[:10]}, SHA-256 "
@@ -900,6 +906,15 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
                 from None
 
     values = {c: _employment_cell(c) for c in table.sector_codes}
+    if (all(v is None for v in values.values())
+            and _employment_cell("TOTAL") is None):
+        raise ConfigError(
+            f"Eurostat publishes no employment for {region} in {year}: the "
+            f"kept release ({path.name}) has no figure for {geo}.\n\n"
+            f"{_no_employment_reason(region, geo, year)}\n\n"
+            f"Give the figures yourself in a `satellites` sheet, account name "
+            f"`employment`, one row per sector. The sheet's figures are used "
+            f"and nothing is fetched.")
     missing = [c for c, v in values.items() if v is None]
     if missing:
         raise ConfigError(
@@ -932,7 +947,7 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
               f" Eurostat serves the archive's {region} as {geo}: the same "
               f"territory under a later NUTS code, by Eurostat's own "
               f"correspondence tables (`run_mrio_eurostat_codes.py`).")
-    return Satellite(
+    sat = Satellite(
         name="employment", unit="thousand persons",
         values=[values[c] for c in table.sector_codes],
         source=(f"Eurostat {EMPLOYMENT_DATASET}, employed persons, {geo}"
@@ -945,6 +960,29 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
                f"a measured figure with an estimated one and is no firmer "
                f"than the estimate. Per unit of output means per million US "
                f"dollars, the archive's unit."))
+
+    # HOW MUCH OF THOSE MULTIPLIERS RUNS THROUGH OTHER REGIONS, IN JOBS. The
+    # same file carries every region, so the loader's columns for this region
+    # are weighted by jobs per unit of output wherever Eurostat has them. A
+    # neighbour without them counts nothing, and the report says how much of
+    # the multiplier that is -- it is not refused.
+    from .io_loader import mrio_jobs
+    from .regionalise import EVIDENCE
+
+    def employment_of(code):
+        if code in MRIO_REDRAWN or code.startswith("UK"):
+            return None
+        g = MRIO_EUROSTAT_CODE.get(code, code)
+        try:
+            v = [cube.at(nace_r2=s, geo=g, time=str(year))
+                 for s in table.sector_codes]
+        except EurostatError:
+            return None
+        return None if any(x is None for x in v) else v
+
+    jobs = mrio_jobs(table_path, region, year, employment_of)
+    jobs["archive_median_pct"] = EVIDENCE["employment_spillover_pct"]["median"]
+    return sat, jobs
 
 
 def _rows(sheets: dict, name: str) -> list[dict]:
@@ -1268,8 +1306,10 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
                 "`satellites` sheet declares an `employment` account; the "
                 "sheet's figures are used and nothing was fetched")
         else:
-            from_eurostat["employment"] = _mrio_employment(
-                meta, table, base_dir, offline, refresh)
+            sat, jobs = _mrio_employment(meta, table, table_path, base_dir,
+                                         offline, refresh)
+            from_eurostat["employment"] = sat
+            table.interregional["jobs"] = jobs
     kept = sorted(set(from_file) - set(from_book))
     replaced = sorted(set(from_file) & set(from_book))
     table.satellites = {**from_file, **from_eurostat, **from_book}

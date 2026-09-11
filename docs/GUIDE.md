@@ -506,6 +506,18 @@ the rest, give the figures yourself in the `satellites` sheet. If that sheet
 declares `employment`, its figures win and nothing is fetched
 (`validators/run_eu_mrio_employment.py`).
 
+**And how much of the employment multipliers the one-region table misses.**
+Eurostat's file carries every region, so the engine weights the whole archive
+by jobs and the report adds a table to "What a one-region table leaves out":
+for each sector, the share of its employment multiplier that runs through
+other regions, as the archive stands and at the surveys' level of domestic
+trade. Across the archive that share is a median 12.1 % (13.6 % for output on
+the same units), and it varies by sector much more than the median suggests:
+real estate's jobs leak twice as far as its output, public services' half as
+far. The regions without Eurostat employment count nothing, and the report
+says how much of the multiplier they hold — a median 0.2 %
+(`validators/run_employment_spillovers.py`).
+
 Read three things before you use it:
 
 - **It is an estimate, not a survey.** Every cell comes out marked

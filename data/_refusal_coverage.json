@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
  "taken": "2026-09-11",
- "n_sites": 217,
+ "n_sites": 218,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -47,7 +47,8 @@
   "config.py::_load_eurostat_sut::the supply-use pair could not be built:",
   "config.py::_mrio_employment::--offline was given and the employment for is not ke",
   "config.py::_mrio_employment::Eurostat publishes no employment for as the archive ",
-  "config.py::_mrio_employment::Eurostat publishes no employment for in : answered w",
+  "config.py::_mrio_employment::Eurostat publishes no employment for in : the kept r",
+  "config.py::_mrio_employment::Eurostat publishes no regional employment for : answ",
   "config.py::_mrio_employment::could not be read as a Eurostat response: Fetch it a",
   "config.py::_mrio_employment::has no figure for ( , ). An absent figure is not tak",
   "config.py::_mrio_employment::the Eurostat download of employment failed: Nothing ",
@@ -309,7 +310,8 @@
   "config.py::_load_eurostat_sut::the supply-use pair could not be built:": "workbook",
   "config.py::_mrio_employment::--offline was given and the employment for is not ke": "upstream",
   "config.py::_mrio_employment::Eurostat publishes no employment for as the archive ": "source",
-  "config.py::_mrio_employment::Eurostat publishes no employment for in : answered w": "upstream",
+  "config.py::_mrio_employment::Eurostat publishes no employment for in : the kept r": "source",
+  "config.py::_mrio_employment::Eurostat publishes no regional employment for : answ": "upstream",
   "config.py::_mrio_employment::could not be read as a Eurostat response: Fetch it a": "source",
   "config.py::_mrio_employment::has no figure for ( , ). An absent figure is not tak": "source",
   "config.py::_mrio_employment::the Eurostat download of employment failed: Nothing ": "upstream",
@@ -485,5 +487,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 210
+ "floor": 211
 }

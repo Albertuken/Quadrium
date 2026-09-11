@@ -83,6 +83,16 @@ EVIDENCE = {
                           "region_range_median_pts": 5.1,
                           "region_range_p90_pts": 9.8,
                           "rank_2008_2018": 0.86},
+    # The same in jobs: Eurostat's employment for the 229 regions that have
+    # it, weighting the full 2018 inverse. On the 2,200 units that have both
+    # employment and trade; the output figure is on those same units, which
+    # is why it is not the 11.7 above. `run_employment_spillovers.py`.
+    "employment_spillover_pct": {"p10": 2.9, "median": 12.1, "p90": 47.1,
+                                 "units": 2200,
+                                 "output_median_same_units": 13.6,
+                                 "median_if_surveyed": 21.4,
+                                 "unmeasured_median_pct": 0.2,
+                                 "unmeasured_p90_pct": 1.7},
 }
 
 
