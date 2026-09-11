@@ -2358,7 +2358,10 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
         "to_regions": [[r, float(v)] for r, v in to_regions],
         "archive_median_pct": EVIDENCE["spillover_share_pct"]["median"],
         "measured_on": f"the archive's full {n:,} x {n:,} inverse",
-        "survey_check": dict(EVIDENCE["mrio_vs_surveys"])}
+        "survey_check": {
+            **EVIDENCE["mrio_vs_surveys"],
+            "spillover_median_if_surveyed":
+                EVIDENCE["spillover_share_pct_survey"]["median"]}}
 
     total = float(X.sum())
     neg = [sectors[j] for j in range(S) if X[j] - Z_all[s][j].sum() < 0]
@@ -2382,7 +2385,10 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
           f"can check the archive, it records "
           f"{EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} times "
           f"the purchases a region makes from the rest of its country, so "
-          f"this share is more likely too low than too high. Trade with the "
+          f"this share is more likely too low than too high: across the "
+          f"archive, moving that trade up to the surveys' level takes the "
+          f"median from {EVIDENCE['spillover_share_pct']['median']} % to "
+          f"{EVIDENCE['spillover_share_pct_survey']['median']} %. Trade with the "
           f"other regions is kept as a final-demand column (sales) and a "
           f"not-value-added row (purchases). "
         + ("NPISH is identical to GGFC on every row of the final-demand file "

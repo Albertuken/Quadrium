@@ -491,6 +491,10 @@ Read three things before you use it:
   Austrian regions and Catalonia — it records about a quarter of the trade a
   region has with the rest of its country (0.25 times, in all ten), so the
   real share is more likely higher (`validators/run_mrio_against_surveys.py`).
+  Moving the archive's trade with the rest of the country up to the surveys'
+  level roughly doubles it: across the archive the median goes from 11.7 % to
+  21.6 %, and Catalonia's from 16.4 % to 27.8 %
+  (`validators/run_spillover_sensitivity.py`).
 
 It refuses four UK regions that are empty in every file. It also refuses nine
 regions, Île-de-France among them, that trade with no other region at all,
@@ -1220,7 +1224,8 @@ asked or not, what the method is known to get wrong:
   ninetieth. Nothing in a region's own accounts says which end it sits at.
   And it was measured on an archive that, where 10 regional surveys can
   check it, records 0.25 times the trade a region has with the rest of its
-  country, so the true feedback is more likely higher
+  country, so the true feedback is more likely higher: moved to what the
+  surveys record, the median is 21.6 %, not 11.7 %
 ```
 
 There is no flag to turn that off. The whole family is known to overstate how
@@ -1274,9 +1279,16 @@ the quotient family you picked, and ahead of delta.
 and where surveys can check that archive — nine Austrian regions and Catalonia —
 it keeps about twice a region's purchases at home and records a quarter of what
 the region buys from the rest of its country, while getting the total roughly
-right. `validators/run_mrio_against_surveys.py` holds the comparison. The real
-feedback is more likely higher than these figures, by an amount nobody has
-measured.
+right. `validators/run_mrio_against_surveys.py` holds the comparison.
+
+Moved up to the surveys' level — the archive's trade with the rest of the
+country multiplied by four, its partners and the total each sector buys left as
+they are — the spread becomes 4.7 % to 61.4 %, with a median of 21.6 % instead
+of 11.7 %. Each of the ten surveyed regions, given its own survey's split, loses
+more than the archive says: Catalonia 27.8 % rather than 16.4 %.
+`validators/run_spillover_sensitivity.py` holds that. It is a range with a floor
+and a plausible level, not a corrected figure: which regions trade with which is
+still the archive's, and nobody has measured it.
 
 ---
 

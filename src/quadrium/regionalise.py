@@ -28,7 +28,9 @@ The costs are measurements, not opinions, and each is checked by a validator:
                                                        archive it is measured
                                                        on holds 0.25 of the
                                                        surveyed trade with the
-                                                       rest of the country
+                                                       rest of the country;
+                                                       moved to the surveys'
+                                                       level, median 21.6 %
 
 See `run_flq_delta.py`, `run_delta_across_regions.py` and
 `run_regionalisation_crosshauling.py`.
@@ -65,6 +67,13 @@ EVIDENCE = {
     # `run_mrio_against_surveys.py`.
     "mrio_vs_surveys": {"regions": 10, "lower_in": 10,
                         "rest_of_country_ratio": 0.25, "own_ratio": 2.06},
+    # And how far below: the archive's trade with the rest of the country
+    # multiplied by 4, its partners and every column total unchanged. A
+    # counterfactual on the coefficients, not a corrected archive; the ten
+    # surveyed regions, each on its own survey's split, all lose more.
+    # `run_spillover_sensitivity.py`.
+    "spillover_share_pct_survey": {"p10": 4.7, "median": 21.6, "p90": 61.4,
+                                   "surveyed_higher": 10},
 }
 
 
@@ -361,7 +370,10 @@ def regionalise(A_national: np.ndarray,
         f"where {EVIDENCE['mrio_vs_surveys']['regions']} regional surveys can "
         f"check it, records {EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} "
         f"times the trade a region has with the rest of its country, so the "
-        f"true feedback is more likely higher",
+        f"true feedback is more likely higher: moved to what the surveys "
+        f"record, the median is "
+        f"{EVIDENCE['spillover_share_pct_survey']['median']:.1f} %, not "
+        f"{EVIDENCE['spillover_share_pct']['median']:.1f} %",
     ]
     if method == "FLQ":
         caveats.insert(1, f"  - delta = {delta:g} was supplied, not derived. A "

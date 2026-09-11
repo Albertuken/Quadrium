@@ -657,6 +657,10 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                    f"the purchases a region makes from the rest of its "
                    f"country, so these shares are more likely too low than "
                    f"too high.") if sc else ""
+            if sc.get("spillover_median_if_surveyed") is not None:
+                low += (f" Moved to what the surveys record, the archive's "
+                        f"median rises from {ir.get('archive_median_pct')} % "
+                        f"to {sc['spillover_median_if_surveyed']} %.")
             prov += [
                 "", "### What a one-region table leaves out", "",
                 f"This table is one region cut from a multiregional archive, so "
