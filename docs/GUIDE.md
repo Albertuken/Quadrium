@@ -132,6 +132,12 @@ quadrium --sources
 lists every table on disk, how many sectors each distinguishes, and how much
 detail the publisher publishes that is nonetheless not loadable.
 
+If the European MRIO is in `data/mrio/` (Route B), `--sources` also says how
+many of its regional tables it found, and `--find I55 --geo ES51` answers for
+one region: there, accommodation sits inside `G-I`. Each region is filed under
+its own NUTS-2 code and never under its country, so asking about Spain is still
+answered from a Spanish national table.
+
 Where a publisher serves both a code and its components — France transmits
 `C10`, `C11` and `C12` alongside `C10-12` — **the engine keeps the components**,
 provided their published totals add up to the parent's. It checks that

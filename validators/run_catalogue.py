@@ -151,6 +151,16 @@ def main() -> int:
           and not _inside("C10", "I561"),
           "`_covers` reads two-digit divisions only, so `I561` matched nothing "
           "and the one proxy worth finding was invisible")
+    check("and a range of SECTIONS is understood, as the European MRIO writes "
+          "them",
+          _inside("G-I", "I55") and _inside("B-E", "C10")
+          and _inside("M_N", "N79") and _inside("G-I", "G")
+          and not _inside("G-I", "J58") and not _inside("G-I", "G-I")
+          and _inside("C10-12", "C11"),
+          "`G-I`, `B-E`, `O-Q`, `R-U` and `M_N` are ranges of sections. Read as "
+          "codes they contained nothing, so `--find I55` against a regional "
+          "table would have said no code covers accommodation when `G-I` does. "
+          "A range of DIVISIONS, `C10-12`, keeps its reading")
 
     prox = advise("I56", sources, "ES")["proxies"]
     check("a proxy that measures only part of the sector is shown AS that",

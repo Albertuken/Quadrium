@@ -116,13 +116,15 @@ def _catalogue(args) -> int:
         # interpreter and runs the documented commands from an empty
         # directory.
         print(f"No loadable table found under {args.data.resolve()}.\n"
-              f"Nothing is wrong: this looks in `data/eurostat/`, `data/ine/` "
-              f"and for `UK_IOAT_*.xlsx`. A configuration with "
+              f"Nothing is wrong: this looks in `data/eurostat/`, `data/ine/`, "
+              f"`data/mrio/` and for `UK_IOAT_*.xlsx`. A configuration with "
               f"`table_kind: eurostat` fetches one without any of them.")
         return 0
 
     if args.sources:
-        tables = [s for s in sources if s.kind == "table"]
+        tables = [s for s in sources
+                  if s.kind == "table" and s.table_kind != "eu_mrio"]
+        regional = [s for s in sources if s.table_kind == "eu_mrio"]
         proxies = [s for s in sources if s.kind == "proxy"]
 
         print(f"{len(tables)} table(s) you can load and split\n")
@@ -137,6 +139,19 @@ def _catalogue(args) -> int:
                   "components, the loader keeps the coarser\n  tiling. "
                   "`--find CODE --geo XX` says when that affects the sector "
                   "you want.")
+
+        # 259 lines would bury everything above them. One paragraph.
+        if regional:
+            countries = sorted({s.geo[:2] for s in regional})
+            print(f"\n  and {len(regional)} regional tables from the European "
+                  f"MRIO (Huang & Koutroumpis 2023),\n  2018, 10 sectors "
+                  f"each, one per NUTS-2 region in {len(countries)} "
+                  f"countries:\n  {', '.join(countries)}.\n  `--find CODE "
+                  f"--geo <region>` asks about one, e.g. --geo "
+                  f"{min(s.geo for s in regional)}. They are estimates, the "
+                  f"archive does not\n  balance, and a region that trades "
+                  f"with no other region is refused on\n  loading, with the "
+                  f"reason: docs/GUIDE.md, Route B.")
 
         if proxies:
             print(f"\n{len(proxies)} source(s) that measure sectors — "
@@ -166,7 +181,10 @@ def _catalogue(args) -> int:
     # question a new user asks -- about their own country -- lands here. What
     # they need next is which years exist, which is one small query per
     # dataset and is cached afterwards.
-    if a["action"] == "none" and args.geo and not args.offline:
+    # Only for a COUNTRY: the probe asks Eurostat, which publishes nothing
+    # under a region's code.
+    if a["action"] == "none" and args.geo and len(args.geo.strip()) == 2 \
+            and not args.offline:
         _availability(args, a)
 
     # The verdict belongs on EVERY answer that names a country, not only on
@@ -199,6 +217,8 @@ def _catalogue(args) -> int:
         if a["action"] == "split":
             print(f"\n  and divide `{a['best']['container']}` in the `splits` "
                   f"sheet.")
+        if s.table_kind == "eu_mrio" and s.note:
+            print(f"\n  Note: {s.note}.")
 
     for pr in a.get("proxies", [])[:4]:
         print()

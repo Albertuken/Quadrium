@@ -2279,7 +2279,8 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
         empty = [r for r, x in zip(regions, per_region) if x <= 0]
         raise LoaderError(
             f"{region} has no output in the archive: its published TOTAL is "
-            f"zero in every sector. {len(empty)} regions are empty this way "
+            f"zero in every sector. {len(empty)} "
+            f"{'regions are' if len(empty) != 1 else 'region is'} empty this way "
             f"({', '.join(empty)}); there is no table to return.")
 
     others = np.r_[0:k * S, (k + 1) * S:n]
@@ -2298,8 +2299,9 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
             f"either direction, while carrying {Z_all[s, s].sum():,.0f} of "
             f"trade inside itself. No region does that; it is a gap in the "
             f"archive, and a table built from it would say that nothing this "
-            f"region buys or sells leaks elsewhere. {len(islands)} regions "
-            f"are like this: {', '.join(islands)}.")
+            f"region buys or sells leaks elsewhere. {len(islands)} "
+            f"{'regions are' if len(islands) != 1 else 'region is'} like "
+            f"this: {', '.join(islands)}.")
 
     dup = bool(np.array_equal(FD[:, fd_head.index("NPISH")],
                               FD[:, fd_head.index("GGFC")]))

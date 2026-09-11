@@ -120,6 +120,10 @@ class Source:
                     f"eurostat_geo     {self.geo}",
                     f"eurostat_year    {self.year}",
                     f"eurostat_dataset {friendly}"]
+        if self.table_kind == "eu_mrio":
+            return ["table_kind      eu_mrio",
+                    f"table_path      {self.path}",
+                    f"mrio_region     {self.geo}"]
         return [f"table_kind      {self.table_kind}",
                 f"table_path      {self.path}"]
 
@@ -253,6 +257,58 @@ def _workbook_source(path: Path, kind: str, publisher: str,
         labels=dict(zip(t.sector_codes, t.sector_labels)))
 
 
+def _mrio_sources(folder: Path) -> list[Source]:
+    """One regional table per region of the European MRIO in `folder`.
+
+    Read from the block's HEADER ROW and the 240 kB final-demand file, in a
+    fraction of a second. Loading a region reads the whole 35 MB block and
+    inverts a 2,720 x 2,720 system, and a listing that did that 272 times would
+    take longer than the work it was listing. So a region is listed when it has
+    output; the nine that trade with no other region -- which only the block
+    can show -- are listed, and refused on loading with the reason.
+
+    Each is filed under its own NUTS-2 code and never under its country. A
+    region's table answers a different question from the country's, which is
+    the rule `advise` already applies to another economy's table.
+    """
+    import openpyxl
+
+    from .io_loader import (LoaderError, _MRIO_S, _MRIO_SECTORS, _mrio_files,
+                            _mrio_side)
+    try:
+        blk, fdf, _ = _mrio_files(folder)
+        wb = openpyxl.load_workbook(blk, read_only=True, data_only=True)
+        try:
+            head = next(wb.worksheets[0].iter_rows(values_only=True,
+                                                   max_row=1))
+        finally:
+            wb.close()
+        fd_head, FD = _mrio_side(fdf, "rows")
+    except (LoaderError, OSError, ValueError, StopIteration, KeyError):
+        return []
+    labels = [str(x) for x in head[1:] if x is not None]
+    S = _MRIO_S
+    regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
+    if (len(regions) * S != len(labels) or FD.shape[0] != len(labels)
+            or "TOTAL" not in fd_head):
+        return []
+    sectors = [l.split("-", 1)[1] for l in labels[:S]]
+    output = FD[:, fd_head.index("TOTAL")].reshape(len(regions), S).sum(1)
+    return [Source(
+        source_id=f"mrio:eu2018:{r}", publisher="Huang & Koutroumpis",
+        geo=r, geos=[r], year=2018, dataset=blk.stem, path=blk.parent,
+        table_kind="eu_mrio",
+        classification=("10 sectors, NACE sections grouped as the archive "
+                        "groups them"),
+        codes=list(sectors),
+        labels={c: _MRIO_SECTORS.get(c, c) for c in sectors},
+        note=("a region's own table, cut from an ESTIMATED archive that does "
+              "not balance: the residue is carried and sized in the report, "
+              "and a region that trades with no other region is refused on "
+              "loading"))
+        for r, x in zip(regions, output) if x > 0]
+
+
 def scan(root: Path | str) -> list[Source]:
     """Every table under `root` that this engine can load, newest first."""
     root = Path(root)
@@ -271,6 +327,7 @@ def scan(root: Path | str) -> list[Source]:
         s = _workbook_source(f, "ine_interior", "INE", "ES")
         if s:
             out.append(s)
+    out.extend(_mrio_sources(root / "data" / "mrio"))
 
     return sorted(out, key=lambda s: (-s.year, s.publisher, s.source_id))
 
@@ -369,12 +426,25 @@ def advise(target: str, sources: list[Source], geo: str | None = None) -> dict:
     geo = geo.strip().upper()
     mine = [h for h in hits if h["source"].geo == geo]
     if not mine:
+        # Eurostat publishes COUNTRIES. Sending someone who typed a region to
+        # fetch it there names a download that does not exist.
+        why = (f"No table for {geo} is on disk. "
+               + (f"`table_kind: eurostat` with `eurostat_geo {geo}` fetches "
+                  f"one for any EU member state and year it publishes."
+                  if len(geo) == 2 else
+                  f"It is not a country code, so Eurostat has nothing to "
+                  f"fetch for it: it publishes national tables."))
+        regional = sorted(s.geo for s in sources
+                          if s.table_kind == "eu_mrio"
+                          and s.geo[:2] == geo[:2] and s.geo != geo)
+        if regional:
+            why += (f" The European MRIO here has {len(regional)} regional "
+                    f"tables for {geo[:2]} ({', '.join(regional[:6])}"
+                    f"{'…' if len(regional) > 6 else ''}); `--geo "
+                    f"{regional[0]}` asks about one of them — a region's own "
+                    f"table, not the country's.")
         return {"target": code, "action": "none", "best": None, "hits": hits,
-                "geo": geo,
-                "why": (f"No table for {geo} is on disk. "
-                        f"`table_kind: eurostat` with `eurostat_geo {geo}` "
-                        f"fetches one for any EU member state and year it "
-                        f"publishes.")}
+                "geo": geo, "why": why}
 
     tables = [h for h in mine if h["source"].kind == "table"]
     separate = [h for h in tables if h["verdict"] == "SEPARATE"]
@@ -483,6 +553,18 @@ def _inside(container: str, code: str) -> bool:
     group falls back to its own division: `I561` is inside `I56`, which is
     inside `I`.
     """
+    # A range of SECTIONS -- `G-I`, `B-E`, `M_N` -- is how the European MRIO
+    # writes its ten sectors. `_covers` reads divisions and knows nothing of
+    # these, so each contained nothing and `--find I55` against a regional
+    # table said no code covers accommodation when `G-I` does. Read on the raw
+    # code, before `_bare`, whose job is stripping dataset prefixes. A range of
+    # DIVISIONS such as `C10-12` has digits and does not match.
+    m = re.fullmatch(r"([A-Z])[-_]([A-Z])", str(container).strip().upper())
+    if m:
+        part = re.fullmatch(r"([A-Z])(\d{2}\d*)?", _bare(code).upper())
+        return (part is not None
+                and str(container).strip().upper() != _bare(code).upper()
+                and m.group(1) <= part.group(1) <= m.group(2))
     container, code = _bare(container).upper(), _bare(code).upper()
     if _covers(container, code):
         return True

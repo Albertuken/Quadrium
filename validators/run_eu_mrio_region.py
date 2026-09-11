@@ -254,6 +254,56 @@ def main() -> int:
         ok, msg = refused(lambda c=code: load_eu_mrio_2018(MRIO, c), word)
         check(f"refused: {code} ({why})", ok, msg)
 
+    # ---- the catalogue finds it, which is how a user learns it exists
+    #
+    # `--sources` promises every table the engine can load on this machine.
+    # Until this was checked it did not look in data/mrio/ at all, so 259
+    # regional tables were loadable and invisible.
+    from quadrium.catalogue import advise, scan
+
+    sources = scan(ROOT)
+    mrio = [s for s in sources if s.table_kind == "eu_mrio"]
+    empty = {r for j, r in enumerate(regions)
+             if X[j * S:(j + 1) * S].sum() <= 0}
+    mine = next((s for s in mrio if s.geo == REGION), None)
+    check("the catalogue lists one regional table per region with output",
+          len(mrio) == len(regions) - len(empty) and mine is not None
+          and not empty & {s.geo for s in mrio}
+          and mine.codes == list(t.sector_codes),
+          f"{len(mrio)} of {len(regions)} regions; the {len(empty)} empty ones "
+          f"are left out, read from the final-demand file and the header row "
+          f"rather than the 35 MB block")
+    a = advise("I55", sources, REGION)
+    lines = a["best"]["source"].config_lines() if a.get("best") else []
+    check("and `--find I55 --geo ES51` sends the user to divide `G-I` there",
+          a["action"] == "split" and a["best"]["container"] == "G-I"
+          and any(l.split()[:2] == ["mrio_region", REGION] for l in lines),
+          " / ".join(l.strip() for l in lines) or a["why"][:160])
+    nat = advise("I55", sources, "ES")
+    check("while a question about Spain is still answered by a national table",
+          nat.get("best") is not None
+          and nat["best"]["source"].table_kind != "eu_mrio",
+          nat["best"]["source"].source_id if nat.get("best")
+          else nat["why"][:160])
+    lonely = sorted({s.geo[:2] for s in mrio}
+                    - {s.geo for s in sources if s.table_kind != "eu_mrio"})
+    if lonely:
+        g = lonely[0]
+        why = advise("I55", sources, g)["why"]
+        check(f"and a country with no national table here is pointed at its "
+              f"regions ({g})",
+              any(s.geo in why for s in mrio if s.geo[:2] == g)
+              and "not the country" in why, why[:200])
+    code, out, _ = run(["--sources", "--data", str(ROOT)])
+    check("`--sources` says so in one paragraph rather than 268 lines",
+          code == 0 and "European MRIO" in out
+          and "mrio:eu2018" not in out, f"exit {code}")
+    code, out, _ = run(["--find", "I55", "--geo", REGION, "--data", str(ROOT),
+                        "--offline"])
+    check("and `--find` prints the rows to paste, region included",
+          code == 0 and "mrio_region" in out and REGION in out,
+          f"exit {code}")
+
     # ---- from a workbook, which is how the owner will use it
     from quadrium.config import ConfigError, load_config, plan_workbook
 

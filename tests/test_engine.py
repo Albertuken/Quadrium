@@ -5181,3 +5181,253 @@ def test_the_functions_the_REACHABILITY_SWEEP_found_UNCALLED():
           f"{step1.inconsistency:,.0f} between a use side of 258,432 and a "
           f"supply side of 257,346 — the property existed and "
           f"run_sut_euro_austria.py subtracted the two by hand instead")
+
+
+def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
+    """Fourteen refusals of the European MRIO loader, on an archive small
+    enough to write here.
+
+    WHY A SYNTHETIC ARCHIVE
+    -------------------------
+    The real one is 317 MB and neither repository distributes it, so the
+    validator that reads it (`run_eu_mrio_region.py`) checks nothing in the
+    public tree. And where it does run, it reaches only the refusals a USER
+    meets -- an empty region, an island, an unknown code. The refusals about a
+    malformed FILE had no case at all: a block that is not square, side files
+    of another length, two output vectors that disagree. Seven of the thirteen
+    refusals the suite never reached on 2026-09-11 were those.
+
+    So this writes the archive's three files at 2 regions by 10 sectors, in the
+    archive's own layout, loads it once clean, and then breaks one thing at a
+    time. The workbook's refusals and the catalogue ride on the same files.
+    """
+    import shutil
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.catalogue import scan
+    from quadrium.config import (ConfigError, build_config,
+                                 build_regionalisation)
+    from quadrium.io_loader import (_MRIO_SECTORS, LoaderError,
+                                    load_eu_mrio_2018)
+
+    sectors = list(_MRIO_SECTORS)
+    regions = ["AA11", "AA12"]
+    labels = [f"{r}-{s}" for r in regions for s in sectors]
+    n = len(labels)
+    i, j = np.indices((n, n))
+    Z0 = 1.0 + (i * 7 + j * 3) % 5
+    fh = ["HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "EX", "TOTAL"]
+    vh = ["TAXSUB", "VA", "IM", "INPUT"]
+
+    def accounts(Z):
+        # Neither identity closes, as in the real archive: final demand falls
+        # 5 short of output on every row and value added 1 short on every
+        # column. NPISH repeats GGFC, as it does there.
+        X = Z.sum(1) + 75.0
+        FD = np.column_stack([np.full(n, v) for v in (50, 10, 10, 5, 1, 4)]
+                             + [X])
+        VA = np.vstack([np.full(n, 2.0), X - Z.sum(0) - 6.0, np.full(n, 3.0),
+                        X])
+        return FD, VA
+
+    def write(folder, Z, rows, cols, fd_head, FD, VA):
+        folder.mkdir(parents=True, exist_ok=True)
+        for name, head, body, row_labels in (
+                ("MRIO_2018_272regions.xlsx", cols, Z, rows),
+                ("Final_demand_2018.xlsx", fd_head, FD, rows),
+                ("TAXSUB_VA_2018.xlsx", cols, VA, vh)):
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.append([None] + list(head))
+            for lab, r in zip(row_labels, body):
+                ws.append([lab] + [float(x) for x in r])
+            wb.save(folder / name)
+        return folder
+
+    def refused(name, fn, fragment):
+        try:
+            fn()
+        except (LoaderError, ConfigError) as exc:
+            check(f"the engine refuses {name}, and says which",
+                  fragment.lower() in str(exc).lower(), str(exc)[:88])
+        except Exception as exc:                          # noqa: BLE001
+            check(f"the engine refuses {name}, and says which", False,
+                  f"{type(exc).__name__} instead of a refusal: "
+                  f"{str(exc)[:60]}")
+        else:
+            check(f"the engine refuses {name}, and says which", False,
+                  "it loaded")
+
+    tmp = Path(tempfile.mkdtemp(prefix="quadrium_mrio_"))
+    FD, VA = accounts(Z0)
+    good = write(tmp / "good", Z0, labels, labels, fh, FD, VA)
+
+    t = load_eu_mrio_2018(good, "AA11")
+    row = np.abs(t.Z.sum(1) + t.Y.sum(1) - t.X).max()
+    col = np.abs(t.Z.sum(0) + t.VA.sum(0) - t.X).max()
+    check("a two-region archive in the real layout loads, the residue "
+          "carried rather than removed",
+          t.n == 10 and row < 1e-9 and col < 1e-9
+          and sum("RESIDUAL" in l for l in t.Y_labels + t.VA_labels) == 2
+          and "omits" in t.notes,
+          f"row {row:.1e}, column {col:.1e}; the notes size the residue and "
+          f"say what a one-region table leaves out")
+
+    # ---- the files
+    (tmp / "empty_folder").mkdir()
+    refused("a folder without the archive's files",
+            lambda: load_eu_mrio_2018(tmp / "empty_folder", "AA11"),
+            "does not hold")
+    swapped = list(labels)
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    refused("a block whose rows are not its columns",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "rows", Z0, swapped, labels, fh, FD, VA), "AA11"),
+            "not the column labels")
+    refused("a block with more rows than columns",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "tall", np.vstack([Z0, Z0[:1]]),
+                      labels + ["AA12-X"], labels, fh, FD, VA), "AA11"),
+            "more rows than columns")
+    by_sector = [f"{r}-{s}" for s in sectors for r in regions]
+    k = [labels.index(l) for l in by_sector]
+    refused("a block laid out sector by sector",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "sector_major", Z0[np.ix_(k, k)], by_sector,
+                      by_sector, fh, FD[k], VA[:, k]), "AA11"),
+            "region by region")
+    refused("side files of another length",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "short", Z0, labels, labels, fh, FD[:-1], VA),
+                "AA11"),
+            "not the same year")
+    refused("a final-demand file with no exports",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "no_ex", Z0, labels, labels, fh[:5] + fh[6:],
+                      np.delete(FD, 5, axis=1), VA), "AA11"),
+            "has no ex")
+    VA2 = VA.copy()
+    VA2[3, 4] += 25.0
+    refused("two output vectors that disagree",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "two_x", Z0, labels, labels, fh, FD, VA2), "AA11"),
+            "differ")
+
+    # ---- what a user meets
+    refused("a region the archive does not have",
+            lambda: load_eu_mrio_2018(good, "ZZ99"), "not in the archive")
+    FDe, VAe = FD.copy(), VA.copy()
+    FDe[10:, 6] = 0.0
+    VAe[3, 10:] = 0.0
+    refused("a region with no output",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "empty", Z0, labels, labels, fh, FDe, VAe),
+                "AA12"),
+            "1 region is empty")
+    Zi = Z0.copy()
+    Zi[:10, 10:] = 0.0
+    Zi[10:, :10] = 0.0
+    FDi, VAi = accounts(Zi)
+    refused("a region that trades with no other",
+            lambda: load_eu_mrio_2018(
+                write(tmp / "island", Zi, labels, labels, fh, FDi, VAi),
+                "AA11"),
+            "no other region")
+
+    # ---- the workbook
+    meta = {"project_id": "t", "table_path": str(good),
+            "table_kind": "eu_mrio"}
+    refused("a workbook that names no region",
+            lambda: build_config(dict(meta), {}, tmp), "needs `mrio_region`")
+    refused("`mrio_region` on another kind of table",
+            lambda: build_config({**meta, "table_kind": "uk_analytical",
+                                  "mrio_region": "AA11"}, {}, tmp),
+            "applies only to")
+    refused("a type II closure on a table with no wages row",
+            lambda: build_config(
+                {**meta, "mrio_region": "AA11",
+                 "type_ii_income_rows": "Value added (VA)",
+                 "type_ii_household_column":
+                     "Household final consumption expenditure (HFCE)"},
+                {}, tmp),
+            "wages")
+    refused("regionalising a table that is already a region",
+            lambda: build_regionalisation({**meta, "mrio_region": "AA11"},
+                                          {"method": "FLQ"}, tmp),
+            "already a regional")
+
+    # ---- and the catalogue finds both regions from the header row
+    tree = tmp / "tree"
+    shutil.copytree(good, tree / "data" / "mrio")
+    ids = sorted(s.source_id for s in scan(tree))
+    check("the catalogue lists each region under its own code",
+          ids == ["mrio:eu2018:AA11", "mrio:eu2018:AA12"], ", ".join(ids))
+
+
+def test_the_refusals_a_SATELLITES_sheet_makes():
+    """Five refusals about satellite accounts that had no case.
+
+    The accounts shipped on 2026-09-08 with their refusals and with cases for
+    the ones a careful user meets -- a sector left out, a sector given twice,
+    no unit. The ones a hurried user meets had none: a row with no account
+    name, a row with no sector, a value that is not a number, a code the table
+    does not have, and a file read back without one of the columns this engine
+    writes. Five of the six refusals the suite never reached on 2026-09-11
+    were these, all from the same week's work.
+    """
+    from quadrium.config import ConfigError, build_satellites
+    from quadrium.io_loader import LoaderError, _read_satellites
+    from quadrium.models import IOTable
+
+    Z = np.array([[1.0, 2.0], [3.0, 4.0]])
+    X = np.array([8.0, 13.0])
+    t = IOTable(table_id="sat", country="X", year=2020, unit="u",
+                classification="two sectors", sector_codes=["A", "B"],
+                sector_labels=["A", "B"], Z=Z, Y=(X - Z.sum(1))[:, None],
+                Y_labels=["final demand"], VA=(X - Z.sum(0))[None, :],
+                VA_labels=["value added"], X=X, source="test")
+    rows = [{"name": "jobs", "unit": "persons", "sector_code": c, "value": v,
+             "source": "test", "source_year": 2020}
+            for c, v in (("A", 10), ("B", 20))]
+    got = build_satellites(rows, t)
+    check("a sheet covering every sector builds an account",
+          list(got["jobs"].values) == [10.0, 20.0], "jobs: 10 and 20")
+
+    def refused(name, fn, fragment):
+        try:
+            fn()
+        except (ConfigError, LoaderError) as exc:
+            check(f"the engine refuses {name}, and says which",
+                  fragment.lower() in str(exc).lower(), str(exc)[:88])
+        except Exception as exc:                          # noqa: BLE001
+            check(f"the engine refuses {name}, and says which", False,
+                  f"{type(exc).__name__} instead of a refusal: "
+                  f"{str(exc)[:60]}")
+        else:
+            check(f"the engine refuses {name}, and says which", False,
+                  "it built the account")
+
+    refused("a row with no account name",
+            lambda: build_satellites([dict(rows[0], name="")] + rows[1:], t),
+            "has no `name`")
+    refused("a row with no sector",
+            lambda: build_satellites([dict(rows[0], sector_code=None)]
+                                     + rows[1:], t),
+            "has no `sector_code`")
+    refused("a value that is not a number",
+            lambda: build_satellites([dict(rows[0], value="n/a")] + rows[1:],
+                                     t),
+            "not a number")
+    refused("a code the table does not have",
+            lambda: build_satellites(rows + [dict(rows[0], sector_code="Z9")],
+                                     t),
+            "the table does not have")
+    lost = {"Satellites": [
+        ["name", "unit", "source", "source_year", "sector_code", "value"],
+        ["jobs", "persons", "test", 2020, "A", 10],
+        ["jobs", "persons", "test", 2020, "B", 20]]}
+    refused("a file read back without the column that says what was measured",
+            lambda: _read_satellites(lost, ["A", "B"], "t.xlsx"),
+            "missing the column(s) origin")
