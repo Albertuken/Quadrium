@@ -307,16 +307,25 @@ per file. The URL, byte count and SHA-256 are in the `.provenance` beside it.
 | file | bytes | SHA-256 |
 |---|---:|---|
 | `nama_10r_3empers_ES51_2018.json` | 4,200 | `4902ca2721dc…` |
+| `nama_10r_3empers_TOTAL_2018.json` | 81,820 | `c45b627473a9…` |
+
+The second file is total employment for every region the release carries, in
+one request, fetched with curl because `eurostat.fetch` always names one
+region. It is what `run_mrio_eurostat_codes.py` measures coverage against.
 
 **No mapping is needed.** The European MRIO's ten sectors are this cube's own
 A10 codes — `A`, `B-E`, `F`, `G-I`, `J`, `K`, `L`, `M_N`, `O-Q`, `R-U` — and for
 Catalonia in 2018 they add up to 3,562.6, the `TOTAL` the cube publishes. The
 engine checks that sum for every region it loads.
 
-**The codes are the current NUTS.** The archive codes France on NUTS 2013 and
-Greece on NUTS 2010, so `FR21` and `EL11` return nothing while `FRF2` and
-`EL51` do. The engine refuses those regions rather than translate a code by
-hand. See `run_eu_mrio_employment.py`.
+**The codes are NUTS 2024.** The archive codes Greece on NUTS 2010 and France
+and Poland on NUTS 2013, so `FR21` and `EL11` return nothing while `FRF2` and
+`EL51` do. Eurostat's correspondence tables (`data/nuts/`) say which changes
+were a new code for the same territory: 35 regions, fetched under the code
+Eurostat serves. Six were split or had their border moved and are refused, and
+the release carries no region of the United Kingdom. 229 of the archive's 268
+regions with data get employment. See `run_mrio_eurostat_codes.py` and
+`run_eu_mrio_employment.py`.
 
 ---
 

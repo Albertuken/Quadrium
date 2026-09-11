@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2021.xlsx",
+  "final_url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2021.xlsx",
+  "office": "Eurostat / European Commission",
+  "path": "data/nuts/NUTS2021.xlsx",
+  "bytes": 766405,
+  "sha256": "b17dcc379bb3586550ec3b16f3f474dd2a8a55b4cfdcdc1e1575097f1c2d4761",
+  "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "retrieved_at": "2026-09-11T15:42:44+00:00",
+  "note": "NUTS 2021 classification with its changes against NUTS 2016 (sheets 'Changes detailed NUTS 2016-2021' and 'Changes NUTS-2'), to carry the MRIO's codes to the ones Eurostat serves"
+}

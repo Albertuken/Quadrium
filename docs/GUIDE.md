@@ -492,12 +492,19 @@ Eurostat publishes as the total, and the engine checks that for every region.
 
 Two things to know. The employment is measured and the output it is divided by
 is the archive's estimate, so a multiplier is no firmer than that estimate; the
-report says so beside it. And Eurostat uses the current NUTS codes while the
-archive codes France on NUTS 2013 and Greece on NUTS 2010, so for those regions
-Eurostat returns nothing under the archive's code. The engine refuses rather
-than translate the code by hand: give the figures yourself in the `satellites`
-sheet. If that sheet declares `employment`, its figures win and nothing is
-fetched (`validators/run_eu_mrio_employment.py`).
+report says so beside it. And Eurostat serves the NUTS 2024 codes, while the
+archive codes Greece on NUTS 2010 and France and Poland on NUTS 2013. Where
+Eurostat's own correspondence tables say a code changed and the territory did
+not, the engine fetches the region under the code Eurostat serves and says so:
+FR21 is fetched as FRF2, EL11 as EL51. That covers 35 regions. Where a border
+moved it refuses, because a figure for a different territory would pair one
+region's employment with another's output: PL12 (split in 2016), NL31 and NL33,
+and PT16, PT17 and PT18 (redrawn in 2024). Eurostat carries no region of the
+United Kingdom at all. In all, 229 of the archive's 268 regions with data get
+their employment from Eurostat (`validators/run_mrio_eurostat_codes.py`). For
+the rest, give the figures yourself in the `satellites` sheet. If that sheet
+declares `employment`, its figures win and nothing is fetched
+(`validators/run_eu_mrio_employment.py`).
 
 Read three things before you use it:
 

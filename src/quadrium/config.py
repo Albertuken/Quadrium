@@ -719,6 +719,66 @@ def _tag(table, note: str):
 # Eurostat's regional employment, on the A10 grouping the European MRIO uses.
 EMPLOYMENT_DATASET = "nama_10r_3empers"
 
+# THE ARCHIVE'S CODES THAT EUROSTAT SERVES UNDER ANOTHER CODE, FOR THE SAME
+# TERRITORY. The archive codes Greece on NUTS 2010 and France and Poland on
+# NUTS 2013; Eurostat serves NUTS 2024. Every pair below is a chain of steps
+# that Eurostat's own correspondence tables call a new code ("code change",
+# "recoded") and nothing else. Held here rather than read from those tables at
+# run time, so an installed engine needs no spreadsheet of Eurostat's;
+# `run_mrio_eurostat_codes.py` rebuilds the list from the tables in
+# `data/nuts/` and fails if the two disagree.
+MRIO_EUROSTAT_CODE = {
+    # NUTS 2010 -> 2013, "Code change"
+    "EL11": "EL51", "EL12": "EL52", "EL13": "EL53", "EL14": "EL61",
+    "EL21": "EL54", "EL22": "EL62", "EL23": "EL63", "EL24": "EL64",
+    "EL25": "EL65",
+    # NUTS 2013 -> 2016, "recoded" (FR24 "recoded and relabelled")
+    "FR21": "FRF2", "FR22": "FRE2", "FR23": "FRD2", "FR24": "FRB0",
+    "FR25": "FRD1", "FR26": "FRC1", "FR30": "FRE1", "FR41": "FRF3",
+    "FR42": "FRF1", "FR43": "FRC2", "FR51": "FRG0", "FR52": "FRH0",
+    "FR53": "FRI3", "FR61": "FRI1", "FR62": "FRJ2", "FR63": "FRI2",
+    "FR71": "FRK2", "FR72": "FRK1", "FR81": "FRJ1", "FR82": "FRL0",
+    "FR83": "FRM0",
+    "PL11": "PL71", "PL31": "PL81", "PL32": "PL82", "PL33": "PL72",
+    "PL34": "PL84",
+}
+
+# THE ARCHIVE'S REGIONS WHOSE BORDER EUROSTAT HAS SINCE MOVED, in what the
+# tables say. Eurostat recalculates its series on the new borders, so no code
+# it serves is the archive's territory, and nothing is fetched for them.
+MRIO_REDRAWN = {
+    "PL12": "NUTS 2016 discontinued it and split it into PL91 and PL92",
+    "NL31": "NUTS 2024 moved its border with Zuid-Holland; Eurostat serves "
+            "Utrecht as NL35",
+    "NL33": "NUTS 2024 moved its border with Utrecht; Eurostat serves "
+            "Zuid-Holland as NL36",
+    "PT16": "NUTS 2024 gave part of it to the new PT1D (Oeste e Vale do "
+            "Tejo); Eurostat serves Centro as PT19",
+    "PT17": "NUTS 2024 split it into PT1A (Grande Lisboa) and PT1B "
+            "(Península de Setúbal)",
+    "PT18": "NUTS 2024 gave part of it to the new PT1D (Oeste e Vale do "
+            "Tejo); Eurostat serves Alentejo as PT1C",
+}
+
+
+def _no_employment_reason(region: str, geo: str, year: int) -> str:
+    """Why Eurostat answered with nothing, said as what it is.
+
+    The United Kingdom's regions are not in the release at all: measured on
+    2026-09-11, none of its NUTS-2 codes carried a 2018 figure, so no code can
+    supply one. Any other code reaching here is the one this engine takes to
+    be Eurostat's for the territory, so the likelier gap is the year.
+    """
+    if region.startswith("UK"):
+        return ("Eurostat's release carries no region of the United Kingdom: "
+                "measured on 2026-09-11, none of its NUTS-2 codes had a 2018 "
+                "figure, so no code can supply one.")
+    return (f"{geo} is the code this engine takes to be Eurostat's for that "
+            f"territory (`run_mrio_eurostat_codes.py` checks every region of "
+            f"the 2018 archive), so the likelier gap is the {year} figure, not "
+            f"the code: Eurostat answers a year it has not published with an "
+            f"empty result.")
+
 
 def _mrio_employment(meta: dict, table, base_dir, offline: bool,
                      refresh: bool) -> Satellite:
@@ -737,13 +797,19 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
     fetched again, `refresh` fetches it on purpose, `offline` refuses and
     prints the URL.
 
+    WHICH CODE
+    -----------
+    The archive codes Greece on NUTS 2010 and France and Poland on NUTS 2013,
+    and Eurostat serves NUTS 2024. Where Eurostat's correspondence tables call
+    every step a new code for the same territory, the region is fetched under
+    the code Eurostat serves (`MRIO_EUROSTAT_CODE`) and the account says so.
+
     WHAT IT REFUSES
     ----------------
-    A region Eurostat does not publish under the archive's code. The archive
-    codes France on NUTS 2013 and Greece on NUTS 2010, and Eurostat serves the
-    current codes: FR21 and EL11 come back empty where FRF2 and EL51 do not.
-    Translating a code by hand would pair one region's employment with another
-    region's output, so the refusal points at the `satellites` sheet instead.
+    A region whose border moved (`MRIO_REDRAWN`): one territory's employment
+    over another's output is a multiplier of neither, so the code is not
+    translated and nothing is fetched. A region the release carries nothing
+    for -- every one of the United Kingdom's.
 
     A sector with no figure, because absent is not zero -- the rule
     `build_satellites` states. And sectors that do not add up to the total
@@ -755,11 +821,23 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
 
     region = str(meta.get("mrio_region") or "").strip()
     year = int(table.year)
+    if region in MRIO_REDRAWN:
+        raise ConfigError(
+            f"Eurostat publishes no employment for {region} as the archive "
+            f"draws it: {MRIO_REDRAWN[region]}.\n\n"
+            f"A region whose border moved is not the same territory, and one "
+            f"territory's employment over another's output is a multiplier of "
+            f"neither, so the code is not translated and nothing was fetched. "
+            f"Give the figures yourself in a `satellites` sheet, account name "
+            f"`employment`, one row per sector; the sheet's figures are used.")
+    # The code Eurostat serves for the archive's territory: the archive's own,
+    # or a later one for the same territory.
+    geo = MRIO_EUROSTAT_CODE.get(region, region)
     path = (Path(base_dir) / "data" / "eurostat"
-            / f"{EMPLOYMENT_DATASET}_{region}_{year}.json")
+            / f"{EMPLOYMENT_DATASET}_{geo}_{year}.json")
     side = path.with_suffix(path.suffix + ".provenance")
     url = (API.format(dataset=EMPLOYMENT_DATASET)
-           + f"&geo={region}&time={year}&unit=THS&wstatus=EMP")
+           + f"&geo={geo}&time={year}&unit=THS&wstatus=EMP")
 
     if path.exists() and not refresh:
         try:
@@ -781,23 +859,15 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
             f"and save the response as that file.")
     else:
         try:
-            rec = fetch(EMPLOYMENT_DATASET, region, year, path, unit="THS",
+            rec = fetch(EMPLOYMENT_DATASET, geo, year, path, unit="THS",
                         wstatus="EMP")
         except EurostatError as exc:
             if "returned no values" in str(exc):
                 raise ConfigError(
                     f"Eurostat publishes no employment for {region} in "
                     f"{year}: {EMPLOYMENT_DATASET} answered with no values "
-                    f"under that code.\n\n"
-                    f"The likeliest reason is the code. The archive codes "
-                    f"France on NUTS 2013 and Greece on NUTS 2010, and PL12 "
-                    f"was split after it; Eurostat serves the current codes, "
-                    f"so FR21 and EL11 come back empty while FRF2 and EL51 do "
-                    f"not. The code is not translated here: a region that was "
-                    f"redrawn is not the same region, and one region's "
-                    f"employment over another's output is a multiplier of "
-                    f"neither.\n\n"
-                    f"Give the figures yourself in a `satellites` sheet, "
+                    f"for {geo}.\n\n{_no_employment_reason(region, geo, year)}"
+                    f"\n\nGive the figures yourself in a `satellites` sheet, "
                     f"account name `employment`, one row per sector. The "
                     f"sheet's figures are used and nothing is fetched.") \
                     from None
@@ -805,7 +875,7 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
                 f"the Eurostat download of employment failed:\n{exc}\n\n"
                 f"Nothing was written. The cache path was {path}.") from None
         side.write_text(json.dumps(rec, indent=2))
-        print(f"    Downloaded {EMPLOYMENT_DATASET} {region} {year} — "
+        print(f"    Downloaded {EMPLOYMENT_DATASET} {geo} {year} — "
               f"{rec['bytes']:,} bytes")
         print(f"    cached at {path}")
         how = (f"downloaded {str(rec.get('retrieved_at', ''))[:10]}, SHA-256 "
@@ -820,7 +890,7 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
 
     def _employment_cell(code):
         try:
-            return cube.at(nace_r2=code, geo=region, time=str(year))
+            return cube.at(nace_r2=code, geo=geo, time=str(year))
         except EurostatError as exc:
             raise ConfigError(
                 f"{path.name} holds more than one category of a dimension "
@@ -858,13 +928,18 @@ def _mrio_employment(meta: dict, table, base_dir, offline: bool,
         checked = (f"The {len(values)} sectors add up to the {total:,.1f} "
                    f"Eurostat publishes as the total.")
 
+    served = ("" if geo == region else
+              f" Eurostat serves the archive's {region} as {geo}: the same "
+              f"territory under a later NUTS code, by Eurostat's own "
+              f"correspondence tables (`run_mrio_eurostat_codes.py`).")
     return Satellite(
         name="employment", unit="thousand persons",
         values=[values[c] for c in table.sector_codes],
-        source=f"Eurostat {EMPLOYMENT_DATASET}, employed persons, {region}",
+        source=(f"Eurostat {EMPLOYMENT_DATASET}, employed persons, {geo}"
+                + ("" if geo == region else f" (the archive's {region})")),
         source_year=year,
-        notes=(f"Eurostat's employed persons for {region} in {year} "
-               f"(`wstatus=EMP`), {how}. {checked} The employment is "
+        notes=(f"Eurostat's employed persons for {geo} in {year} "
+               f"(`wstatus=EMP`), {how}.{served} {checked} The employment is "
                f"measured; the output each multiplier divides it by is the "
                f"MRIO's, which the archive estimates, so the multiplier pairs "
                f"a measured figure with an estimated one and is no firmer "

@@ -58,6 +58,7 @@
   "config.py::_load_eurostat_sut",
   "config.py::_mrio_employment",
   "config.py::_need",
+  "config.py::_no_employment_reason",
   "config.py::_project",
   "config.py::_rows",
   "config.py::_strength",
@@ -303,8 +304,8 @@
   "validation.py::validate_original",
   "validation.py::validate_scenario"
  ],
- "n_functions": 312,
- "floor": 302,
+ "n_functions": 313,
+ "floor": 303,
  "taken": "2026-09-11",
  "_note": "Which of the functions the engine defines anything in the suite has ever ENTERED. Taken by library/tools/sweep_reachability.py, which installs a sys.setprofile hook through sitecustomize and runs every validator and the unit tests as separate processes. Keyed by file.py::name; Python 3.10 has no co_qualname, so same-named methods in one file share a key and the collision is recorded on the entry.",
  "classified": {

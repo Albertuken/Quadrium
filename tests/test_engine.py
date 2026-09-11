@@ -5471,11 +5471,11 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
 
     emp = {s: 10.0 + k for k, s in enumerate(sectors)}
 
-    def cube(values, total, status=("EMP",)):
+    def cube(values, total, status=("EMP",), geo="AA11"):
         codes = ["TOTAL"] + list(values)
         cells = [total] + list(values.values())
         dims = {"freq": ["A"], "unit": ["THS"], "wstatus": list(status),
-                "nace_r2": codes, "geo": ["AA11"], "time": ["2018"]}
+                "nace_r2": codes, "geo": [geo], "time": ["2018"]}
         return {"version": "2.0", "class": "dataset",
                 "label": "Employment (thousand persons) by NUTS 3 region",
                 "id": list(dims), "size": [len(v) for v in dims.values()],
@@ -5583,8 +5583,8 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     asked = {}
 
     def served(dataset, geo, year, dest, **kw):
-        asked.update(kw, dataset=dataset)
-        raw = json.dumps(cube(emp, sum(emp.values())))
+        asked.update(kw, dataset=dataset, geo=geo, dest=Path(dest).name)
+        raw = json.dumps(cube(emp, sum(emp.values()), geo=geo))
         Path(dest).write_text(raw)
         return {"dataset": dataset, "url": "the request", "geo": geo,
                 "year": year, "bytes": len(raw), "sha256": "0" * 64,
@@ -5598,6 +5598,42 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
           and asked.get("unit") == "THS" and asked.get("wstatus") == "EMP"
           and kept.with_suffix(".json.provenance").exists()
           and "downloaded 2026-09-11" in notes, f"{asked}")
+
+    # A code Eurostat changed for the same territory is fetched under the
+    # code Eurostat serves, kept under it, and said.
+    from quadrium import config as Cfg
+    asked.clear()
+    with patch.dict(Cfg.MRIO_EUROSTAT_CODE, {"AA11": "AB11"}), \
+            patch.object(E, "fetch", served):
+        cfg = build_config(dict(meta), tables, tmp)
+    sat = cfg["table"].satellites["employment"]
+    check("a region Eurostat serves under a later code for the same territory "
+          "is fetched under that code, and the account says so",
+          asked.get("geo") == "AB11"
+          and asked.get("dest") == "nama_10r_3empers_AB11_2018.json"
+          and list(sat.values) == [emp[s] for s in sectors]
+          and "AB11" in sat.source and "AA11" in (sat.notes or "")
+          and "same territory" in (sat.notes or ""),
+          f"{asked.get('geo')}, {sat.source}")
+
+    # A region whose border moved is refused before anything is fetched.
+    asked.clear()
+    with patch.dict(Cfg.MRIO_REDRAWN,
+                    {"AA11": "NUTS 2024 moved its border (a test entry)"}), \
+            patch.object(E, "fetch", served):
+        refused("a region whose border Eurostat has since moved",
+                lambda: build_config(dict(meta), tables, tmp),
+                "border moved")
+    check("and nothing is fetched for it", not asked, f"{asked}")
+
+    # The United Kingdom is absent from the release, not recoded, and the
+    # refusal says which of the two it is.
+    uk = Cfg._no_employment_reason("UKC1", "UKC1", 2018)
+    other = Cfg._no_employment_reason("AA11", "AA11", 2018)
+    check("an empty answer for a British region says the release carries no "
+          "British region, and for any other says the year is missing",
+          "United Kingdom" in uk and "United Kingdom" not in other
+          and "year" in other, f"{uk[:60]} | {other[:60]}")
     refused("`mrio_employment` on another kind of table",
             lambda: build_config({"project_id": "x",
                                   "table_path": str(folder / labels[0]),

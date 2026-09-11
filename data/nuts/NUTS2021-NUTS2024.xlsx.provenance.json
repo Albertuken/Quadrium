@@ -1,0 +1,11 @@
+{
+  "url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2021-NUTS2024.xlsx",
+  "final_url": "https://ec.europa.eu/eurostat/documents/345175/629341/NUTS2021-NUTS2024.xlsx",
+  "office": "Eurostat / European Commission",
+  "path": "data/nuts/NUTS2021-NUTS2024.xlsx",
+  "bytes": 556714,
+  "sha256": "0c4360fbba078ce640289be3d92c86715f3103800446cfc5c1ecf2590c15a7f1",
+  "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "retrieved_at": "2026-09-11T15:42:15+00:00",
+  "note": "NUTS 2021 to NUTS 2024 correspondence, to carry the MRIO's codes to the ones Eurostat serves. Linked from https://ec.europa.eu/eurostat/web/nuts/history"
+}
