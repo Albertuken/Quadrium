@@ -5282,6 +5282,11 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
           and abs(ir["to_regions"][0][1] - 1.0) < 1e-12,
           "ten shares between 0 and 1, all of it to AA12, the only other "
           "region")
+    check("and what the region would lose at the surveys' level of trade",
+          len(ir.get("share_by_sector_if_surveyed", [])) == 10
+          and ir.get("share_if_surveyed", -1.0) > ir.get("share", 2.0),
+          "the rest of its country is AA12, and raising that trade raises "
+          "what leaves")
     import dataclasses
     try:
         dataclasses.replace(t, interregional={"share_by_sector": [0.1]})

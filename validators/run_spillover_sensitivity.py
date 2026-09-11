@@ -201,13 +201,31 @@ def main() -> int:
     base, L0 = spillover(Z / denom, R)
     keep = np.repeat(~island, S) & np.isfinite(base)
 
-    Z_ratio, stuck_r = moved(Z, regions, {r: ("ratio", 4.0) for r in live})
+    # One factor, written once, in the engine's EVIDENCE: the loader uses it
+    # for a region's own figure and this file for the archive-wide range.
+    factor = EVIDENCE.get("spillover_share_pct_survey", {}).get("factor", 4.0)
+    Z_ratio, stuck_r = moved(Z, regions,
+                             {r: ("ratio", factor) for r in live})
     col_err = float(np.abs(Z_ratio.sum(0) - Z.sum(0)).max())
     check("every column of A keeps its total, so only the split moved",
           col_err < 1e-6 * float(Z.sum(0).max()),
           f"largest change in a column total {col_err:.2e}; "
           f"{stuck_r} column(s) buy nothing from the rest of their country and "
           f"stay as they are")
+    # The loader computes the same counterfactual for the region it returns,
+    # with its own implementation. Two codes, one answer, or the region's
+    # figure and the range it is read against are not the same experiment.
+    try:
+        from quadrium.io_loader import _mrio_move_to_country
+        Z_eng = _mrio_move_to_country(Z, regions, {r: factor for r in live})
+        same = bool(np.allclose(Z_eng, Z_ratio, rtol=0,
+                                atol=1e-9 * float(Z.max())))
+        detail = ("the loader's implementation gives this file's matrix, cell "
+                  "for cell")
+    except ImportError as exc:
+        same, detail = False, f"the engine has no implementation: {exc}"
+    check("and the engine moves the trade exactly as this file does",
+          same, detail)
 
     ratio, L1 = spillover(Z_ratio / denom, R)
     check("and the counterfactual system still has an inverse with no "

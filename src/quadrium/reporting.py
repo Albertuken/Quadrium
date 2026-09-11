@@ -661,6 +661,14 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 low += (f" Moved to what the surveys record, the archive's "
                         f"median rises from {ir.get('archive_median_pct')} % "
                         f"to {sc['spillover_median_if_surveyed']} %.")
+            cf = ir.get("share_by_sector_if_surveyed")
+            if ir.get("share_if_surveyed") is not None:
+                low += (f" **At the surveys' level of trade** — this region's "
+                        f"trade with the rest of its country multiplied by "
+                        f"{ir.get('surveyed_factor', 4):g}, every column total "
+                        f"held; a counterfactual, not a corrected figure — it "
+                        f"would lose **{_fmt(100 * ir['share_if_surveyed'])} "
+                        f"%**.")
             prov += [
                 "", "### What a one-region table leaves out", "",
                 f"This table is one region cut from a multiregional archive, so "
@@ -673,13 +681,14 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"this report come from the one-region table and do not "
                 f"contain it.**" + low, "",
                 "| sector | | multiplier, full system | runs through other "
-                "regions |",
-                "|---|---|---:|---:|"]
-            for c, lab, mf, sh in zip(tbl.sector_codes, tbl.sector_labels,
-                                      ir.get("multiplier_full", []),
-                                      ir["share_by_sector"]):
+                "regions |" + (" at the surveys' level |" if cf else ""),
+                "|---|---|---:|---:|" + ("---:|" if cf else "")]
+            for i, (c, lab, mf, sh) in enumerate(zip(
+                    tbl.sector_codes, tbl.sector_labels,
+                    ir.get("multiplier_full", []), ir["share_by_sector"])):
                 prov.append(f"| `{c}` | {lab} | {_fmt(mf, 3)} | "
-                            f"{_fmt(100 * sh)} % |")
+                            f"{_fmt(100 * sh)} % |"
+                            + (f" {_fmt(100 * cf[i])} % |" if cf else ""))
             if ir.get("to_regions"):
                 prov += ["", "Where it goes, as a share of what leaves: "
                          + ", ".join(f"`{r}` {_fmt(100 * v)} %"

@@ -74,7 +74,7 @@ EVIDENCE = {
     # surveyed regions, each on its own survey's split, all lose more.
     # `run_spillover_sensitivity.py`.
     "spillover_share_pct_survey": {"p10": 4.7, "median": 21.6, "p90": 61.4,
-                                   "surveyed_higher": 10},
+                                   "surveyed_higher": 10, "factor": 4.0},
 }
 
 

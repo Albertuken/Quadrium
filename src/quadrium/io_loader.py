@@ -2148,6 +2148,42 @@ def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
     return head, M
 
 
+def _mrio_move_to_country(Z: np.ndarray, regions: list[str], factors: dict,
+                          S: int = _MRIO_S) -> np.ndarray:
+    """Z with each region's purchases from the rest of its own country
+    multiplied by its factor, and taken from what it buys at home.
+
+    A counterfactual on the coefficients and nothing more. For every
+    purchasing column of a region, what it buys from other countries' regions
+    is untouched and home plus rest-of-country is held fixed, so the column
+    total -- the archive's level of intermediate purchases -- does not move;
+    only the split does, spread over the partners the archive already has, in
+    its proportions. A column is never given more than it buys, and one that
+    buys nothing from the rest of its country stays as it is.
+
+    `run_spillover_sensitivity.py` keeps its own implementation and requires
+    this one to give the same matrix, cell for cell.
+    """
+    Zn = np.array(Z, float, copy=True)
+    for r, k in factors.items():
+        cols = slice(r * S, (r + 1) * S)
+        same = [j for j, q in enumerate(regions)
+                if q[:2] == regions[r][:2] and j != r]
+        if not same:
+            continue
+        rows = np.concatenate([np.arange(j * S, (j + 1) * S) for j in same])
+        O, C = Zn[cols, cols], Zn[rows, cols]
+        o, c = O.sum(0), C.sum(0)
+        d = o + c
+        c_new = np.minimum(c * k, d)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            fo = np.where(o > 0, (d - c_new) / o, 1.0)
+            fc = np.where(c > 0, c_new / c, 1.0)
+        Zn[cols, cols] = O * fo
+        Zn[rows, cols] = C * fc
+    return Zn
+
+
 def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     """One region's own table from the European MRIO of Huang & Koutroumpis.
 
@@ -2351,7 +2387,24 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
             for j in range(len(regions)) if j != k}
     to_regions = sorted(((r, v / out_total) for r, v in leak.items() if v > 0),
                         key=lambda p: -p[1])[:5] if out_total > 0 else []
+    # The same at the surveys' level of trade: the counterfactual behind the
+    # archive-wide range in `run_spillover_sensitivity.py`, applied to every
+    # region and solved for this one's columns. A counterfactual on the
+    # coefficients, not a corrected table -- the report says which is which.
+    factor = EVIDENCE["spillover_share_pct_survey"]["factor"]
+    Z4 = _mrio_move_to_country(Z_all, regions,
+                               {j: factor for j in range(len(regions))})
+    Ls4 = np.linalg.solve(np.eye(n) - Z4 / np.where(X_all > 0, X_all, np.inf),
+                          E)
+    m4 = Ls4.sum(0)
+    intra4 = Ls4[s].sum(0)
+    agg4 = float((m4 - intra4).sum() / m4.sum())
+    per4 = (m4 - intra4) / m4
+
     interregional = {
+        "share_if_surveyed": agg4,
+        "share_by_sector_if_surveyed": [float(x) for x in per4],
+        "surveyed_factor": factor,
         "share": agg,
         "share_by_sector": [float(x) for x in per],
         "multiplier_full": [float(x) for x in m],
@@ -2388,7 +2441,8 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
           f"this share is more likely too low than too high: across the "
           f"archive, moving that trade up to the surveys' level takes the "
           f"median from {EVIDENCE['spillover_share_pct']['median']} % to "
-          f"{EVIDENCE['spillover_share_pct_survey']['median']} %. Trade with the "
+          f"{EVIDENCE['spillover_share_pct_survey']['median']} %, and this "
+          f"region's from {100 * agg:.1f} % to {100 * agg4:.1f} %. Trade with the "
           f"other regions is kept as a final-demand column (sales) and a "
           f"not-value-added row (purchases). "
         + ("NPISH is identical to GGFC on every row of the final-demand file "

@@ -493,8 +493,11 @@ Read three things before you use it:
   real share is more likely higher (`validators/run_mrio_against_surveys.py`).
   Moving the archive's trade with the rest of the country up to the surveys'
   level roughly doubles it: across the archive the median goes from 11.7 % to
-  21.6 %, and Catalonia's from 16.4 % to 27.8 %
-  (`validators/run_spillover_sensitivity.py`).
+  21.6 % (`validators/run_spillover_sensitivity.py`). The report prints the
+  same move for your region, sector by sector, beside the archive's figure
+  and labelled a counterfactual: Catalonia 29.0 % rather than 16.4 %, close to
+  the 27.8 % its own survey's split gives
+  (`validators/run_eu_mrio_region.py`).
 
 It refuses four UK regions that are empty in every file. It also refuses nine
 regions, Île-de-France among them, that trade with no other region at all,

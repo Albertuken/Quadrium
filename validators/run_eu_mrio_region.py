@@ -239,6 +239,37 @@ def main() -> int:
           f"the independent inverse; most of what leaves {REGION} goes to "
           f"{top}, {100 * leak[top] / float((m - intra).sum()):.1f} % of it")
 
+    # ---- and what the region would lose at the surveys' level of trade
+    #
+    # The same counterfactual as the archive-wide range in
+    # run_spillover_sensitivity.py -- trade with the rest of the country
+    # multiplied by the factor, every column total held -- computed here with
+    # THAT file's own implementation, so the loader's figure is checked
+    # against code it does not share.
+    from quadrium.regionalise import EVIDENCE
+    sspec = importlib.util.spec_from_file_location(
+        "sens", ROOT / "validators" / "run_spillover_sensitivity.py")
+    sens = importlib.util.module_from_spec(sspec)
+    sspec.loader.exec_module(sens)
+    factor = EVIDENCE["spillover_share_pct_survey"].get("factor", 4.0)
+    Z4, _ = sens.moved(Z, regions,
+                       {j: ("ratio", factor) for j in range(len(regions))})
+    E = np.zeros((len(X), S))
+    E[np.arange(k * S, (k + 1) * S), np.arange(S)] = 1.0
+    L4 = np.linalg.solve(np.eye(len(X)) - Z4 / np.where(X > 0, X, np.inf), E)
+    m4 = L4.sum(0)
+    intra4 = L4[s].sum(0)
+    agg4 = float((m4 - intra4).sum() / m4.sum())
+    per4 = (m4 - intra4) / m4
+    check("and what the region would lose at the surveys' level of trade, "
+          "from the counterfactual behind the archive-wide range",
+          abs(ir.get("share_if_surveyed", -1.0) - agg4) < 1e-9
+          and np.allclose(ir.get("share_by_sector_if_surveyed", []), per4,
+                          atol=1e-9),
+          f"{REGION}: {100 * agg:.1f} % as the archive has it, "
+          f"{100 * agg4:.1f} % with its trade with the rest of the country "
+          f"x{factor:g} — a counterfactual, not a corrected figure")
+
     check("every cell is marked ESTIMATED",
           t.provenance_counts() == {"ESTIMATED": S * S} and t.derived,
           "the archive is an estimate from the OECD ICIO, regional accounts "
@@ -340,6 +371,11 @@ def main() -> int:
           "the run above divided G-I, and the figures are the archive's for "
           "the table as loaded: a split changes the region's own block, and "
           "the 2,720-sector inverse is not recomputed for the subsectors")
+    check("and gives the surveys' level beside the archive's, labelled a "
+          "counterfactual",
+          "at the surveys' level" in text and f"{100 * agg4:.1f} %" in text
+          and "counterfactual" in text,
+          f"{100 * agg4:.1f} % for {REGION}, next to {100 * agg:.1f} %")
     csv_path = tmp / "o" / "eumrio" / "scenarios" / "S1" / "table_disaggregated.csv"
     check("the residual column survives the split",
           csv_path.exists() and "RESIDUAL" in csv_path.read_text(),

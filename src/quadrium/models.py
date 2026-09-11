@@ -261,13 +261,14 @@ class IOTable:
                     f"{n} sectors. An account is one figure per sector of THIS "
                     f"table; one carried from a table of another shape is "
                     f"aligned to sectors that are not these.")
-        shares = (self.interregional or {}).get("share_by_sector")
-        if shares is not None and len(shares) != n:
-            raise ValueError(
-                f"interregional carries {len(shares)} sector shares for {n} "
-                f"sectors. The figures describe the table they were measured "
-                f"on; attached to a table of another shape they describe "
-                f"nothing.")
+        for key in ("share_by_sector", "share_by_sector_if_surveyed"):
+            shares = (self.interregional or {}).get(key)
+            if shares is not None and len(shares) != n:
+                raise ValueError(
+                    f"interregional carries {len(shares)} sector shares "
+                    f"({key}) for {n} sectors. The figures describe the table "
+                    f"they were measured on; attached to a table of another "
+                    f"shape they describe nothing.")
         if len(self.Y_labels) != self.Y.shape[1]:
             raise ValueError("Y_labels does not match Y columns")
         if len(self.VA_labels) != self.VA.shape[0]:
