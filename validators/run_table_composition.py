@@ -59,7 +59,10 @@ DECLARED = {
         "after",
         "the expanded table. `satellites` needs the split's weights and "
         "`type_ii` the expanded labels, neither of which exists at the call, "
-        "so both are set on the next lines."),
+        "so both are set on the next lines. `interregional` is set EMPTY on "
+        "purpose: it is the archive's leakage for the table as loaded, a "
+        "split changes the block it was measured on, and the report reads it "
+        "from the original table instead."),
     "regionalise.py::to_table": (
         "constructor",
         "`satellites=` scaled by the region's share of national output. "
@@ -85,11 +88,19 @@ DECLARED = {
     "io_loader.py::load_ine_tio": ("primary", "the INE workbook."),
     "io_loader.py::load_idescat_mioc": ("primary", "the IDESCAT workbook."),
     "io_loader.py::load_rokicki_austria": ("primary", "the MRIO archive."),
-    "io_loader.py::load_eu_mrio_2018": ("primary", "the European MRIO."),
+    "io_loader.py::load_eu_mrio_2018": (
+        "constructor",
+        "passes `interregional`, the leakage computed on the archive's full "
+        "inverse. `satellites` and `type_ii` have no parent here: a table "
+        "from an archive has no account until a workbook attaches one."),
     "eurostat.py::load_iot": ("primary", "a Eurostat download."),
 }
 
-FIELDS = ("satellites", "type_ii")
+# `interregional` joined on 2026-09-11, and it is the first field whose right
+# answer is almost everywhere NOT to travel: it is the archive's leakage for a
+# region as loaded, and a split changes the block it was measured on. Being
+# listed here is what makes each site say so rather than drop it quietly.
+FIELDS = ("satellites", "type_ii", "interregional")
 
 
 def check(label, ok, detail=""):

@@ -483,7 +483,14 @@ Read three things before you use it:
   effect. For Catalonia, the single-region table leaves out 16.4 % of the output
   multipliers. Across the archive the median is 11.7 %, and it ranges from
   about 2 % to 81 %. `validators/run_eu_mrio_region.py` checks the figure
-  against the full 2,720 × 2,720 inverse.
+  against the full 2,720 × 2,720 inverse. The report shows this sector by
+  sector, and names the regions that most of it goes to. The figures are for
+  the table as loaded, before any split: a split changes the region's own
+  block, and the engine cannot recompute the archive's inverse for the parts.
+  And read the share as low: where surveys can check the archive — nine
+  Austrian regions and Catalonia — it records about a quarter of the trade a
+  region has with the rest of its country (0.25 times, in all ten), so the
+  real share is more likely higher (`validators/run_mrio_against_surveys.py`).
 
 It refuses four UK regions that are empty in every file. It also refuses nine
 regions, Île-de-France among them, that trade with no other region at all,
@@ -1210,7 +1217,10 @@ asked or not, what the method is known to get wrong:
 - this is a SINGLE-REGION table: an impulse cannot leave it and come back.
   Across 259 European regions that feedback is a median 11.7 % of the output
   multiplier, and between 2.1 % and 41.5 % from the tenth percentile to the
-  ninetieth. Nothing in a region's own accounts says which end it sits at
+  ninetieth. Nothing in a region's own accounts says which end it sits at.
+  And it was measured on an archive that, where 10 regional surveys can
+  check it, records 0.25 times the trade a region has with the rest of its
+  country, so the true feedback is more likely higher
 ```
 
 There is no flag to turn that off. The whole family is known to overstate how
@@ -1259,6 +1269,14 @@ understate it. **Nothing in a region's own accounts tells you which one you are
 holding.** If your question turns on the size of a multiplier rather than on its
 composition, that is the first thing to worry about — ahead of which member of
 the quotient family you picked, and ahead of delta.
+
+**And read both ends as low.** The spread was measured on the European MRIO,
+and where surveys can check that archive — nine Austrian regions and Catalonia —
+it keeps about twice a region's purchases at home and records a quarter of what
+the region buys from the rest of its country, while getting the total roughly
+right. `validators/run_mrio_against_surveys.py` holds the comparison. The real
+feedback is more likely higher than these figures, by an amount nobody has
+measured.
 
 ---
 

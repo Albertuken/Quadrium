@@ -645,6 +645,46 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"inherits them. What was done to it, oldest first:")
             prov += [f"  {i}. {line}" for i, line
                      in enumerate(tbl.lineage or ["(not recorded)"], start=1)]
+        # WHAT A ONE-REGION TABLE LEAVES OUT, when it was cut from a
+        # multiregional archive. Read from the table AS LOADED -- the split
+        # tables below carry none of it, on purpose -- and said to be that.
+        ir = getattr(tbl, "interregional", None) or {}
+        if ir.get("share_by_sector"):
+            sc = ir.get("survey_check") or {}
+            low = (f" And the archive keeps trade at home: where "
+                   f"{sc.get('regions')} regional surveys can check it, it "
+                   f"records {sc.get('rest_of_country_ratio', 0):.2f} times "
+                   f"the purchases a region makes from the rest of its "
+                   f"country, so these shares are more likely too low than "
+                   f"too high.") if sc else ""
+            prov += [
+                "", "### What a one-region table leaves out", "",
+                f"This table is one region cut from a multiregional archive, so "
+                f"part of what happens when one of its sectors grows runs "
+                f"through other regions and comes back. Measured on "
+                f"{ir.get('measured_on', 'the archive')}, that part is "
+                f"**{_fmt(100 * ir['share'])} %** of this region's output "
+                f"multipliers; across the archive the median is "
+                f"{ir.get('archive_median_pct', '—')} %. **The multipliers in "
+                f"this report come from the one-region table and do not "
+                f"contain it.**" + low, "",
+                "| sector | | multiplier, full system | runs through other "
+                "regions |",
+                "|---|---|---:|---:|"]
+            for c, lab, mf, sh in zip(tbl.sector_codes, tbl.sector_labels,
+                                      ir.get("multiplier_full", []),
+                                      ir["share_by_sector"]):
+                prov.append(f"| `{c}` | {lab} | {_fmt(mf, 3)} | "
+                            f"{_fmt(100 * sh)} % |")
+            if ir.get("to_regions"):
+                prov += ["", "Where it goes, as a share of what leaves: "
+                         + ", ".join(f"`{r}` {_fmt(100 * v)} %"
+                                     for r, v in ir["to_regions"]) + "."]
+            prov += ["", "These figures are for the table as loaded, before "
+                         "any split. A split changes the region's own block, "
+                         "and the archive's inverse is not recomputed for the "
+                         "parts, so no subsector below has a figure of its "
+                         "own."]
     lines += prov + ["", meta["original_report"].to_markdown(), "", "---", ""]
 
     for res in results:

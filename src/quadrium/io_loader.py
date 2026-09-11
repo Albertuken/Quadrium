@@ -2343,6 +2343,23 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
     lo, hi = int(per.argmin()), int(per.argmax())
     from .regionalise import EVIDENCE
 
+    # Where it goes: each other region's rows of this region's columns, as a
+    # share of everything that leaves. Kept as data on the table, and not only
+    # as the sentence below, so the report can show it sector by sector.
+    out_total = float((m - intra).sum())
+    leak = {regions[j]: float(Ls[j * S:(j + 1) * S].sum())
+            for j in range(len(regions)) if j != k}
+    to_regions = sorted(((r, v / out_total) for r, v in leak.items() if v > 0),
+                        key=lambda p: -p[1])[:5] if out_total > 0 else []
+    interregional = {
+        "share": agg,
+        "share_by_sector": [float(x) for x in per],
+        "multiplier_full": [float(x) for x in m],
+        "to_regions": [[r, float(v)] for r, v in to_regions],
+        "archive_median_pct": EVIDENCE["spillover_share_pct"]["median"],
+        "measured_on": f"the archive's full {n:,} x {n:,} inverse",
+        "survey_check": dict(EVIDENCE["mrio_vs_surveys"])}
+
     total = float(X.sum())
     neg = [sectors[j] for j in range(S) if X[j] - Z_all[s][j].sum() < 0]
     notes = (
@@ -2361,7 +2378,11 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
           f"{100 * per[hi]:.1f} % in {sectors[hi]}; median "
           f"{EVIDENCE['spillover_share_pct']['median']} % across the "
           f"archive): the part that travels through other regions and comes "
-          f"back, measured on the full {n:,} x {n:,} inverse. Trade with the "
+          f"back, measured on the full {n:,} x {n:,} inverse. Where surveys "
+          f"can check the archive, it records "
+          f"{EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} times "
+          f"the purchases a region makes from the rest of its country, so "
+          f"this share is more likely too low than too high. Trade with the "
           f"other regions is kept as a final-demand column (sales) and a "
           f"not-value-added row (purchases). "
         + ("NPISH is identical to GGFC on every row of the final-demand file "
@@ -2392,6 +2413,6 @@ def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
                 f"input output data for 2008-2018, Scientific Data 10, 218, "
                 f"doi:10.1038/s41597-023-02117-y; Zenodo record 7875024, "
                 f"CC BY 4.0 ({', '.join(f.name for f in (blk, fdf, vaf))})"),
-        notes=notes, provenance=prov)
+        notes=notes, provenance=prov, interregional=interregional)
     _assert_balances(table, f"{blk.name} ({region})")
     return table

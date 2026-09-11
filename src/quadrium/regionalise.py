@@ -24,6 +24,11 @@ The costs are measurements, not opinions, and each is checked by a validator:
     interregional feedback a single-region table       median 11.7 % of the
     cannot contain at all                              multiplier, 2.1 % to
                                                        41.5 % (259 regions)
+                                                       -- a LOWER bound: the
+                                                       archive it is measured
+                                                       on holds 0.25 of the
+                                                       surveyed trade with the
+                                                       rest of the country
 
 See `run_flq_delta.py`, `run_delta_across_regions.py` and
 `run_regionalisation_crosshauling.py`.
@@ -51,6 +56,15 @@ EVIDENCE = {
     # has it at zero by construction. `run_mrio_spillovers.py`.
     "spillover_share_pct": {"p10": 2.1, "median": 11.7, "p90": 41.5},
     "spillover_regions_measured": 259,
+    # And how far that archive can be trusted on it. Where surveys record a
+    # region's trade -- nine Austrian regions and Catalonia -- the archive
+    # gives a region a quarter of the purchases from the rest of its country
+    # that they record, and twice the purchases from itself, while the total
+    # it buys is about right. So the feedback above is more likely too low
+    # than too high, by an amount nobody has measured.
+    # `run_mrio_against_surveys.py`.
+    "mrio_vs_surveys": {"regions": 10, "lower_in": 10,
+                        "rest_of_country_ratio": 0.25, "own_ratio": 2.06},
 }
 
 
@@ -343,7 +357,11 @@ def regionalise(A_national: np.ndarray,
         f"{EVIDENCE['spillover_share_pct']['p10']:.1f} % and "
         f"{EVIDENCE['spillover_share_pct']['p90']:.1f} % from the tenth "
         f"percentile to the ninetieth. Nothing in a region's own accounts "
-        f"says which end it sits at",
+        f"says which end it sits at. And it was measured on an archive that, "
+        f"where {EVIDENCE['mrio_vs_surveys']['regions']} regional surveys can "
+        f"check it, records {EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} "
+        f"times the trade a region has with the rest of its country, so the "
+        f"true feedback is more likely higher",
     ]
     if method == "FLQ":
         caveats.insert(1, f"  - delta = {delta:g} was supplied, not derived. A "

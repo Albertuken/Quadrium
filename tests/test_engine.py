@@ -5274,6 +5274,22 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
           and "omits" in t.notes,
           f"row {row:.1e}, column {col:.1e}; the notes size the residue and "
           f"say what a one-region table leaves out")
+    ir = getattr(t, "interregional", None) or {}
+    check("and it carries that leakage sector by sector, and where it goes",
+          len(ir.get("share_by_sector", [])) == 10
+          and all(0.0 <= x <= 1.0 for x in ir["share_by_sector"])
+          and (ir.get("to_regions") or [[None, 0]])[0][0] == "AA12"
+          and abs(ir["to_regions"][0][1] - 1.0) < 1e-12,
+          "ten shares between 0 and 1, all of it to AA12, the only other "
+          "region")
+    import dataclasses
+    try:
+        dataclasses.replace(t, interregional={"share_by_sector": [0.1]})
+        bad = "accepted"
+    except Exception as exc:                              # noqa: BLE001
+        bad = f"{type(exc).__name__}: {exc}"
+    check("and a table refuses leakage figures for sectors it does not have",
+          bad.startswith("ValueError"), bad[:88])
 
     # ---- the files
     (tmp / "empty_folder").mkdir()

@@ -306,6 +306,11 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
     # variable is well formed after each. Read back rather than recomputed.
     expanded.satellites = seed.get("satellites") or {}
 
+    # NOT the parent's leakage. It was measured on the table as loaded, and
+    # the split has just changed that table's own block; the report reads it
+    # from the original table instead, and says so. `IOTable.interregional`.
+    expanded.interregional = {}
+
     diag = diagnostics.compute(Z_bal, seed["X"])
 
     # Type II, when the workbook asked for it. Computed on the SPLIT table, so

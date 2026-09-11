@@ -225,6 +225,20 @@ def main() -> int:
           f"other regions and comes back. No regionalisation by quotients can "
           f"give that number; it is the reason this source is worth loading")
 
+    ir = getattr(t, "interregional", None) or {}
+    leak = {r: float(L[j * S:(j + 1) * S, s].sum())
+            for j, r in enumerate(regions) if r != REGION}
+    top = max(leak, key=leak.get)
+    per_ind = (m - intra) / m
+    check("and the table carries it sector by sector, not only as a sentence",
+          bool(ir)
+          and np.allclose(ir.get("share_by_sector", []), per_ind, atol=1e-9)
+          and abs(ir.get("share", -1.0) - agg) < 1e-12
+          and (ir.get("to_regions") or [[None]])[0][0] == top,
+          f"{len(ir.get('share_by_sector', []))} sector shares, each equal to "
+          f"the independent inverse; most of what leaves {REGION} goes to "
+          f"{top}, {100 * leak[top] / float((m - intra).sum()):.1f} % of it")
+
     check("every cell is marked ESTIMATED",
           t.provenance_counts() == {"ESTIMATED": S * S} and t.derived,
           "the archive is an estimate from the OECD ICIO, regional accounts "
@@ -319,6 +333,13 @@ def main() -> int:
     check("and the report says the residue and what the table omits",
           "RESIDUAL" in text and f"{100 * agg:.1f} %" in text,
           "above every figure, where a reader meets it before the numbers")
+    check("and shows it by sector, says where it goes, and that it is the "
+          "table before the split",
+          "What a one-region table leaves out" in text and top in text
+          and "before any split" in text,
+          "the run above divided G-I, and the figures are the archive's for "
+          "the table as loaded: a split changes the region's own block, and "
+          "the 2,720-sector inverse is not recomputed for the subsectors")
     csv_path = tmp / "o" / "eumrio" / "scenarios" / "S1" / "table_disaggregated.csv"
     check("the residual column survives the split",
           csv_path.exists() and "RESIDUAL" in csv_path.read_text(),

@@ -219,6 +219,19 @@ class IOTable:
     # or empty for type I only.
     type_ii: dict = field(default_factory=dict)
 
+    # WHAT A ONE-REGION TABLE LEAVES OUT, when it was cut from a multiregional
+    # archive: the share of each sector's output multiplier that runs through
+    # other regions, measured on the archive's full inverse, and where it goes.
+    # Filled by `load_eu_mrio_2018` and by nothing else.
+    #
+    # It does NOT travel, and that is why it is a field and not only a sentence
+    # in `notes`: it describes the table AS LOADED. A split changes the
+    # region's own block and the full inverse is not there to recompute it for
+    # the parts, so every table built from this one gets an empty dict, and the
+    # report reads it from the original table and says which table it
+    # describes. `run_table_composition.py` makes each construction say so.
+    interregional: dict = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         self.Z = np.asarray(self.Z, float)
         self.Y = np.asarray(self.Y, float)
@@ -248,6 +261,13 @@ class IOTable:
                     f"{n} sectors. An account is one figure per sector of THIS "
                     f"table; one carried from a table of another shape is "
                     f"aligned to sectors that are not these.")
+        shares = (self.interregional or {}).get("share_by_sector")
+        if shares is not None and len(shares) != n:
+            raise ValueError(
+                f"interregional carries {len(shares)} sector shares for {n} "
+                f"sectors. The figures describe the table they were measured "
+                f"on; attached to a table of another shape they describe "
+                f"nothing.")
         if len(self.Y_labels) != self.Y.shape[1]:
             raise ValueError("Y_labels does not match Y columns")
         if len(self.VA_labels) != self.VA.shape[0]:
