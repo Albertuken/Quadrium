@@ -25,6 +25,10 @@ Five sheets. Only `project` and `splits` are required.
               `interchange`    the project's own format
               `eurostat`       fetched from the Eurostat API by country and
                                year, and cached — see below
+              `eu_mrio`        one region of the European MRIO (Huang and
+                               Koutroumpis 2023), named by `mrio_region`.
+                               The archive does not balance and the residue
+                               is carried in a labelled column and row
             `table_unbalanced` (`refuse` by default, or `residual_column`)
             applies to `ine_interior` alone, whose published table does not
             balance for one product — see OQ-D-04. Setting it on any other kind
@@ -94,8 +98,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .io_loader import LoaderError, _open_workbook, load_ine_tio, \
-    load_io_table, load_uk_analytical_iot
+from .io_loader import LoaderError, _open_workbook, load_eu_mrio_2018, \
+    load_ine_tio, load_io_table, load_uk_analytical_iot
 from .models import (AllocationKey, Assumption, AssumptionLedger,
                      ProxyStrength, Satellite, Scenario, SplitSpec)
 
@@ -110,7 +114,17 @@ REQUIRED_SHEETS = ("project",)
 # listed only the first two and refused every projection workbook.
 ONE_OF_SHEETS = ("splits", "regionalise", "targets")
 TABLE_KINDS = ("uk_analytical", "interchange",
-               "ine_interior", "ine_total", "eurostat", "eurostat_sut")
+               "ine_interior", "ine_total", "eurostat", "eurostat_sut",
+               "eu_mrio")
+
+# Why a type II closure cannot be built on the European MRIO. Said in two
+# places -- the gate and `--plan` -- so it is one string.
+_EU_MRIO_NO_TYPE_II = (
+    "the European MRIO publishes value added as ONE row, `VA`, with no split "
+    "between wages and profits, so there is no row of household income to "
+    "close on. Naming `VA` would close the model on profits as if households "
+    "received them, and the result would look like an induced effect and not "
+    "be one")
 
 # What `--template` seeds into `table_path`. Named here because the refusal
 # below has to recognise it: the first thing a new user does is run the
@@ -803,6 +817,25 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
     if kind not in TABLE_KINDS:
         raise ConfigError(f"table_kind {kind!r} must be one of {TABLE_KINDS}")
 
+    # `mrio_region` names one region of the European MRIO and means nothing to
+    # any other kind. Refused rather than ignored, for the reason given for
+    # `table_unbalanced` below: a setting that was silently dropped cannot be
+    # told apart from one that was applied.
+    mrio_region = str(meta.get("mrio_region") or "").strip()
+    if mrio_region and kind != "eu_mrio":
+        raise ConfigError(
+            f"mrio_region={mrio_region!r} applies only to table_kind "
+            f"'eu_mrio', not {kind!r}. Refusing rather than ignoring a "
+            f"setting you would never see was ignored.")
+    if kind == "eu_mrio" and not mrio_region:
+        raise ConfigError(
+            "table_kind 'eu_mrio' needs `mrio_region`: the archive holds 272 "
+            "regions and a table is one of them. Add a row to the `project` "
+            "sheet with its NUTS-2 code, for example\n"
+            "\n    mrio_region    ES51\n"
+            "\nfor Catalonia. A code the archive does not have is refused with "
+            "the list of that country's regions.")
+
     # `eurostat` names a country and a year instead of a file, and `table_path`
     # becomes where the download is KEPT rather than where it already is. So
     # the existence check below cannot apply to it: on a first run the file is
@@ -864,6 +897,7 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
         "interchange": lambda p: load_io_table(p),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
+        "eu_mrio": lambda p: load_eu_mrio_2018(p, mrio_region),
         "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
         "eurostat_sut": lambda p: _load_eurostat_sut(
             fetch_note, offline, refresh, defaults_taken,
@@ -963,6 +997,15 @@ def build_config(meta: dict, tables: dict, base_dir: Path = Path("."),
             f"the satellite account(s) {', '.join(replaced)} came with the "
             f"table AND are declared here; the workbook's figures are used")
 
+    # The label lookup in `_type_ii_spec` would ACCEPT `VA` here, because the
+    # row exists -- it is simply not income. So the refusal is by kind.
+    if kind == "eu_mrio" and (
+            str(meta.get("type_ii_income_rows") or "").strip()
+            or str(meta.get("type_ii_household_column") or "").strip()):
+        raise ConfigError(
+            f"a type II closure cannot be built on this table: "
+            f"{_EU_MRIO_NO_TYPE_II}. Remove both type_ii rows; the type I "
+            f"results and any satellite accounts are unaffected.")
     spec = _type_ii_spec(meta, table)
     if spec:
         table.type_ii = spec
@@ -1231,6 +1274,10 @@ def write_template(path: Path | str) -> Path:
             "#                           country and year.",
             "#             eurostat_sut  supply-use pair, downloaded and",
             "#                           TRANSFORMED into a symmetric table.",
+            "#             eu_mrio       one region of the European MRIO",
+            "#                           (Huang & Koutroumpis 2023). Point",
+            "#                           table_path at the archive's Data",
+            "#                           folder and add mrio_region, e.g. ES51.",
             "#",
             "# For table_kind: eurostat, delete table_path (or use it to say",
             "# where to cache) and add instead:",
@@ -1445,6 +1492,15 @@ def build_regionalisation(meta: dict, reg: dict, base_dir: Path = Path("."),
     meta = {str(k).strip().lower(): v for k, v in (meta or {}).items()}
     defaults_taken: list[str] = []
     project_id = str(_need(meta, "project_id", "project", 0)).strip()
+    # Before the load, which on this kind parses a 35 MB workbook to find out
+    # something the `project` sheet already says.
+    if str(meta.get("table_kind") or "").strip().lower() == "eu_mrio":
+        raise ConfigError(
+            "table_kind 'eu_mrio' is already a REGIONAL table: one region's "
+            "own block of the European MRIO. Regionalising it would apply a "
+            "location quotient to a table that already describes a region, "
+            "and estimate a region of a region. Use it directly with `splits`, "
+            "or regionalise from a national table.")
     table, table_path, kind = _load_declared_table(
         meta, base_dir, {}, offline, refresh, defaults_taken)
 
@@ -1612,9 +1668,28 @@ def plan_workbook(path: Path | str) -> dict:
                 "where you run the command",
                 "`quadrium --sources` lists what is loadable here")
 
+    mrio_region = str(meta.get("mrio_region") or "").strip()
+    if kind == "eu_mrio" and not mrio_region:
+        gap("project", "`mrio_region` is empty",
+            "the European MRIO holds 272 regions and a table is one of them",
+            "its NUTS-2 code, for example ES51 for Catalonia; a code the "
+            "archive does not have is refused with that country's list")
+    elif mrio_region and kind != "eu_mrio":
+        gap("project", f"`mrio_region` is set with table_kind {kind!r}",
+            "it names a region of the European MRIO and applies to `eu_mrio` "
+            "alone", "remove the row, or change the kind")
+    if kind == "eu_mrio" and job == "regionalise":
+        gap("regionalise", "a regionalisation of an `eu_mrio` table",
+            "that table already describes one region; a location quotient on "
+            "it would estimate a region of a region",
+            "use it with `splits`, or regionalise from a national table")
+
     t2_rows = str(meta.get("type_ii_income_rows") or "").strip()
     t2_col = str(meta.get("type_ii_household_column") or "").strip()
-    if bool(t2_rows) != bool(t2_col):
+    if kind == "eu_mrio" and (t2_rows or t2_col):
+        gap("project", "a type II closure is configured on the European MRIO",
+            _EU_MRIO_NO_TYPE_II, "remove both type_ii rows")
+    elif bool(t2_rows) != bool(t2_col):
         gap("project",
             f"`type_ii_{'household_column' if t2_rows else 'income_rows'}` is "
             f"empty and the other is not",

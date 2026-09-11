@@ -207,6 +207,53 @@ def main() -> int:
           f"NPISH were a printing artefact, removing it would improve the "
           f"identity; it does not, so the file's own total counts it twice")
 
+    # ---- the three ways to build a table from it (INDEX.md §7 A1)
+    #
+    # The owner chose between them on 2026-09-11 on these numbers, which is
+    # why they are checked here and not only stated in the conversation that
+    # produced them. `load_eu_mrio_2018` implements the choice.
+    print()
+
+    def multipliers(x):
+        A = Z / np.where(x > 0, x, np.inf)
+        return np.linalg.inv(np.eye(len(A)) - A).sum(0)
+
+    m_pub = multipliers(output)
+    derived = sales + y6
+    m_der = multipliers(derived)
+    ok = output > 0
+    move = np.abs(m_der - m_pub)[ok] / m_pub[ok]
+    purchases = Z.sum(axis=0)
+    va_neg_pub = int((output - purchases < 0).sum())
+    va_neg_der = int((derived - purchases < 0).sum())
+    check("A — deriving output from the row identity moves the multipliers "
+          "and breaks the column identity instead",
+          float(np.median(move)) > 0.05 and va_neg_der > va_neg_pub,
+          f"output multipliers move {100 * float(np.median(move)):.1f} % at "
+          f"the median, {100 * float(np.percentile(move, 90)):.0f} % at the "
+          f"90th percentile and {100 * float(move.max()):.0f} % at worst; "
+          f"units whose output falls below their intermediate PURCHASES go "
+          f"from {va_neg_pub} to {va_neg_der}. The row is fixed by moving the "
+          f"problem into the column")
+
+    hit = {labels[i].split("-", 1)[0] for i in np.flatnonzero(implied < 0)}
+    check("C — refusing the 123 refuses a large part of the map",
+          len(hit) > 0.25 * R,
+          f"they sit in {len(hit)} of {R} regions and "
+          f"{len({h[:2] for h in hit})} countries. The problem is spread thin, "
+          f"so removing the units it shows in removes the regions with them")
+
+    resid = output - sales - y6
+    live = np.abs(resid) > 1e-6 * np.maximum(output, 1.0)
+    check("B — keeping published output changes no multiplier, and shows the "
+          "123 were never the problem",
+          int(live.sum()) > 10 * bad,
+          f"the row residue is non-zero in {int(live.sum()):,} of "
+          f"{len(output):,} units ({int((resid < 0).sum()):,} of them "
+          f"negative); the {bad} are only where it is large enough to flip "
+          f"the sign of implied final demand. Carried in a labelled column "
+          f"and row by load_eu_mrio_2018, where A = Z / X cannot read it")
+
     print("\n" + "=" * 78)
     if FAIL:
         print(f"{len(FAIL)} check(s) FAILED: {', '.join(FAIL)}")

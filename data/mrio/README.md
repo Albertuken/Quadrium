@@ -50,11 +50,17 @@ licence would allow it; eleven 33 MB workbooks in git would not be worth it.
 
 **To reproduce anything that uses the 2018 workbook**, download `MRIO.zip` from
 the record above and put `MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx`
-and `TAXSUB_VA_2018.xlsx` in this folder. Six validators then run:
-`run_mrio_axis_scale`, `run_mrio_spillovers`, `run_spillover_predictability`,
-`run_mrio_side_join`, `run_mrio_nuts_join` and `run_mrio_real_output`. The first
-run reads the 33 MB sheet and caches it as `_mrio2018_cache.npz`; the rest are
-fast.
+and `TAXSUB_VA_2018.xlsx` in this folder. All three are in the zip's `Data/`
+folder; `_provenance.json` records how that was confirmed. Seven validators then
+run: `run_mrio_axis_scale`, `run_mrio_spillovers`, `run_spillover_predictability`,
+`run_mrio_side_join`, `run_mrio_nuts_join`, `run_mrio_real_output` and
+`run_eu_mrio_region`. The first run reads the 33 MB sheet and caches it as
+`_mrio2018_cache.npz`; the rest are fast.
+
+**The engine reads the same three files** as `table_kind: eu_mrio`, one region
+at a time (`docs/GUIDE.md`, Route B). The archive does not balance, and the
+loader does not balance it: the residue is carried in a column and a row
+labelled RESIDUAL and sized in the report, and every cell is marked ESTIMATED.
 
 `run_mrio_axis_scale.py` was **not** in this repository until 2026-09-06, on the
 rule that a validator which cannot run is removed rather than left to pass

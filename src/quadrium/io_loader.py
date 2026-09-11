@@ -2046,3 +2046,350 @@ def read_rokicki_components(path: Path | str, region: str) -> dict:
         "primary": {labels[i]: M[i, :S] for i in range(S, len(labels))
                     if labels[i] not in _AT_IMPORT_ROWS and labels[i] != "Total"},
     }
+
+
+# ---------------------------------------------------------------------------
+# The European MRIO, one region at a time
+# ---------------------------------------------------------------------------
+
+_MRIO_FILES = ("MRIO_2018_272regions.xlsx", "Final_demand_2018.xlsx",
+               "TAXSUB_VA_2018.xlsx")
+_MRIO_S = 10
+# `NPISH` is not here on purpose: see the docstring.
+_MRIO_FD = (("HFCE", "Household final consumption expenditure (HFCE)"),
+            ("GGFC", "General government final consumption (GGFC)"),
+            ("GFCF", "Gross fixed capital formation (GFCF)"),
+            ("INVNT", "Changes in inventories and valuables (INVNT)"),
+            ("EX", "Exports (EX)"))
+# The archive's own names for its ten sectors (`Metadata.xlsx`, sheet
+# `Sector`), keyed by the code the block uses -- `M_N`, not `M-N`.
+_MRIO_SECTORS = {"A": "Primary", "B-E": "Industry", "F": "Construction",
+                 "G-I": "Distribution", "J": "ICT", "K": "Financial services",
+                 "L": "Real estate activities", "M_N": "Professional services",
+                 "O-Q": "Public services", "R-U": "Other services"}
+_MRIO_UNIT = ("million US dollars, as Huang & Koutroumpis (2023) state it; "
+              "price basis not stated")
+# One parsed block per process. The workbook takes about 30 s to read and a
+# workbook run, its report and a validator may each ask for it.
+_MRIO_CACHE: dict = {}
+
+
+def _mrio_files(path: Path | str) -> tuple[Path, Path, Path]:
+    path = Path(path)
+    folder = path if path.is_dir() else path.parent
+    found = tuple(folder / f for f in _MRIO_FILES)
+    missing = [f.name for f in found if not f.exists()]
+    if missing:
+        raise LoaderError(
+            f"{folder} does not hold {', '.join(missing)}. The European MRIO "
+            f"is Zenodo record 7875024 (MRIO.zip, 317 MB, CC BY 4.0); these "
+            f"three files are in its `Data/` folder and must sit side by side. "
+            f"Point table_path at that folder.")
+    return found
+
+
+def _mrio_block(path: Path) -> tuple[np.ndarray, list[str]]:
+    """The 2,720 x 2,720 block and its labels, parsed once per process."""
+    import openpyxl
+
+    st = path.stat()
+    key = (str(path.resolve()), st.st_size, st.st_mtime_ns)
+    if key in _MRIO_CACHE:
+        return _MRIO_CACHE[key]
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        it = wb.worksheets[0].iter_rows(values_only=True)
+        labels = [str(x) for x in next(it)[1:] if x is not None]
+        n = len(labels)
+        Z = np.zeros((n, n))
+        idx: list[str] = []
+        for r in it:
+            if r[0] is None:
+                continue
+            if len(idx) == n:
+                raise LoaderError(f"{path.name} has more rows than columns; "
+                                  f"the block must be square")
+            idx.append(str(r[0]))
+            Z[len(idx) - 1] = [0.0 if c is None else float(c)
+                               for c in r[1:n + 1]]
+    finally:
+        wb.close()
+    if idx != labels:
+        raise LoaderError(f"{path.name}: the row labels are not the column "
+                          f"labels in the same order, so the block is not "
+                          f"square in the sense a coefficient needs")
+    _MRIO_CACHE.clear()
+    _MRIO_CACHE[key] = (Z, labels)
+    return Z, labels
+
+
+def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
+    """A side file's headers and values, units always on the first axis.
+
+    The label column is deliberately NOT returned: it does not describe the
+    rows it sits beside. See `load_eu_mrio_2018`.
+    """
+    import openpyxl
+
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        rows = [r for r in wb.worksheets[0].iter_rows(values_only=True)
+                if any(c is not None for c in r)]
+    finally:
+        wb.close()
+    if orientation == "rows":
+        head = [str(c) for c in rows[0][1:]]
+        M = np.array([[0.0 if c is None else float(c) for c in r[1:]]
+                      for r in rows[1:]], float)
+    else:
+        head = [str(r[0]) for r in rows[1:]]
+        M = np.array([[0.0 if c is None else float(c) for c in r[1:]]
+                      for r in rows[1:]], float).T
+    return head, M
+
+
+def load_eu_mrio_2018(path: Path | str, region: str) -> IOTable:
+    """One region's own table from the European MRIO of Huang & Koutroumpis.
+
+    THE SOURCE
+    ------------
+    Huang, S. & Koutroumpis, P. (2023), "European multi regional input output
+    data for 2008-2018", Scientific Data 10, 218, deposited as Zenodo record
+    7875024 under CC BY 4.0: 272 NUTS-2 regions by 10 sectors, estimated from
+    the OECD ICIO, Eurostat regional accounts and truck freight flows. **An
+    estimate, not a survey**, so every cell of the returned table is marked
+    `ESTIMATED`, and a later split inherits that rather than a measurement.
+
+    `path` is the archive's `Data/` folder, or any of the three files in it:
+    the 2,720 x 2,720 block, `Final_demand_2018.xlsx` and `TAXSUB_VA_2018.xlsx`.
+    The year is the one the publisher's own file names carry inside a
+    checksummed deposit, which is the only place it is stated; the rule
+    against reading years from file names (`OQ-D-01`) is about files a user
+    named.
+
+    WHAT IS RETURNED, AND WHY ONE REGION
+    --------------------------------------
+    The region's diagonal block, 10 x 10. Nothing downstream of this loader
+    reads a regional axis, so the 2,720 table would enter a split or a report
+    that could not tell its regions apart. Trade with the other 271 regions is
+    kept, as it is for Catalonia and Austria: sales to them are a final-demand
+    column and purchases from them a value-added row marked NOT value added.
+
+    THE ARCHIVE DOES NOT BALANCE, AND THIS DOES NOT BALANCE IT
+    -----------------------------------------------------------
+    Output is ONE vector here: the final-demand file's `TOTAL` equals the
+    value-added file's `INPUT` unit by unit, which is checked on every load
+    and is what `load_rokicki_austria` refuses when it fails. What does not
+    close is the components -- the row identity is 6.6 % off at the median and
+    the column identity 5.4 %. So both identities are closed by a RESIDUAL
+    column and a RESIDUAL row, computed here, labelled as such, and sized in
+    the first sentence of `notes`, which the report prints above every number.
+
+    This is the choice the owner made on 2026-09-11 between three, each
+    measured (`run_mrio_real_output.py`). Deriving output from the identity
+    moves multipliers 8.1 % at the median and 198 % at worst; refusing the
+    123 units with negative implied final demand loses 83 regions. Carrying the
+    residue changes no published number, and it cannot reach a multiplier:
+    `A = Z / X` reads the block and the output and nothing else.
+
+    AND THE ONE NUMBER THAT MAKES IT WORTH LOADING
+    ------------------------------------------------
+    A single-region table cannot contain what travels out through other
+    regions and comes back. Here it can be measured, on the full inverse, and
+    `notes` says how much of this region's output multipliers the returned
+    table omits.
+
+    WHAT IT REFUSES
+    -----------------
+    A region the archive does not have, with that country's list -- the block
+    codes France on NUTS 2013 and Greece on NUTS 2010, so a current code can be
+    absent under an older one. A region with no output: four are empty in
+    every file. And a region that trades with no other region in either
+    direction while trading inside itself -- nine, Île-de-France among them.
+    That is a gap in the archive, and a table built from it would say nothing
+    leaks. **No threshold is applied to the residue**: any would be invented,
+    and a region whose residue is larger than its output says so instead.
+
+    `NPISH` is the same column as `GGFC` on every row of the final-demand
+    file, so it is dropped rather than counted twice -- after checking, on
+    every load, that it still is. The side files are joined to the block by
+    POSITION: their own label column is sector-major while their data is
+    region-major, so it describes nothing and is never read
+    (`run_mrio_side_join.py`).
+    """
+    blk, fdf, vaf = _mrio_files(path)
+    region = str(region or "").strip().upper()
+    S = _MRIO_S
+
+    Z_all, labels = _mrio_block(blk)
+    n = len(labels)
+    regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
+    # A label is REGION-SECTOR and sector codes contain hyphens themselves
+    # (`B-E`), so it is split on the first hyphen only.
+    sectors = [l.split("-", 1)[1] for l in labels[:S]]
+    if len(regions) * S != n or any(
+            labels[k * S + j] != f"{regions[k]}-{sectors[j]}"
+            for k in range(len(regions)) for j in range(S)):
+        raise LoaderError(
+            f"{blk.name} is not laid out region by region with the same "
+            f"{S} sectors in each, which is the archive's layout; it may be a "
+            f"different file")
+    if region not in regions:
+        same = [r for r in regions if r[:2] == region[:2]]
+        listing = (f"Its {region[:2]} regions are: {', '.join(same)}." if same
+                   else f"Its countries are: "
+                        f"{', '.join(sorted({r[:2] for r in regions}))}.")
+        raise LoaderError(
+            f"region {region!r} is not in the archive. {listing} The block "
+            f"codes France on NUTS 2013 and Greece on NUTS 2010, so a current "
+            f"code can be absent under an older one; Eurostat's NUTS "
+            f"correspondence tables give the older code.")
+
+    fd_head, FD = _mrio_side(fdf, "rows")
+    va_head, VA = _mrio_side(vaf, "columns")
+    for f, M, head, need in (
+            (fdf, FD, fd_head, [c for c, _ in _MRIO_FD] + ["NPISH", "TOTAL"]),
+            (vaf, VA, va_head, ["IM", "TAXSUB", "VA", "INPUT"])):
+        if M.shape[0] != n:
+            raise LoaderError(f"{f.name} has {M.shape[0]} units and the block "
+                              f"has {n}; they are not the same year or table")
+        absent = [c for c in need if c not in head]
+        if absent:
+            raise LoaderError(f"{f.name} has no {', '.join(absent)}; found "
+                              f"{', '.join(head)}")
+
+    X_all = FD[:, fd_head.index("TOTAL")]
+    inp = VA[:, va_head.index("INPUT")]
+    gap = np.abs(X_all - inp)
+    # The bound is the files' own precision (`OQ-B-02`), not a flat constant:
+    # a difference of two printed figures is two terms.
+    if float(gap.max()) > assertable_tolerance(np.concatenate([X_all, inp]), 2):
+        j = int(gap.argmax())
+        raise LoaderError(
+            f"output by rows (`TOTAL`) and by columns (`INPUT`) differ, by up "
+            f"to {gap[j]:,.1f} at {labels[j]}. An IOTable needs one output "
+            f"vector for both identities; this archive had one when this "
+            f"loader was written and no longer does")
+
+    k = regions.index(region)
+    s = slice(k * S, (k + 1) * S)
+    X = X_all[s].copy()
+    per_region = X_all.reshape(len(regions), S).sum(1)
+    if float(X.sum()) <= 0:
+        empty = [r for r, x in zip(regions, per_region) if x <= 0]
+        raise LoaderError(
+            f"{region} has no output in the archive: its published TOTAL is "
+            f"zero in every sector. {len(empty)} regions are empty this way "
+            f"({', '.join(empty)}); there is no table to return.")
+
+    others = np.r_[0:k * S, (k + 1) * S:n]
+    sales_out = Z_all[s][:, others].sum(1)
+    buys_in = Z_all[others][:, s].sum(0)
+    if float(sales_out.sum() + buys_in.sum()) <= 0:
+        islands = []
+        for j, r in enumerate(regions):
+            sj = slice(j * S, (j + 1) * S)
+            own = Z_all[sj, sj].sum()
+            if per_region[j] > 0 and Z_all[sj].sum() - own <= 0 \
+                    and Z_all[:, sj].sum() - own <= 0:
+                islands.append(r)
+        raise LoaderError(
+            f"{region} trades with no other region in the archive, in "
+            f"either direction, while carrying {Z_all[s, s].sum():,.0f} of "
+            f"trade inside itself. No region does that; it is a gap in the "
+            f"archive, and a table built from it would say that nothing this "
+            f"region buys or sells leaks elsewhere. {len(islands)} regions "
+            f"are like this: {', '.join(islands)}.")
+
+    dup = bool(np.array_equal(FD[:, fd_head.index("NPISH")],
+                              FD[:, fd_head.index("GGFC")]))
+    fd_cols = list(_MRIO_FD)
+    if not dup:
+        fd_cols.insert(1, ("NPISH", "Final consumption of NPISHs (NPISH)"))
+
+    Zr = Z_all[s, s].copy()
+    Yp = np.column_stack([FD[s, fd_head.index(c)] for c, _ in fd_cols])
+    res_y = X - Zr.sum(1) - sales_out - Yp.sum(1)
+    va_parts = [VA[s, va_head.index(c)] for c in ("IM", "TAXSUB", "VA")]
+    res_v = X - Zr.sum(0) - buys_in - sum(va_parts)
+    Y = np.column_stack([Yp, sales_out, res_y])
+    Y_labels = [lbl for _, lbl in fd_cols] + [
+        "Intermediate sales to other regions of the archive (from the block)",
+        "Statistical discrepancy (RESIDUAL, computed by the loader; the "
+        "archive does not publish it)"]
+    VAm = np.vstack([buys_in, *va_parts, res_v])
+    VA_labels = [
+        "Intermediate purchases from other regions of the archive "
+        "(NOT value added)",
+        "Imports (IM) (NOT value added)",
+        "Taxes less subsidies (TAXSUB) (not value added)",
+        "Value added (VA)",
+        "Statistical discrepancy (RESIDUAL, NOT value added; computed by the "
+        "loader)"]
+
+    # What a single-region table omits: the column sums of the full inverse,
+    # split into this region's rows and everyone else's. Solved for this
+    # region's columns only; the factorisation is the cost either way.
+    A = Z_all / np.where(X_all > 0, X_all, np.inf)
+    E = np.zeros((n, S))
+    E[np.arange(k * S, (k + 1) * S), np.arange(S)] = 1.0
+    Ls = np.linalg.solve(np.eye(n) - A, E)
+    m = Ls.sum(0)
+    intra = Ls[s].sum(0)
+    agg = float((m - intra).sum() / m.sum())
+    per = (m - intra) / m
+    lo, hi = int(per.argmin()), int(per.argmax())
+    from .regionalise import EVIDENCE
+
+    total = float(X.sum())
+    neg = [sectors[j] for j in range(S) if X[j] - Z_all[s][j].sum() < 0]
+    notes = (
+        f"NEITHER IDENTITY CLOSES IN THIS ARCHIVE. For {region} the row "
+        f"residue is {100 * np.abs(res_y).sum() / total:.1f} % of output and "
+        f"the column residue {100 * np.abs(res_v).sum() / total:.1f} %, in "
+        f"absolute value; both are carried in a RESIDUAL column and row "
+        f"computed here, which the archive does not publish. Multipliers do "
+        f"not read them -- A = Z / X uses only the published block and output "
+        f"-- but anything read off final demand or value added does. "
+        + (f"Implied final demand (output less intermediate sales) is "
+           f"negative for {', '.join(neg)}, which the accounting does not "
+           f"allow. " if neg else "")
+        + f"A single-region table omits {100 * agg:.1f} % of this region's "
+          f"output multipliers ({100 * per[lo]:.1f} % in {sectors[lo]} to "
+          f"{100 * per[hi]:.1f} % in {sectors[hi]}; median "
+          f"{EVIDENCE['spillover_share_pct']['median']} % across the "
+          f"archive): the part that travels through other regions and comes "
+          f"back, measured on the full {n:,} x {n:,} inverse. Trade with the "
+          f"other regions is kept as a final-demand column (sales) and a "
+          f"not-value-added row (purchases). "
+        + ("NPISH is identical to GGFC on every row of the final-demand file "
+           "and was dropped rather than counted twice. " if dup else
+           "NPISH differs from GGFC in this file and is kept. ")
+        + "The side files are joined to the block by POSITION; their own "
+          "label column does not describe their rows and is not read. Every "
+          "cell is marked ESTIMATED: the archive is estimated from the OECD "
+          "ICIO, Eurostat regional accounts and truck freight flows, not "
+          "surveyed. The paper states the unit for 'all environmental data' "
+          "in a deposit that holds none; it is read as the tables' unit.")
+
+    from .models import CellLabel
+
+    # np.full() would infer a fixed-width string dtype from the enum and
+    # truncate it; build the object array first and fill it.
+    prov = np.empty((S, S), dtype=object)
+    prov[:] = CellLabel.PROXY_ESTIMATED
+    table = IOTable(
+        table_id=f"EU_MRIO_2018_{region}", country=region, year=2018,
+        unit=_MRIO_UNIT,
+        classification=("10 sectors, NACE Rev. 2 sections grouped as the "
+                        "archive groups them; NUTS-2 as coded in the archive"),
+        sector_codes=list(sectors),
+        sector_labels=[_MRIO_SECTORS.get(c, c) for c in sectors],
+        Z=Zr, Y=Y, Y_labels=Y_labels, VA=VAm, VA_labels=VA_labels, X=X,
+        source=(f"Huang, S. & Koutroumpis, P. (2023), European multi regional "
+                f"input output data for 2008-2018, Scientific Data 10, 218, "
+                f"doi:10.1038/s41597-023-02117-y; Zenodo record 7875024, "
+                f"CC BY 4.0 ({', '.join(f.name for f in (blk, fdf, vaf))})"),
+        notes=notes, provenance=prov)
+    _assert_balances(table, f"{blk.name} ({region})")
+    return table

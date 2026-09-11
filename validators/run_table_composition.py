@@ -85,6 +85,7 @@ DECLARED = {
     "io_loader.py::load_ine_tio": ("primary", "the INE workbook."),
     "io_loader.py::load_idescat_mioc": ("primary", "the IDESCAT workbook."),
     "io_loader.py::load_rokicki_austria": ("primary", "the MRIO archive."),
+    "io_loader.py::load_eu_mrio_2018": ("primary", "the European MRIO."),
     "eurostat.py::load_iot": ("primary", "a Eurostat download."),
 }
 

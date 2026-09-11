@@ -48,8 +48,10 @@ nothing here was tuned to produce it: finance `K` 28.6 %, professional services
 THIRTEEN REGIONS ARE ISLANDS, AND ONE OF THEM IS PARIS
 --------------------------------------------------------
 Thirteen of the 272 regions have **zero interregional trade in either
-direction** while carrying ordinary internal trade. Three (`UKI1`, `UKI2`,
-`UKM2`) have no output at all — empty rows. The rest do: `FR10` is Île-de-
+direction** while carrying ordinary internal trade. Four (`UKI1`, `UKI2`,
+`UKM2`, `UKM3`) have no output at all — empty in every file. This said three
+until 2026-09-11, when the refusals of `load_eu_mrio_2018` counted them; the
+count below is now computed rather than written. The rest do: `FR10` is Île-de-
 France, with 1,557,716 of output and 693,604 of internal intermediate trade,
 and not one euro of trade with anywhere else. That is not an economy, it is a
 gap in the archive, and it is what makes the finding safe to state: no
@@ -169,12 +171,13 @@ def main() -> int:
              - Z[r * S:(r + 1) * S, r * S:(r + 1) * S].sum()) < 1e-9
         for r in range(R)])
     n_isl = int(island.sum())
+    empty = int(sum(X[r * S:(r + 1) * S].sum() <= 0 for r in range(R)))
     fr10 = regions.index("FR10") if "FR10" in regions else -1
     check("thirteen regions are islands in the archive, and one of them is "
           "Île-de-France",
           n_isl == 13 and fr10 >= 0 and bool(island[fr10]),
           f"{n_isl} regions have zero interregional trade in EITHER direction. "
-          f"Three have no output at all. FR10 has "
+          f"{empty} of them have no output at all. FR10 has "
           f"{X[fr10 * S:(fr10 + 1) * S].sum():,.0f} of output and "
           f"{Z[fr10 * S:(fr10 + 1) * S, fr10 * S:(fr10 + 1) * S].sum():,.0f} of "
           f"internal intermediate trade, and trades with nowhere. No reading "

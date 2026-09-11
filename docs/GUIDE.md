@@ -425,6 +425,7 @@ Set `table_kind` in the configuration workbook to one of:
 | `ine_interior` | The Spanish INE workbook, domestic output — **2021 and 2022 only** |
 | `ine_total` | The Spanish INE workbook, total flows — **2016 to 2022** |
 | `interchange` | This project's own format — see Route C |
+| `eu_mrio` | One NUTS-2 region of the European MRIO, 2018, 10 sectors — see below |
 
 The Spanish restriction is the publisher's, not the loader's: before 2021 the
 INE does not publish the domestic/imports split at all, so there is no domestic
@@ -442,6 +443,51 @@ value added, and that the reference year must be read from the Menu sheet and
 never from the filename. What each loader decided is printed in your report
 under **What the loader decided when reading this file**, so you can check it
 made the right call.
+
+**A table for almost any EU region, from the European MRIO.** Huang and
+Koutroumpis (2023) estimated input-output tables for 272 NUTS-2 regions,
+linked by trade. `eu_mrio` gives you one region's own table, 10 sectors, for
+2018. Download `MRIO.zip` from Zenodo record 7875024 (317 MB, CC BY 4.0), unzip
+it, and point `table_path` at its `Data` folder: the loader needs
+`MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx` and `TAXSUB_VA_2018.xlsx`
+side by side. Then name the region by its NUTS-2 code:
+
+    table_kind     eu_mrio
+    table_path     /where/you/unzipped/MRIO/Data
+    mrio_region    ES51
+
+Read three things before you use it:
+
+- **It is an estimate, not a survey.** Every cell comes out marked
+  `ESTIMATED`, and anything you split from it inherits that.
+- **The archive does not balance, and the engine does not balance it for you.**
+  Neither accounting identity closes with the published components, so the
+  difference goes in a column and a row both labelled **RESIDUAL**. For
+  Catalonia they come to 7.8 % of output on the row side and 5.4 % on the column
+  side. The multipliers are unaffected, because they read only the flows and the
+  output, which are the archive's. Anything you read off final demand or value
+  added is affected. The report prints the size of the residue above every
+  number. Keeping the published output was a choice between three, and the
+  other two are measured in `validators/run_mrio_real_output.py`: deriving the
+  output instead moves the multipliers by 8.1 % at the median, and refusing the
+  units that do not add up loses 83 of the 272 regions.
+- **It tells you what a one-region table misses.** A table of one region
+  cannot hold the effect that leaks to other regions and comes back. This one
+  is cut from a table that has all the regions, so the loader can measure that
+  effect. For Catalonia, the single-region table leaves out 16.4 % of the output
+  multipliers. Across the archive the median is 11.7 %, and it ranges from
+  about 2 % to 81 %. `validators/run_eu_mrio_region.py` checks the figure
+  against the full 2,720 × 2,720 inverse.
+
+It refuses four UK regions that are empty in every file. It also refuses nine
+regions, Île-de-France among them, that trade with no other region at all,
+which is a gap in the archive rather than an economy. France and Greece use
+older NUTS codes in this archive than the ones in use today. If you type a
+current code that is not there, the refusal lists the codes the archive does
+use for that country. A type II closure is refused, because the archive
+publishes value added as one row with no wages in it. Regionalising the table
+again is refused too, because it is already a region. The first load takes
+about 30 seconds.
 
 ### Route C — any other table, via the interchange format
 

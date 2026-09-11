@@ -11,12 +11,15 @@
   "why": "the technical-validation set carries NINE survey-based Austrian NUTS-2 tables (Rokicki et al. 2021) with both sides of interregional trade by sector, plus Finnish and Scottish regional tables. OQ-R-02 closed on ONE region; these are the cases that say whether delta = 0.20 generalises. The 272-region MRIO files are estimates, not ground truth, and are used for structure rather than for scoring.",
   "extracted": [
    "Data/MRIO_2018_272regions.xlsx",
+   "Data/Final_demand_2018.xlsx",
+   "Data/TAXSUB_VA_2018.xlsx",
    "Code/NUTS2_list.xlsx",
    "Code/Metadata.xlsx",
    "ReadMe.md",
    "LICENSE",
    "Code/Technical validation/** -> truth/"
   ],
+  "side_files_note": "Final_demand_2018.xlsx and TAXSUB_VA_2018.xlsx were on disk from 2026-09-01 and used from then on, but were missing from `extracted` until 2026-09-11. Confirmed that day against the deposit itself by reading only the zip's central directory (an HTTP range request for the last 4 MB): both are under Data/ with uncompressed sizes 241,525 and 157,877 bytes, equal to the files here, as is MRIO_2018_272regions.xlsx at 34,814,567. The deposit holds the same three files for every year 2008-2017.",
   "note": "the archive and every workbook extracted from it are gitignored: 317 MB against a 33 MB data/ and a 74 MB .git. What is tracked is this file, so the payload is re-obtainable from the URL and checkable against the hash."
  }
 }
