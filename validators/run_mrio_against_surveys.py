@@ -35,13 +35,14 @@ high**, and the 11.7 % is a lower bound rather than a central estimate. By how
 much it is low is not measured: a quarter of the interregional purchases does
 not translate into a known fraction of the multiplier.
 
-WHAT IT CANNOT RULE OUT
--------------------------
-The years differ -- the surveys are 2010 (Austria) and 2021 (Catalonia), the
-archive 2018 -- and the classifications do (56 and 63 branches against 10),
-which is why only shares of total output are compared. A factor of four in the
-same direction in ten regions of two countries is hard to put down to eight
-years. The authors validated the archive against the same Austrian tables with
+WHAT IT CANNOT RULE OUT, AND WHAT IT NOW CAN
+----------------------------------------------
+The years differ here -- the surveys are 2010 (Austria) and 2021 (Catalonia),
+the archive 2018 -- and the classifications do (56 and 63 branches against
+10), which is why only shares of total output are compared. For Austria the
+years are no longer a caveat: `run_mrio_same_year.py` makes the comparison at
+2010 against 2010, from the deposit's own 2010 files, and finds the same
+quarter, 0.23 against 0.24. Catalonia's comparison keeps it. The authors validated the archive against the same Austrian tables with
 similarity scores; as far as their text shows, they did not report the
 direction.
 

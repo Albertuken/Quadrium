@@ -59,6 +59,15 @@ observed rather than guessed. Two parameters, two failed predictions from
 observables, and in both cases the quantity that would predict well is the one
 the exercise is undertaken to avoid needing.
 
+AND IT DOES NOT REST ON THE ARCHIVE'S HOME BIAS
+-------------------------------------------------
+Checked on 2026-09-11, after `run_mrio_against_surveys.py` found the archive
+keeps a region's trade at home -- a quarter of the purchases from the rest of
+the country that surveys record. On `run_spillover_sensitivity.py`'s
+counterfactual, that trade times four with every column total held, the mean
+share rises from 0.172 to 0.287 and the answer does not move: out-of-sample
+R² -0.105 from what the analyst holds, +0.840 with the interregional trade.
+
 Run:
     python3 validators/run_spillover_predictability.py
 """
@@ -166,7 +175,7 @@ def main() -> int:
     OBSERVED = [0] + list(range(3, F.shape[1]))   # log output + composition
     EVERYTHING = list(range(F.shape[1]))          # plus openness
 
-    def score(cols):
+    def score(cols, F=F, y=y):
         Xc = F[:, cols]
         yin = _pred(_ols(Xc, y), Xc)
         r2in = 1 - ((y - yin) ** 2).sum() / ((y - y.mean()) ** 2).sum()
@@ -215,6 +224,45 @@ def main() -> int:
           "single-region method exists in order not to need — the same shape "
           "as delta, which is estimable only where a survey table makes the "
           "regionalisation unnecessary")
+
+    # ---- and the conclusion does not rest on the archive's home bias
+    #
+    # Every share above is measured on an archive that, where surveys can
+    # check it, records a quarter of a region's trade with the rest of its
+    # country (`run_mrio_against_surveys.py`). So the test is run again on
+    # `run_spillover_sensitivity.py`'s counterfactual -- that trade times four,
+    # every column total held -- where the shares are higher. What the analyst
+    # holds does not change: output and composition are the archive's.
+    sspec = importlib.util.spec_from_file_location(
+        "sens", ROOT / "validators" / "run_spillover_sensitivity.py")
+    sens = importlib.util.module_from_spec(sspec)
+    sspec.loader.exec_module(sens)
+    live = [r for r in range(R) if not island[r]]
+    Zr, _ = sens.moved(Z, regions, {r: ("ratio", 4.0) for r in live})
+    share4, _ = sens.spillover(Zr / np.where(X > 0, X, np.inf), R)
+    y4, rows4 = [], []
+    for r in keep:
+        sl = slice(r * S, (r + 1) * S)
+        sh = share4[sl][np.isfinite(share4[sl])]
+        y4.append(float(np.mean(sh)))
+        xr = X[sl]
+        tot = xr.sum()
+        sells = Zr[sl, :].sum() - Zr[sl, sl].sum()
+        buys = Zr[:, sl].sum() - Zr[sl, sl].sum()
+        rows4.append([np.log(tot), (sells + buys) / tot, buys / tot]
+                     + list(xr / tot))
+    y4, F4 = np.array(y4), np.array(rows4)
+    a4 = score(OBSERVED, F4, y4)
+    b4 = score(EVERYTHING, F4, y4)
+    base4 = float(np.abs(y4 - y4.mean()).mean())
+    check("and the conclusion does not rest on the archive keeping trade at "
+          "home",
+          a4[1] < 0.05 and a4[2] >= base4 * 0.98 and b4[1] > 0.6,
+          f"moved to the surveys' level the mean share is {y4.mean():.3f} "
+          f"rather than {y.mean():.3f}, and from what the analyst holds it is "
+          f"still not predictable: out-of-sample R² {a4[1]:+.3f}, error "
+          f"{a4[2]:.4f} against {base4:.4f} for the mean. With the "
+          f"interregional trade, {b4[1]:+.3f}")
 
     print("\n" + "=" * 78)
     if FAIL:

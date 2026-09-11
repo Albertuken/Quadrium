@@ -13,6 +13,9 @@
    "Data/MRIO_2018_272regions.xlsx",
    "Data/Final_demand_2018.xlsx",
    "Data/TAXSUB_VA_2018.xlsx",
+   "Data/MRIO_2010_272regions.xlsx",
+   "Data/Final_demand_2010.xlsx",
+   "Data/TAXSUB_VA_2010.xlsx",
    "Code/NUTS2_list.xlsx",
    "Code/Metadata.xlsx",
    "ReadMe.md",
@@ -20,6 +23,7 @@
    "Code/Technical validation/** -> truth/"
   ],
   "side_files_note": "Final_demand_2018.xlsx and TAXSUB_VA_2018.xlsx were on disk from 2026-09-01 and used from then on, but were missing from `extracted` until 2026-09-11. Confirmed that day against the deposit itself by reading only the zip's central directory (an HTTP range request for the last 4 MB): both are under Data/ with uncompressed sizes 241,525 and 157,877 bytes, equal to the files here, as is MRIO_2018_272regions.xlsx at 34,814,567. The deposit holds the same three files for every year 2008-2017.",
+  "retaken_2026_09_11": "downloaded again on 2026-09-11 to extract the three 2010 files for run_mrio_same_year.py, which compares the archive with the Austrian surveys at their own year: 317,055,869 bytes, SHA-256 identical to the one recorded above, so the same deposit.",
   "note": "the archive and every workbook extracted from it are gitignored: 317 MB against a 33 MB data/ and a 74 MB .git. What is tracked is this file, so the payload is re-obtainable from the URL and checkable against the hash."
  }
 }

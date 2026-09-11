@@ -51,10 +51,13 @@ licence would allow it; eleven 33 MB workbooks in git would not be worth it.
 **To reproduce anything that uses the 2018 workbook**, download `MRIO.zip` from
 the record above and put `MRIO_2018_272regions.xlsx`, `Final_demand_2018.xlsx`
 and `TAXSUB_VA_2018.xlsx` in this folder. All three are in the zip's `Data/`
-folder; `_provenance.json` records how that was confirmed. Seven validators then
+folder; `_provenance.json` records how that was confirmed. Nine validators then
 run: `run_mrio_axis_scale`, `run_mrio_spillovers`, `run_spillover_predictability`,
-`run_mrio_side_join`, `run_mrio_nuts_join`, `run_mrio_real_output` and
-`run_eu_mrio_region`. The first run reads the 33 MB sheet and caches it as
+`run_mrio_side_join`, `run_mrio_nuts_join`, `run_mrio_real_output`,
+`run_eu_mrio_region`, `run_mrio_against_surveys` and `run_spillover_sensitivity`.
+A tenth, `run_mrio_same_year`, also wants `MRIO_2010_272regions.xlsx`,
+`Final_demand_2010.xlsx` and `TAXSUB_VA_2010.xlsx` from the same folder: it
+compares the archive with the Austrian surveys at their own year. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region

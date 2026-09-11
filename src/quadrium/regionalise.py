@@ -63,7 +63,8 @@ EVIDENCE = {
     # gives a region a quarter of the purchases from the rest of its country
     # that they record, and twice the purchases from itself, while the total
     # it buys is about right. So the feedback above is more likely too low
-    # than too high, by an amount nobody has measured.
+    # than too high; how much is `spillover_share_pct_survey` below. It holds
+    # at the surveys' own year too: 0.23 in 2010 (`run_mrio_same_year.py`).
     # `run_mrio_against_surveys.py`.
     "mrio_vs_surveys": {"regions": 10, "lower_in": 10,
                         "rest_of_country_ratio": 0.25, "own_ratio": 2.06},
