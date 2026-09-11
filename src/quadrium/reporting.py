@@ -686,6 +686,17 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                         f"between {yc.get('median_min')} % and "
                         f"{yc.get('median_max')} %. Read it as that year's, "
                         f"not as a constant.")
+            # The same weighted by the final demand for the region's own
+            # products, which is the figure a reader asks for: the sum above
+            # counts a unit of demand in every sector alike.
+            dem = ir.get("share_of_demand")
+            dem_txt = "" if dem is None else (
+                f" Weighted by the final demand for this region's own "
+                f"products instead, exports included, **{_fmt(100 * dem)} %** "
+                f"of the output that demand sets off is produced in other "
+                f"regions ({_fmt(100 * ir['share_of_demand_if_surveyed'])} % "
+                f"at the surveys' level); the median region's is "
+                f"{ir.get('demand_median_pct', '—')} %.")
             prov += [
                 "", "### What a one-region table leaves out", "",
                 f"This table is one region cut from a multiregional archive, so "
@@ -697,7 +708,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"archive the median is "
                 f"{ir.get('archive_median_pct', '—')} %. **The multipliers in "
                 f"this report come from the one-region table and do not "
-                f"contain it.**" + low, "",
+                f"contain it.**" + dem_txt + low, "",
                 "| sector | | multiplier, full system | runs through other "
                 "regions |" + (" at the surveys' level |" if cf else ""),
                 "|---|---|---:|---:|" + ("---:|" if cf else "")]
@@ -728,7 +739,14 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                     f"multipliers in this report come from the one-region "
                     f"table and do not contain it. Regions without "
                     f"Eurostat's employment hold at most {_fmt(100 * worst)} % "
-                    f"of any sector's multiplier here, and count nothing.", "",
+                    f"of any sector's multiplier here, and count nothing."
+                    + ("" if jb.get("share_of_demand") is None else
+                       f" Weighted by the final demand for the region's own "
+                       f"products, **{_fmt(100 * jb['share_of_demand'])} %** "
+                       f"of the jobs it creates are elsewhere "
+                       f"({_fmt(100 * jb['share_of_demand_if_surveyed'])} % "
+                       f"at the surveys' level); the median region's is "
+                       f"{jb.get('demand_median_pct', '—')} %."), "",
                     "| sector | jobs through other regions | at the surveys' "
                     "level |", "|---|---:|---:|"]
                 for c, a, b in zip(tbl.sector_codes, jb["share_by_sector"],

@@ -63,7 +63,8 @@ engine loads one with `mrio_year`. `run_eu_mrio_employment` loads Catalonia
 2018 with `mrio_employment` and reads Eurostat's employment for it from
 `data/eurostat/`, offline, and `run_employment_spillovers` weights the whole
 archive by that same file to measure how much of the jobs a one-region table
-misses. The first run reads the 33 MB sheet and caches it as
+misses; `run_demand_spillovers` does the same region by region, weighted by
+the final demand for each region's products. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region

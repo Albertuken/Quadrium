@@ -93,6 +93,17 @@ EVIDENCE = {
                                  "median_if_surveyed": 21.4,
                                  "unmeasured_median_pct": 0.2,
                                  "unmeasured_p90_pct": 1.7},
+    # Region by region, weighted by the final demand for its own products (the
+    # five categories the loaded table carries, exports included): the share
+    # of the output and of the jobs that demand sets off elsewhere.
+    # Without exports the output median is 12.1. `run_demand_spillovers.py`.
+    "demand_spillover_pct": {"output_regions": 259, "output_p10": 3.4,
+                             "output_median": 10.5, "output_p90": 20.6,
+                             "jobs_regions": 220, "jobs_p10": 5.1,
+                             "jobs_median": 10.8, "jobs_p90": 21.3,
+                             "output_median_if_surveyed": 19.8,
+                             "jobs_median_if_surveyed": 19.8,
+                             "output_median_without_exports": 12.1},
 }
 
 

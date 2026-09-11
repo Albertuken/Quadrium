@@ -982,6 +982,7 @@ def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
 
     jobs = mrio_jobs(table_path, region, year, employment_of)
     jobs["archive_median_pct"] = EVIDENCE["employment_spillover_pct"]["median"]
+    jobs["demand_median_pct"] = EVIDENCE["demand_spillover_pct"]["jobs_median"]
     return sat, jobs
 
 

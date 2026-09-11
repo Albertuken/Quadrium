@@ -518,6 +518,13 @@ far. The regions without Eurostat employment count nothing, and the report
 says how much of the multiplier they hold — a median 0.2 %
 (`validators/run_employment_spillovers.py`).
 
+Those shares count a unit of final demand in every sector alike. The report
+also gives the figure weighted by the final demand the region's products
+actually have (households, government, investment, inventories and exports):
+of all the output and all the jobs that demand sets off, the share elsewhere.
+For Catalonia that is 9.6 % of the output and 9.7 % of the jobs, against a
+median region's 10.5 % and 10.8 % (`validators/run_demand_spillovers.py`).
+
 Read three things before you use it:
 
 - **It is an estimate, not a survey.** Every cell comes out marked

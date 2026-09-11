@@ -33,13 +33,13 @@ more than the medians do.** Real estate's jobs leak twice as far as its output
 9.6 %; 5.9 against 12.0 %). An employment multiplier from a one-region table
 is short by a different amount in each sector, and not by the output figure.
 
-**Catalonia**: of the jobs its domestic final demand creates, 10.4 % are
-outside Catalonia, mostly in Extremadura (4.3 %) and Murcia (2.8 %).
-
 **At the surveys' level of domestic trade** (`run_spillover_sensitivity.py`,
 the same factor, from `EVIDENCE`) the median is 21.4 %, against 24.6 % for
-output on the same units, and Catalonia's is 21.2 %. The archive's own figure
-is a floor here for the reason it is one for output.
+output on the same units. The archive's own figure is a floor here for the
+reason it is one for output.
+
+These are per unit of final demand in each sector. Weighted by the final
+demand a region actually has, region by region: `run_demand_spillovers.py`.
 
 The figures live in `EVIDENCE['employment_spillover_pct']`, which the report
 quotes; this file fails if the two disagree. It also computes Catalonia's
@@ -163,16 +163,11 @@ def main() -> int:
         js = (jobs - own_jobs)[keep] / jobs[keep]
         os_ = (m - own_out)[keep] / m[keep]
         unmeasured = L[~known, :].sum(0)[keep] / m[keep]
-        y = FD[cs][:, [fd_head.index(h) for h in ("HFCE", "GGFC", "GFCF",
-                                                   "INVNT")]].sum(1)
-        col = (ck[:, None] * L[:, cs]) @ y
-        by_r = {regions[r]: col[r * S:(r + 1) * S].sum() / col.sum()
-                for r in range(R)}
         per_cat = (jobs[cs] - own_jobs[cs]) / jobs[cs]
         sec = np.array([l.split("-", 1)[1] for l in labels])[keep]
-        return js, os_, unmeasured, by_r, sec, int(keep.sum()), per_cat
+        return js, os_, unmeasured, sec, int(keep.sum()), per_cat
 
-    js, os_, unmeasured, by_r, sec, n, per_cat = measure(Z)
+    js, os_, unmeasured, sec, n, per_cat = measure(Z)
     p10, p50, p90 = (100 * np.percentile(js, [10, 50, 90])).round(1)
     o50 = round(100 * float(np.median(os_)), 1)
     u50, u90 = (100 * np.percentile(unmeasured, [50, 90])).round(1)
@@ -202,24 +197,16 @@ def main() -> int:
           f"L {med('L', js)} against {med('L', os_)}; O-Q {med('O-Q', js)} "
           f"against {med('O-Q', os_)}; R-U {med('R-U', js)} against "
           f"{med('R-U', os_)}")
-    out = round(100 * (1 - by_r["ES51"]), 1)
-    top = sorted(((v, k) for k, v in by_r.items() if k != "ES51"),
-                 reverse=True)[:2]
-    check("Catalonia: 10.4 % of the jobs its domestic demand creates are "
-          "elsewhere", out == 10.4,
-          f"{out} %; " + ", ".join(f"{k} {100 * v:.1f} %" for v, k in top))
-
     f = EVIDENCE["spillover_share_pct_survey"]["factor"]
     live = [r for r in range(R)
             if not island[r] and X[r * S:(r + 1) * S].sum() > 0]
-    js4, os4, _, by_r4, _, _, per_cat4 = measure(
+    js4, os4, _, _, _, per_cat4 = measure(
         _mrio_move_to_country(Z, regions, {r: f for r in live}, S))
     q50 = round(100 * float(np.median(js4)), 1)
-    out4 = round(100 * (1 - by_r4["ES51"]), 1)
     check("at the surveys' level of domestic trade, 21.4 % of the jobs",
-          q50 == ev["median_if_surveyed"] and out4 == 21.2,
+          q50 == ev["median_if_surveyed"],
           f"factor {f:g}: jobs {q50} %, output "
-          f"{round(100 * float(np.median(os4)), 1)} %, Catalonia {out4} %")
+          f"{round(100 * float(np.median(os4)), 1)} %")
 
     # ---- the engine gives the report the same numbers
     try:

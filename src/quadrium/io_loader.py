@@ -2220,7 +2220,7 @@ def mrio_jobs(path: Path | str, region: str, year: int,
     key = (str(Path(blk).resolve()), region, year)
     if key not in _MRIO_COLUMNS:
         load_eu_mrio(path, region, year)
-    Ls, Ls4, X_all, regions = _MRIO_COLUMNS[key]
+    Ls, Ls4, X_all, regions, y = _MRIO_COLUMNS[key]
     S = _MRIO_S
     c = np.zeros(len(X_all))
     known = np.zeros(len(X_all), bool)
@@ -2247,10 +2247,19 @@ def mrio_jobs(path: Path | str, region: str, year: int,
                else float("nan"))
         return per, agg
 
+    def by_demand(L):
+        # The jobs the final demand for this region's products creates, and
+        # the share of them elsewhere -- the weighting `load_eu_mrio` uses.
+        jx = c * (L @ y)
+        return (float(1 - jx[s].sum() / jx.sum()) if jx.sum() > 0
+                else float("nan"))
+
     per, agg = shares(Ls)
     per4, agg4 = shares(Ls4)
     unmeasured = Ls[~known].sum(0) / Ls.sum(0)
-    return {"share": agg, "share_by_sector": [float(x) for x in per],
+    return {"share_of_demand": by_demand(Ls),
+            "share_of_demand_if_surveyed": by_demand(Ls4),
+            "share": agg, "share_by_sector": [float(x) for x in per],
             "share_if_surveyed": agg4,
             "share_by_sector_if_surveyed": [float(x) for x in per4],
             "unmeasured_by_sector": [float(x) for x in unmeasured],
@@ -2488,10 +2497,23 @@ def load_eu_mrio(path: Path | str, region: str,
     intra4 = Ls4[s].sum(0)
     agg4 = float((m4 - intra4).sum() / m4.sum())
     per4 = (m4 - intra4) / m4
+    # Weighted by the final demand for this region's own products -- the five
+    # categories the table carries, exports included -- instead of one unit
+    # per sector: of all the output that demand sets off, the share produced
+    # elsewhere. What a reader asks; `run_demand_spillovers.py`.
+    y = FD[s][:, [fd_head.index(c) for c, _ in _MRIO_FD]].sum(1)
+    xd, xd4 = Ls @ y, Ls4 @ y
+    dem = (float(1 - xd[s].sum() / xd.sum()) if xd.sum() > 0
+           else float("nan"))
+    dem4 = (float(1 - xd4[s].sum() / xd4.sum()) if xd4.sum() > 0
+            else float("nan"))
     _MRIO_COLUMNS[(str(Path(blk).resolve()), region, year)] = (
-        Ls, Ls4, X_all, regions)
+        Ls, Ls4, X_all, regions, y)
 
     interregional = {
+        "share_of_demand": dem,
+        "share_of_demand_if_surveyed": dem4,
+        "demand_median_pct": EVIDENCE["demand_spillover_pct"]["output_median"],
         "share_if_surveyed": agg4,
         "share_by_sector_if_surveyed": [float(x) for x in per4],
         "surveyed_factor": factor,

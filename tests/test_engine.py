@@ -5571,6 +5571,27 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
           f"{[round(x, 4) for x in jb.get('share_by_sector', [])[:3]]} "
           f"against {[round(x, 4) for x in want[:3]]}")
 
+    # Weighted by the final demand for the region's own products -- the five
+    # categories the loaded table carries, exports included, NPISH left out:
+    # of the output and of the jobs it sets off, the share elsewhere.
+    yv = FD[:10][:, [0, 2, 3, 4, 5]].sum(1)
+
+    def by_demand(Zm):
+        xx = np.linalg.inv(np.eye(n) - Zm / X)[:, :10] @ yv
+        jj = c * xx
+        return 1 - xx[:10].sum() / xx.sum(), 1 - jj[:10].sum() / jj.sum()
+    d0 = by_demand(Z)
+    d4 = by_demand(_mrio_move_to_country(Z, ["AA11", "AA12"], {0: f, 1: f}))
+    ir = cfg["table"].interregional
+    got = (ir.get("share_of_demand"), ir.get("share_of_demand_if_surveyed"),
+           jb.get("share_of_demand"), jb.get("share_of_demand_if_surveyed"))
+    check("weighted by the final demand for the region's products, the share "
+          "of the output and of the jobs set off elsewhere is the direct one, "
+          "as the archive stands and at the surveys' level",
+          None not in got and np.allclose(got, [d0[0], d4[0], d0[1], d4[1]],
+                                          atol=1e-12),
+          f"{got} against output {d0[0]:.4f}, jobs {d0[1]:.4f}")
+
     # A neighbour the release carries nothing for counts nothing, and how
     # much of each multiplier it holds is said instead of refused.
     keep(cube({"AA11": both["AA11"]}))
