@@ -654,6 +654,38 @@ def build_report(results: list[DisaggregationResult], meta: dict,
         # multiregional archive. Read from the table AS LOADED -- the split
         # tables below carry none of it, on purpose -- and said to be that.
         ir = getattr(tbl, "interregional", None) or {}
+        if ir.get("scope") == "with_rest":
+            # The wide table HOLDS the feedback, so the section says what it
+            # contains rather than what it omits.
+            blocks = ir.get("blocks") or []
+            counts = ir.get("regions_in_blocks") or []
+            per = ir.get("share_by_sector_if_one_region") or []
+            prov += [
+                "", "### What this table holds that a one-region table "
+                "cannot", "",
+                f"Three blocks — `{blocks[0]}`, the rest of its country "
+                f"({counts[1] if len(counts) > 1 else '?'} regions) and the "
+                f"rest of the archive "
+                f"({counts[2] if len(counts) > 2 else '?'} regions) — which "
+                f"between them cover the archive. So the part of an impulse "
+                f"that runs through other regions and comes back is **inside "
+                f"the multipliers below**, and the trade between regions is "
+                f"intermediate demand rather than a final-demand column. A "
+                f"table of `{blocks[0]}` alone would omit "
+                f"**{_fmt(100 * ir['share_if_one_region'])} %** of its output "
+                f"multipliers; across the archive the median is "
+                f"{ir.get('archive_median_pct', '—')} %.", "",
+                "What it costs: the other two blocks are aggregates, and an "
+                "aggregate's technology is a mix of the regions inside it. "
+                "This table answers what this region's demand sets off "
+                "everywhere, not what each other region does. A sector code "
+                f"names `{blocks[0]}`'s own block, which is what a split "
+                f"divides."]
+            if per:
+                prov += ["", "| sector | omitted by a one-region table |",
+                         "|---|---:|"]
+                for c, v in zip(tbl.sector_codes[:len(per)], per):
+                    prov.append(f"| `{c}` | {_fmt(100 * v)} % |")
         if ir.get("share_by_sector"):
             sc = ir.get("survey_check") or {}
             low = (f" And the archive keeps trade at home: where "

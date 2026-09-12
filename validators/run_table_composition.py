@@ -94,6 +94,14 @@ DECLARED = {
         "passes `interregional`, the leakage computed on the archive's full "
         "inverse. `satellites` and `type_ii` have no parent here: a table "
         "from an archive has no account until a workbook attaches one."),
+    "io_loader.py::load_eu_mrio_wide": (
+        "constructor",
+        "passes `interregional`, here saying which three blocks the table "
+        "carries and what a one-region table of the same region would omit. "
+        "`satellites` and `type_ii` have no parent, as in `load_eu_mrio`: the "
+        "archive has no account until a workbook attaches one, and "
+        "`mrio_employment` is refused with this scope for now because two of "
+        "the three blocks are aggregates Eurostat covers only in part."),
     "eurostat.py::load_iot": ("primary", "a Eurostat download."),
 }
 

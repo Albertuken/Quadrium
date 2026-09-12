@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
- "taken": "2026-09-11",
- "n_sites": 218,
+ "taken": "2026-09-12",
+ "n_sites": 221,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -29,6 +29,8 @@
   "config.py::_eurostat_sut_paths::table_path is , which exists and is a file. A supply",
   "config.py::_load_declared_table::mrio_employment= applies only to table_kind 'eu_mrio",
   "config.py::_load_declared_table::mrio_region= applies only to table_kind 'eu_mrio', n",
+  "config.py::_load_declared_table::mrio_scope must be 'region' or 'with_rest'. region t",
+  "config.py::_load_declared_table::mrio_scope= applies only to table_kind 'eu_mrio', no",
   "config.py::_load_declared_table::mrio_year is not a year. The archive holds 2008 to 2",
   "config.py::_load_declared_table::mrio_year= applies only to table_kind 'eu_mrio', not",
   "config.py::_load_declared_table::table_kind 'eu_mrio' needs `mrio_region`: the archiv",
@@ -290,8 +292,11 @@
   "config.py::_eurostat_sut_paths::project_to_year is , not a year. project_to_year": "workbook",
   "config.py::_eurostat_sut_paths::sut_unbalanced must be 'refuse' (the default) or 'ca": "workbook",
   "config.py::_eurostat_sut_paths::table_path is , which exists and is a file. A supply": "workbook",
+  "config.py::_load_declared_table::mrio_employment does not work with mrio_scope 'with_": "workbook",
   "config.py::_load_declared_table::mrio_employment= applies only to table_kind 'eu_mrio": "workbook",
   "config.py::_load_declared_table::mrio_region= applies only to table_kind 'eu_mrio', n": "workbook",
+  "config.py::_load_declared_table::mrio_scope must be 'region' or 'with_rest'. region t": "workbook",
+  "config.py::_load_declared_table::mrio_scope= applies only to table_kind 'eu_mrio', no": "workbook",
   "config.py::_load_declared_table::mrio_year is not a year. The archive holds 2008 to 2": "workbook",
   "config.py::_load_declared_table::mrio_year= applies only to table_kind 'eu_mrio', not": "workbook",
   "config.py::_load_declared_table::table_kind 'eu_mrio' needs `mrio_region`: the archiv": "workbook",
@@ -487,5 +492,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 211
+ "floor": 213
 }

@@ -5488,6 +5488,146 @@ def test_the_archives_greek_and_finnish_labels_are_corrected():
               False, "it loaded")
 
 
+def test_the_EUROPEAN_MRIO_can_carry_the_rest_of_the_country():
+    """`mrio_scope: with_rest` returns three blocks instead of one.
+
+    The region, the rest of its country and the rest of the archive, each ten
+    sectors. The three cover the archive, so the trade between regions is
+    inside the table: the feedback a one-region table can only mention in a
+    note is in its multipliers.
+    """
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.config import ConfigError, build_config
+    from quadrium.io_loader import (LoaderError, _MRIO_SECTORS, load_eu_mrio,
+                                    load_eu_mrio_wide)
+
+    sectors = list(_MRIO_SECTORS)
+    S = len(sectors)
+    regs = ("AA11", "AA12", "BB11", "BB12")
+    labels = [f"{r}-{s}" for r in regs for s in sectors]
+    n = len(labels)
+    i, j = np.indices((n, n))
+    Z = 1.0 + (i * 7 + j * 3) % 5
+    X = Z.sum(1) + 75.0
+    FD = np.column_stack([np.full(n, v) for v in (50, 10, 10, 5, 1, 4)] + [X])
+    VA = np.vstack([np.full(n, 2.0), X - Z.sum(0) - 6.0, np.full(n, 3.0), X])
+    tmp = Path(tempfile.mkdtemp(prefix="quadrium_wide_"))
+    folder = tmp / "mrio"
+    folder.mkdir()
+    for name, head, body, rows in (
+            ("MRIO_2018_272regions.xlsx", labels, Z, labels),
+            ("Final_demand_2018.xlsx", ["HFCE", "NPISH", "GGFC", "GFCF",
+                                        "INVNT", "EX", "TOTAL"], FD, labels),
+            ("TAXSUB_VA_2018.xlsx", labels, VA,
+             ["TAXSUB", "VA", "IM", "INPUT"])):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([None] + list(head))
+        for lab, r in zip(rows, body):
+            ws.append([lab] + [float(x) for x in r])
+        wb.save(folder / name)
+
+    t = load_eu_mrio_wide(folder, "AA11", 2018)
+    check("the table is the region, the rest of its country and the rest of "
+          "the archive",
+          t.n == 3 * S and t.regions == ["AA11", "AA_REST", "REST"]
+          and list(t.sector_codes[:S]) == sectors,
+          f"{t.n} units in {t.regions}")
+
+    groups = ([0], [1], [2, 3])
+    want = np.zeros((3 * S, 3 * S))
+    wantx = np.zeros(3 * S)
+    for a, ga in enumerate(groups):
+        for r in ga:
+            wantx[a * S:(a + 1) * S] += X[r * S:(r + 1) * S]
+        for b, gb in enumerate(groups):
+            for r in ga:
+                for q in gb:
+                    want[a * S:(a + 1) * S, b * S:(b + 1) * S] += \
+                        Z[r * S:(r + 1) * S, q * S:(q + 1) * S]
+    check("every block is the archive's own flows added up, and the output "
+          "with them",
+          np.allclose(t.Z, want) and np.allclose(t.X, wantx),
+          f"{t.Z.sum():,.0f} against {want.sum():,.0f}")
+
+    check("the trade between regions is inside the table, so it is no longer "
+          "a final-demand column and a value-added row",
+          not any("other regions" in l for l in t.Y_labels)
+          and not any("other regions" in l for l in t.VA_labels),
+          f"{len(t.Y_labels)} final-demand columns, {len(t.VA_labels)} rows "
+          f"below")
+    check("both identities close, and the residue the archive does not "
+          "publish is labelled",
+          np.allclose(t.Z.sum(1) + t.Y.sum(1), t.X)
+          and np.allclose(t.Z.sum(0) + t.VA.sum(0), t.X)
+          and any("RESIDUAL" in l for l in t.Y_labels)
+          and any("RESIDUAL" in l for l in t.VA_labels),
+          "closed by a labelled residual, as the one-region table closes")
+
+    check("a sector code names the region's own block, which is what a split "
+          "divides",
+          t.index_of("G-I") < S and "region's block" in (t.notes or ""),
+          f"G-I is unit {t.index_of('G-I')} of {t.n}")
+
+    one = load_eu_mrio(folder, "AA11", 2018)
+    check("the region's own block is exactly the one-region table's",
+          np.array_equal(t.Z[:S, :S], one.Z) and np.array_equal(t.X[:S], one.X),
+          "same cells, not a rebuilt estimate")
+    L1 = np.linalg.inv(np.eye(S) - one.Z / one.X)
+    L3 = np.linalg.inv(np.eye(3 * S) - t.Z / t.X)
+    check("and its multipliers are larger, because the feedback through the "
+          "other blocks is in them",
+          bool((L3[:, :S].sum(0) >= L1.sum(0) - 1e-12).all())
+          and float(L3[:, :S].sum(0).sum()) > float(L1.sum(0).sum()),
+          f"{L3[:, :S].sum(0).sum():.3f} against {L1.sum(0).sum():.3f} over "
+          f"the ten sectors")
+
+    meta = {"project_id": "w", "table_path": str(folder),
+            "table_kind": "eu_mrio", "mrio_region": "AA11",
+            "mrio_scope": "with_rest"}
+    tables = {"splits": [
+        {"sector_code": "G-I", "new_code": "GI1", "new_label": "a",
+         "key_id": "k1"},
+        {"sector_code": "G-I", "new_code": "GI2", "new_label": "b",
+         "key_id": "k1"}],
+        "keys": [
+        {"key_id": "k1", "new_sector_code": "GI1", "value": 70, "source": "t",
+         "source_year": 2018, "strength": "weak"},
+        {"key_id": "k1", "new_sector_code": "GI2", "value": 30, "source": "t",
+         "source_year": 2018, "strength": "weak"}]}
+    cfg = build_config(dict(meta), tables, tmp)
+    check("a workbook asks for it with `mrio_scope`",
+          cfg["table"].n == 3 * S and cfg["table"].regions[0] == "AA11",
+          f"{cfg['table'].n} units")
+
+    def refused(name, fn, fragment):
+        try:
+            fn()
+        except (ConfigError, LoaderError) as exc:
+            check(f"the engine refuses {name}, and says which",
+                  fragment.lower() in str(exc).lower(), str(exc)[:88])
+        except Exception as exc:                          # noqa: BLE001
+            check(f"the engine refuses {name}, and says which", False,
+                  f"{type(exc).__name__}: {str(exc)[:60]}")
+        else:
+            check(f"the engine refuses {name}, and says which", False,
+                  "it built the table")
+
+    refused("a scope it does not have",
+            lambda: build_config({**meta, "mrio_scope": "everything"}, tables,
+                                 tmp),
+            "mrio_scope")
+    refused("`mrio_scope` on another kind of table",
+            lambda: build_config({"project_id": "x",
+                                  "table_path": str(folder / labels[0]),
+                                  "table_kind": "uk_analytical",
+                                  "mrio_scope": "with_rest"}, tables, tmp),
+            "applies only to")
+
+
 def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     """A region's employment account, from a kept Eurostat download, offline.
 

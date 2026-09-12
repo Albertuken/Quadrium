@@ -103,6 +103,7 @@ from pathlib import Path
 import numpy as np
 
 from .io_loader import LoaderError, _open_workbook, load_eu_mrio, \
+    load_eu_mrio_wide, \
     load_ine_tio, load_io_table, load_uk_analytical_iot
 from .models import (AllocationKey, Assumption, AssumptionLedger,
                      ProxyStrength, Satellite, Scenario, SplitSpec)
@@ -1161,6 +1162,34 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
             f"mrio_employment is {raw_emp!r}, which is not a yes; no "
             f"employment account was fetched")
 
+    # `mrio_scope` says how wide the table is: the region alone, or the region
+    # with the rest of its country and the rest of the archive. The wide one
+    # holds the feedback the narrow one can only mention.
+    raw_scope = str(meta.get("mrio_scope") or "").strip().lower()
+    if raw_scope and kind != "eu_mrio":
+        raise ConfigError(
+            f"mrio_scope={raw_scope!r} applies only to table_kind 'eu_mrio', "
+            f"not {kind!r}: it says how many regions of the European MRIO the "
+            f"table carries. It is refused rather than ignored, because a "
+            f"setting that is ignored in silence is one you never find out.")
+    mrio_scope = raw_scope or "region"
+    if mrio_scope not in ("region", "with_rest"):
+        raise ConfigError(
+            f"mrio_scope {raw_scope!r} must be 'region' or 'with_rest'.\n\n"
+            f"    region     the region's own table, ten sectors (the "
+            f"default)\n"
+            f"    with_rest  that region, the rest of its country and the "
+            f"rest of the archive: thirty sectors, and the feedback between "
+            f"regions inside the table instead of in a note\n")
+    if mrio_scope == "with_rest" and _yes(meta.get("mrio_employment")):
+        raise ConfigError(
+            "mrio_employment does not work with mrio_scope 'with_rest' yet. "
+            "The wide table's other two blocks are aggregates of many "
+            "regions, and Eurostat publishes employment for 230 of the "
+            "archive's 268, so an account for them would have to say how much "
+            "of each block it covers. Until it does, load the region alone "
+            "for employment, or give the figures in a `satellites` sheet.")
+
     # `eurostat` names a country and a year instead of a file, and `table_path`
     # becomes where the download is KEPT rather than where it already is. So
     # the existence check below cannot apply to it: on a first run the file is
@@ -1222,7 +1251,9 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
         "interchange": lambda p: load_io_table(p),
         "ine_interior": lambda p: load_ine_tio(p, "interior", unbalanced),
         "ine_total": lambda p: load_ine_tio(p, "total"),
-        "eu_mrio": lambda p: load_eu_mrio(p, mrio_region, mrio_year),
+        "eu_mrio": lambda p: (load_eu_mrio_wide if mrio_scope
+                              == "with_rest" else load_eu_mrio)(
+            p, mrio_region, mrio_year),
         "eurostat": lambda p: _load_eurostat(p, fetch_note, offline, refresh),
         "eurostat_sut": lambda p: _load_eurostat_sut(
             fetch_note, offline, refresh, defaults_taken,
@@ -1621,7 +1652,9 @@ def write_template(path: Path | str) -> Path:
             "#                           mrio_year picks 2008-2018 (default",
             "#                           2018). mrio_employment sí attaches",
             "#                           Eurostat's employed persons for that",
-            "#                           region and year.",
+            "#                           region and year. mrio_scope",
+            "#                           with_rest adds the rest of the",
+            "#                           country and of the archive.",
             "#",
             "# For table_kind: eurostat, delete table_path (or use it to say",
             "# where to cache) and add instead:",
@@ -2036,6 +2069,18 @@ def plan_workbook(path: Path | str) -> dict:
             gap("project", f"`mrio_year` is {raw_year!r}",
                 "the archive holds 2008 to 2018, one table per year",
                 "a year in that range, or leave it empty for 2018")
+    raw_scope = str(meta.get("mrio_scope") or "").strip()
+    if raw_scope and kind != "eu_mrio":
+        gap("project", f"`mrio_scope` is set with table_kind {kind!r}",
+            "it says how many regions of the European MRIO the table carries "
+            "and applies to `eu_mrio` alone",
+            "remove the row, or change the kind")
+    elif raw_scope and raw_scope.lower() not in ("region", "with_rest"):
+        gap("project", f"`mrio_scope` is {raw_scope!r}",
+            "the scopes are `region`, the region's own table, and "
+            "`with_rest`, that region with the rest of its country and the "
+            "rest of the archive",
+            "one of those two, or leave the row out for `region`")
     raw_emp = str(meta.get("mrio_employment") or "").strip()
     if raw_emp and kind != "eu_mrio":
         gap("project", f"`mrio_employment` is set with table_kind {kind!r}",

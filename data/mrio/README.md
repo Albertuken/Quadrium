@@ -70,7 +70,11 @@ every year from 2008 to 2018 that has both the archive and Eurostat's file.
 another region — Greece's, Finland's and `PL12` — against the archive's side
 files and Eurostat's regional GDP, and the engine corrects them on load.
 `run_mrio_sectors` asks the same of the ten branches inside each region,
-against Eurostat's value added by branch, and finds them right. The first run reads the 33 MB sheet and caches it as
+against Eurostat's value added by branch, and finds them right.
+`run_eu_mrio_wide` checks the three-block table — a region, the rest of its
+country and the rest of the archive — against the full 2,720-unit system:
+its multipliers are the full system's to within 0.35 % at the worst region,
+where a one-region table is out by 2.7 % to 9.2 %. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region

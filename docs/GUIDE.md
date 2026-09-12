@@ -491,6 +491,25 @@ highest and lowest year, 9.8 at the 90th percentile, although regions keep
 their order (`validators/run_spillover_years.py`). The figure for your region
 is the one for the year you loaded, and the report says so.
 
+**Or the region with the rest around it.** Add
+
+    mrio_scope     with_rest
+
+and instead of ten sectors you get thirty: your region, the rest of its
+country and the rest of the archive, three blocks that between them cover it.
+Because they cover it, the trade between regions is intermediate demand rather
+than a final-demand column, and the feedback a one-region table can only
+mention is inside the multipliers. It costs almost nothing to aggregate the
+other 271 regions into two blocks: against the full 2,720-unit system the
+multipliers are out by 0.005 % to 0.354 % at the median, where a one-region
+table is out by 2.7 % to 9.2 % (`validators/run_eu_mrio_wide.py`). What it
+does cost is that those two blocks are aggregates, whose technology is a mix
+of the regions inside them, so the table answers what your region's demand
+sets off everywhere — not what each other region does. A sector code names
+your region's own block, which is what a split divides. Employment
+(`mrio_employment`) is refused with this scope for now: an account for the
+aggregates would have to say how much of each block Eurostat covers.
+
 **Employment for the region, from Eurostat.** The archive's ten sectors are
 Eurostat's A10 grouping, and Eurostat publishes employment for NUTS-2 regions on
 that same grouping. Add

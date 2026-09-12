@@ -2694,3 +2694,163 @@ def load_eu_mrio(path: Path | str, region: str,
         notes=notes, provenance=prov, interregional=interregional)
     _assert_balances(table, f"{blk.name} ({region})")
     return table
+
+
+def load_eu_mrio_wide(path: Path | str, region: str,
+                      year: int = 2018) -> IOTable:
+    """The region, the rest of its country and the rest of the archive.
+
+    WHY IT EXISTS
+    ---------------
+    A one-region table cannot hold what leaves through other regions and
+    comes back, and `load_eu_mrio` can only say how much that is: a median
+    13.6 % of a region's output multipliers and 11.4 % of the jobs. Three
+    blocks that between them cover the archive hold it instead. Whatever this
+    region buys from anywhere is a purchase from one of the other two, so the
+    feedback is IN the multipliers rather than in a note, and the trade
+    between regions stops being a final-demand column and a value-added row:
+    it is intermediate demand, where it belongs.
+
+    WHAT IT COSTS
+    ---------------
+    The other two blocks are aggregates, and an aggregate's technology is a
+    mix of the regions inside it. That is the trade: this table answers what
+    the region's demand sets off everywhere, not what each other region does.
+
+    NOTHING IS ESTIMATED HERE
+    ---------------------------
+    Every cell is the archive's own flows added up: the cell from group g's
+    sector i to group h's sector j is the sum of the archive's cells from
+    every region of g to every region of h. Output is added the same way, and
+    the region's own block is the one-region table's, cell for cell. Both
+    identities are closed by the same labelled RESIDUAL, because the
+    archive's components do not close (`run_mrio_real_output.py`).
+
+    The refusals are `load_eu_mrio`'s, which is called to make them: a region
+    the archive does not have, one with no output, one that trades with
+    nobody.
+    """
+    year = int(year)
+    blk, fdf, vaf = _mrio_files(path, year)
+    region = str(region or "").strip().upper()
+    S = _MRIO_S
+
+    # The one-region table first: it validates the region and its figures are
+    # what this table adds -- said in the notes, measured the same way.
+    one = load_eu_mrio(path, region, year)
+
+    Z_all, labels = _mrio_block(blk)
+    regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
+    sectors = [l.split("-", 1)[1] for l in labels[:S]]
+    R = len(regions)
+    k = regions.index(region)
+    fd_head, FD = _mrio_side(fdf, "rows")
+    va_head, VA = _mrio_side(vaf, "columns")
+    X_all = FD[:, fd_head.index("TOTAL")]
+
+    # Who is in which block. A country with one region in the archive gets an
+    # empty middle block, and the notes say so rather than dropping it: a
+    # reader counting three blocks should find three.
+    same = [j for j, r in enumerate(regions)
+            if r[:2] == region[:2] and j != k]
+    G = np.zeros((R, 3))
+    G[k, 0] = 1.0
+    for j in same:
+        G[j, 1] = 1.0
+    for j in range(R):
+        if j != k and j not in same:
+            G[j, 2] = 1.0
+
+    def by_block(v):
+        """A per-unit vector added up into the three blocks."""
+        return (G.T @ np.asarray(v, float).reshape(R, S)).reshape(3 * S)
+
+    Z3 = np.einsum("rg,riqj,qh->gihj", G, Z_all.reshape(R, S, R, S), G,
+                   optimize=True).reshape(3 * S, 3 * S)
+    X3 = by_block(X_all)
+
+    dup = bool(np.array_equal(FD[:, fd_head.index("NPISH")],
+                              FD[:, fd_head.index("GGFC")]))
+    fd_cols = list(_MRIO_FD)
+    if not dup:
+        fd_cols.insert(1, ("NPISH", "Final consumption of NPISHs (NPISH)"))
+    Yp = np.column_stack([by_block(FD[:, fd_head.index(c)])
+                          for c, _ in fd_cols])
+    va_parts = [by_block(VA[:, va_head.index(c)])
+                for c in ("IM", "TAXSUB", "VA")]
+    res_y = X3 - Z3.sum(1) - Yp.sum(1)
+    res_v = X3 - Z3.sum(0) - sum(va_parts)
+    Y = np.column_stack([Yp, res_y])
+    Y_labels = [lbl for _, lbl in fd_cols] + [
+        "Statistical discrepancy (RESIDUAL, computed by the loader; the "
+        "archive does not publish it)"]
+    VAm = np.vstack([*va_parts, res_v])
+    VA_labels = [
+        "Imports (IM) (NOT value added)",
+        "Taxes less subsidies (TAXSUB) (not value added)",
+        "Value added (VA)",
+        "Statistical discrepancy (RESIDUAL, NOT value added; computed by the "
+        "loader)"]
+
+    rest_country = f"{region[:2]}_REST"
+    total = float(X3.sum())
+    notes = (
+        f"THREE BLOCKS THAT COVER THE ARCHIVE: {region}, the rest of "
+        f"{region[:2]} ({len(same)} "
+        f"{'regions' if len(same) != 1 else 'region'}) and the rest of the "
+        f"archive ({R - len(same) - 1} regions). Every cell is the archive's "
+        f"own flows added up, and this region's own block is the one-region "
+        f"table's cell for cell. Because the three cover the archive, the "
+        f"trade between regions is intermediate demand here rather than a "
+        f"final-demand column: the feedback a one-region table omits -- "
+        f"{100 * one.interregional['share']:.1f} % of this region's output "
+        f"multipliers -- is inside these multipliers. What it costs is that "
+        f"the other two blocks are aggregates, whose technology is a mix of "
+        f"the regions inside them. "
+        + (f"The archive has no other region of {region[:2]}, so the middle "
+           f"block is empty. " if not same else "")
+        + f"NEITHER IDENTITY CLOSES IN THIS ARCHIVE: the row residue is "
+          f"{100 * np.abs(res_y).sum() / total:.1f} % of output and the "
+          f"column residue {100 * np.abs(res_v).sum() / total:.1f} %, both "
+          f"carried in a labelled RESIDUAL column and row computed here. "
+        + ("NPISH is identical to GGFC on every row of the final-demand file "
+           "and was dropped rather than counted twice. " if dup else
+           "NPISH differs from GGFC in this file and is kept. ")
+        + f"A sector code names THIS region's block: the three blocks "
+          f"carry the same ten codes, as an interregional table must, "
+          f"and this region goes first, so a split of `G-I` divides "
+          f"{region}'s G-I and not an aggregate's. "
+        + f"Every cell is ESTIMATED, as the whole archive is, and the unit "
+          f"is the archive's."
+    ).strip()
+
+    from .models import CellLabel
+
+    prov = np.empty((3 * S, 3 * S), dtype=object)
+    prov[:] = CellLabel.PROXY_ESTIMATED
+    table = IOTable(
+        table_id=f"EU_MRIO_{year}_{region}_with_rest", country=region,
+        year=year, unit=_MRIO_UNIT,
+        classification=("10 sectors, NACE Rev. 2 sections grouped as the "
+                        "archive groups them, in three blocks; NUTS-2 as "
+                        "coded in the archive"),
+        sector_codes=list(sectors) * 3,
+        sector_labels=([_MRIO_SECTORS.get(c, c) for c in sectors]
+                       + [f"{_MRIO_SECTORS.get(c, c)} — rest of "
+                          f"{region[:2]}" for c in sectors]
+                       + [f"{_MRIO_SECTORS.get(c, c)} — rest of the archive"
+                          for c in sectors]),
+        region_codes=[region] * S + [rest_country] * S + ["REST"] * S,
+        Z=Z3, Y=Y, Y_labels=Y_labels, VA=VAm, VA_labels=VA_labels, X=X3,
+        source=one.source, notes=notes, provenance=prov,
+        interregional={
+            "scope": "with_rest",
+            "blocks": [region, rest_country, "REST"],
+            "regions_in_blocks": [1, len(same), R - len(same) - 1],
+            "share_if_one_region": one.interregional["share"],
+            "share_by_sector_if_one_region":
+                list(one.interregional["share_by_sector"]),
+            "archive_median_pct": one.interregional.get("archive_median_pct"),
+            "year": year})
+    _assert_balances(table, f"{blk.name} ({region} with the rest)")
+    return table
