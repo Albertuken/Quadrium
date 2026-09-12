@@ -728,10 +728,9 @@ EMPLOYMENT_DATASET = "nama_10r_3empers"
 # `run_mrio_eurostat_codes.py` rebuilds the list from the tables in
 # `data/nuts/` and fails if the two disagree.
 MRIO_EUROSTAT_CODE = {
-    # NUTS 2010 -> 2013, "Code change"
-    "EL11": "EL51", "EL12": "EL52", "EL13": "EL53", "EL14": "EL61",
-    "EL21": "EL54", "EL22": "EL62", "EL23": "EL63", "EL24": "EL64",
-    "EL25": "EL65",
+    # Greece needs no entry: the archive's Greek labels do not describe their
+    # own rows, and `io_loader.MRIO_RELABEL` replaces them with the codes
+    # Eurostat serves (`run_mrio_labels.py`).
     # NUTS 2013 -> 2016, "recoded" (FR24 "recoded and relabelled")
     "FR21": "FRF2", "FR22": "FRE2", "FR23": "FRD2", "FR24": "FRB0",
     "FR25": "FRD1", "FR26": "FRC1", "FR30": "FRE1", "FR41": "FRF3",
@@ -747,7 +746,8 @@ MRIO_EUROSTAT_CODE = {
 # tables say. Eurostat recalculates its series on the new borders, so no code
 # it serves is the archive's territory, and nothing is fetched for them.
 MRIO_REDRAWN = {
-    "PL12": "NUTS 2016 discontinued it and split it into PL91 and PL92",
+    # PL12 is not here: the archive prints that code over PL91's rows, which
+    # Eurostat publishes (`io_loader.MRIO_RELABEL`, `run_mrio_labels.py`).
     "NL31": "NUTS 2024 moved its border with Zuid-Holland; Eurostat serves "
             "Utrecht as NL35",
     "NL33": "NUTS 2024 moved its border with Utrecht; Eurostat serves "
@@ -983,6 +983,19 @@ def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
     jobs = mrio_jobs(table_path, region, year, employment_of)
     jobs["archive_median_pct"] = EVIDENCE["employment_spillover_pct"]["median"]
     jobs["demand_median_pct"] = EVIDENCE["demand_spillover_pct"]["jobs_median"]
+    # How far that figure moves across the deposit's years, so the report can
+    # say it is the loaded year's (`run_employment_years.py`).
+    jobs["years_check"] = dict(EVIDENCE.get("employment_by_year") or {})
+    # If the archive puts this region's own output far below its employment,
+    # the account's multipliers inherit it, and the account says so.
+    if jobs.get("loaded_implausible"):
+        sat.notes = (f"{sat.notes} The archive's output for {region} and this "
+                     f"employment are not describing the same place: its jobs "
+                     f"per unit of output are "
+                     f"{jobs['loaded_implausible']:.0f} times the median "
+                     f"region's (`run_demand_spillovers.py`), so the "
+                     f"multipliers this account gives cannot be read with "
+                     f"confidence.")
     return sat, jobs
 
 

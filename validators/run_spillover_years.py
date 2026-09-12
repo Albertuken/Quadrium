@@ -74,7 +74,9 @@ def measure(year):
 
     fs = files(year)
     key = np.array([[f.stat().st_size, f.stat().st_mtime_ns] for f in fs])
-    cache = fs[0].with_name(f"_{fs[0].stem}_spill.npz")
+    # `_v2`: the region names changed when the archive's Greek and Finnish
+    # labels were corrected, and this cache stores figures by name.
+    cache = fs[0].with_name(f"_{fs[0].stem}_spill_v2.npz")
     if cache.exists():
         d = np.load(cache, allow_pickle=False)
         if np.array_equal(d["key"], key):

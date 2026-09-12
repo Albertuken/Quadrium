@@ -109,13 +109,13 @@ validators say so on the project's own fixtures.
 ```
 src/quadrium/     the engine: loaders, solvers, transformation, disaggregation,
                   balancing, validation, reporting
-validators/      127 runnable checks against published tables
+validators/      129 runnable checks against published tables
 data/             the tables they run on — see PROVENANCE.md
 docs/             the user guide
 outputs/          one finished run, published so it can be read without
                   installing anything
 examples/         four worked pilots
-tests/            71 unit tests
+tests/            72 unit tests
 ```
 
 ## What is not here

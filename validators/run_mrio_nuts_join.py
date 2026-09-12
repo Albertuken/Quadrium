@@ -48,6 +48,16 @@ Pairing them would understate Mazovia's final demand by whatever `PL92` holds,
 and nothing in the archive says what that is. So this file resolves 271 and
 refuses the 272nd by name.
 
+AND PL12'S COST WAS NOT PAID EITHER (2026-09-12)
+--------------------------------------------------
+The paragraph above says pairing the block's `PL12` with the side files' `PL91`
+would understate Mazovia. It would not: the rows the block calls `PL12` ARE
+PL91's. Their share of Poland is 16.8 % to 18.3 % across the deposit against
+Eurostat's 15.9 % to 17.2 % for PL91 and 21.0 % to 22.5 % for Mazowieckie
+whole. The label is the old code, the data are the new region, and the same is
+true of every Greek and Finnish label. See `run_mrio_labels.py`; the engine
+corrects them on load.
+
 SUPERSEDED AS AN UNBLOCKER, AND STILL TRUE AS A FINDING
 --------------------------------------------------------
 Written to unblock the side files, and it does not: `run_mrio_side_join.py`

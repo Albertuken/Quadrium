@@ -87,23 +87,42 @@ EVIDENCE = {
     # it, weighting the full 2018 inverse. On the 2,200 units that have both
     # employment and trade; the output figure is on those same units, which
     # is why it is not the 11.7 above. `run_employment_spillovers.py`.
-    "employment_spillover_pct": {"p10": 2.9, "median": 12.1, "p90": 47.1,
-                                 "units": 2200,
+    "employment_spillover_pct": {"p10": 3.0, "median": 11.4, "p90": 45.0,
+                                 "units": 2210,
                                  "output_median_same_units": 13.6,
-                                 "median_if_surveyed": 21.4,
+                                 "median_if_surveyed": 20.7,
                                  "unmeasured_median_pct": 0.2,
-                                 "unmeasured_p90_pct": 1.7},
+                                 "unmeasured_p90_pct": 1.5},
     # Region by region, weighted by the final demand for its own products (the
     # five categories the loaded table carries, exports included): the share
     # of the output and of the jobs that demand sets off elsewhere.
     # Without exports the output median is 12.1. `run_demand_spillovers.py`.
     "demand_spillover_pct": {"output_regions": 259, "output_p10": 3.4,
                              "output_median": 10.5, "output_p90": 20.6,
-                             "jobs_regions": 220, "jobs_p10": 5.1,
-                             "jobs_median": 10.8, "jobs_p90": 21.3,
+                             "jobs_regions": 221, "jobs_p10": 5.2,
+                             "jobs_median": 10.4, "jobs_p90": 20.0,
                              "output_median_if_surveyed": 19.8,
-                             "jobs_median_if_surveyed": 19.8,
+                             "jobs_median_if_surveyed": 19.4,
                              "output_median_without_exports": 12.1},
+    # And by year, 2008 to 2018, with Eurostat's employment for each: the
+    # archive's medians barely move, a region's weighted figure moves more
+    # than its output figure does, and regions keep their order less well
+    # (+0.71 against +0.86 for output). `run_employment_years.py`.
+    # A guard, and what it found. Employment over output, region by region,
+    # against the median region's: three regions stood at 25 to 40 times it on
+    # 2026-09-11, and that turned out to be the archive's own labels naming
+    # other regions (`run_mrio_labels.py`). With the labels corrected no region
+    # passes ten times and the largest is 5.1, so the guard fires on nothing --
+    # which is the point of keeping it. `run_demand_spillovers.py`.
+    "implausible_output": {"regions": [],
+                           "threshold_times_median": 10,
+                           "largest_times_median": 5.1},
+    "employment_by_year": {"unit_median_min": 10.4, "unit_median_max": 11.5,
+                           "demand_median_min": 9.7,
+                           "demand_median_max": 11.0,
+                           "region_range_median_pts": 5.1,
+                           "region_range_p90_pts": 12.1,
+                           "rank_2008_2018": 0.72},
 }
 
 

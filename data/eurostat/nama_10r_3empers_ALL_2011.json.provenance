@@ -1,0 +1,10 @@
+{
+  "dataset": "nama_10r_3empers",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10r_3empers?format=JSON&lang=EN&time=2011&unit=THS&wstatus=EMP",
+  "geo": null,
+  "year": 2011,
+  "bytes": 325334,
+  "sha256": "00b224862ca1196f72fbc3eed018d5562d984f50a5cc337625443737c21c2c2c",
+  "retrieved_at": "2026-09-11T20:25:51.531544+00:00",
+  "n_values": 20734
+}

@@ -159,6 +159,7 @@
   "identities.py::structural_zero_check",
   "io_loader.py::_assert_balances",
   "io_loader.py::_assert_ine_layout",
+  "io_loader.py::_implausible_output",
   "io_loader.py::_ine_block",
   "io_loader.py::_ine_codes",
   "io_loader.py::_ine_columns",
@@ -170,6 +171,7 @@
   "io_loader.py::_mrio_block",
   "io_loader.py::_mrio_files",
   "io_loader.py::_mrio_move_to_country",
+  "io_loader.py::_mrio_relabel",
   "io_loader.py::_mrio_side",
   "io_loader.py::_num",
   "io_loader.py::_open_workbook",
@@ -308,9 +310,9 @@
   "validation.py::validate_original",
   "validation.py::validate_scenario"
  ],
- "n_functions": 317,
- "floor": 307,
- "taken": "2026-09-11",
+ "n_functions": 319,
+ "floor": 309,
+ "taken": "2026-09-12",
  "_note": "Which of the functions the engine defines anything in the suite has ever ENTERED. Taken by library/tools/sweep_reachability.py, which installs a sys.setprofile hook through sitecustomize and runs every validator and the unit tests as separate processes. Keyed by file.py::name; Python 3.10 has no co_qualname, so same-named methods in one file share a key and the collision is recorded on the entry.",
  "classified": {
   "catalogue.py::available_years": "network",

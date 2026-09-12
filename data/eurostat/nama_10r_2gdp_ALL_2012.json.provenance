@@ -1,0 +1,10 @@
+{
+  "dataset": "nama_10r_2gdp",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10r_2gdp?format=JSON&lang=EN&time=2012&unit=MIO_EUR",
+  "geo": null,
+  "year": 2012,
+  "bytes": 25195,
+  "sha256": "3d5a63bb179664266562df895bdbdf2bda3b878fbec16a852404051f3ae8fbf9",
+  "retrieved_at": "2026-09-11T22:11:27.178116+00:00",
+  "n_values": 471
+}

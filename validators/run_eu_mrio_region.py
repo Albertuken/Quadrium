@@ -285,16 +285,19 @@ def main() -> int:
     # ---- every refusal, fired
     from quadrium.io_loader import LoaderError  # noqa: F401  (named in msgs)
 
-    check("the Greek codes are older than the ones a user types, so the test "
-          "below means something", "EL11" in regions and "EL51" not in regions,
-          "run_mrio_nuts_join.py: the block carries Greece on NUTS 2010")
+    check("the block's own Greek labels are not the ones the loader gives, so "
+          "the test below means something",
+          "EL11" in regions and "EL51" not in regions,
+          "`load_Z` here reads the block's own labels, which print EL11 over "
+          "Attiki's rows; the loader corrects them (run_mrio_labels.py)")
     for code, word, why in (
             ("UKI1", "no output", "empty in every file"),
             ("UKM3", "no output", "also empty; the count is four, not three"),
             ("FR10", "no other region", "Île-de-France trades with nobody in "
                                         "the archive, which no region does"),
-            ("EL51", "EL11", "the current code for Anatoliki Makedonia; the "
-                             "refusal lists the codes the archive uses"),
+            ("EL11", "EL51", "a NUTS 2010 code the archive prints over "
+                             "another region's rows; the refusal says which "
+                             "code to ask for instead (run_mrio_labels.py)"),
             ("XX99", "not in the archive", "a code nobody has")):
         ok, msg = refused(lambda c=code: load_eu_mrio_2018(MRIO, c), word)
         check(f"refused: {code} ({why})", ok, msg)

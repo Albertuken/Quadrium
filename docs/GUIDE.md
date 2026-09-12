@@ -450,6 +450,20 @@ never from the filename. What each loader decided is printed in your report
 under **What the loader decided when reading this file**, so you can check it
 made the right call.
 
+**Nineteen of the archive's own labels name the wrong region, and the engine
+corrects them.** The archive prints Greece's NUTS 2010 codes over data that are
+in NUTS 2013 order, Finland's shifted by one, and `PL12` over the rows of PL91
+(Warsaw and its ring). The rows it calls `EL11` are Attiki's; the ones it calls
+`EL30` are the Ionian Islands'; `FI1B` is Åland. Two sources say so and agree in
+every year of the deposit: the archive's own final-demand and value-added files
+carry the regions in that order, and each region's share of its country matches
+Eurostat's regional GDP within 6 % that way and is out by a factor of 26 to 71
+the other way. So when you ask for `ES51` you get Catalonia, and when you ask
+for `EL30` you get Attiki — not what the archive prints there. The table says
+which label the archive printed over its rows, nothing in the data is moved,
+and a NUTS 2010 Greek code is refused with the code to ask for instead
+(`validators/run_mrio_labels.py`).
+
 **A table for almost any EU region, from the European MRIO.** Huang and
 Koutroumpis (2023) estimated input-output tables for 272 NUTS-2 regions,
 linked by trade. `eu_mrio` gives you one region's own table, 10 sectors, for
@@ -496,12 +510,13 @@ report says so beside it. And Eurostat serves the NUTS 2024 codes, while the
 archive codes Greece on NUTS 2010 and France and Poland on NUTS 2013. Where
 Eurostat's own correspondence tables say a code changed and the territory did
 not, the engine fetches the region under the code Eurostat serves and says so:
-FR21 is fetched as FRF2, EL11 as EL51. That covers 35 regions. Where a border
-moved it refuses, because a figure for a different territory would pair one
-region's employment with another's output: PL12 (split in 2016), NL31 and NL33,
-and PT16, PT17 and PT18 (redrawn in 2024). Eurostat carries no region of the
-United Kingdom at all. In all, 229 of the archive's 268 regions with data get
-their employment from Eurostat (`validators/run_mrio_eurostat_codes.py`). For
+FR21 is fetched as FRF2. That covers 26 regions, French and Polish; Greece
+needs none, because its labels are corrected before anything is fetched. Where
+a border moved it refuses, because a figure for a different territory would
+pair one region's employment with another's output: NL31 and NL33, and PT16,
+PT17 and PT18 (redrawn in 2024). Eurostat carries no region of the United
+Kingdom at all. In all, 230 of the archive's 268 regions with data get their
+employment from Eurostat (`validators/run_mrio_eurostat_codes.py`). For
 the rest, give the figures yourself in the `satellites` sheet. If that sheet
 declares `employment`, its figures win and nothing is fetched
 (`validators/run_eu_mrio_employment.py`).
@@ -511,7 +526,7 @@ Eurostat's file carries every region, so the engine weights the whole archive
 by jobs and the report adds a table to "What a one-region table leaves out":
 for each sector, the share of its employment multiplier that runs through
 other regions, as the archive stands and at the surveys' level of domestic
-trade. Across the archive that share is a median 12.1 % (13.6 % for output on
+trade. Across the archive that share is a median 11.4 % (13.6 % for output on
 the same units), and it varies by sector much more than the median suggests:
 real estate's jobs leak twice as far as its output, public services' half as
 far. The regions without Eurostat employment count nothing, and the report
@@ -524,6 +539,22 @@ actually have (households, government, investment, inventories and exports):
 of all the output and all the jobs that demand sets off, the share elsewhere.
 For Catalonia that is 9.6 % of the output and 9.7 % of the jobs, against a
 median region's 10.5 % and 10.8 % (`validators/run_demand_spillovers.py`).
+
+These job figures are the loaded year's. From 2008 to 2018 the archive's
+medians barely move, but a region's figure moves a median 5.4 points between
+its highest and lowest year, and the report says so
+(`validators/run_employment_years.py`).
+
+**A guard on the employment figures, and what it caught.** The engine compares
+each region's jobs per unit of output with the median region's, and names any
+that is more than ten times it: such a figure means the archive's output and
+Eurostat's employment are not describing the same place. On 2026-09-11 it
+named three, Helsinki-Uusimaa, Attiki and Kentriki Makedonia, at 25 to 40
+times while the next region was at 5. That is how the archive's mislabelled
+Greek and Finnish regions were found. With the labels corrected the largest is
+5 times the median and the guard names nobody, which is what it is for. It
+still runs on every report: if it ever names a region, the report says so and
+says the figures that pass through it cannot be read with confidence.
 
 Read three things before you use it:
 

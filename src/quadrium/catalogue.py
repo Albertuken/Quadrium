@@ -275,7 +275,7 @@ def _mrio_sources(folder: Path) -> list[Source]:
     import openpyxl
 
     from .io_loader import (LoaderError, _MRIO_S, _MRIO_SECTORS, _MRIO_YEARS,
-                            _mrio_files, _mrio_side)
+                            _mrio_files, _mrio_relabel, _mrio_side)
     out: list[Source] = []
     # Every year of the deposit that is in the folder, each under its own id.
     for year in _MRIO_YEARS:
@@ -290,7 +290,9 @@ def _mrio_sources(folder: Path) -> list[Source]:
             fd_head, FD = _mrio_side(fdf, "rows")
         except (LoaderError, OSError, ValueError, StopIteration, KeyError):
             continue
-        labels = [str(x) for x in head[1:] if x is not None]
+        # Corrected for Greece and Finland, as the loader corrects them: the
+        # catalogue must list the region a user can then load.
+        labels = _mrio_relabel([str(x) for x in head[1:] if x is not None])
         S = _MRIO_S
         regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
         if (len(regions) * S != len(labels) or FD.shape[0] != len(labels)

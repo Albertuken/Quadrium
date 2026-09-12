@@ -14,11 +14,14 @@ the 2021 split of HR04) -- and Eurostat serves NUTS 2024.
 
 Eurostat publishes a correspondence table for every revision, and each one
 says what happened to each code. Where every step is a new code for the SAME
-territory, the engine fetches the current code and says so: 35 regions, 21
-French, 9 Greek and 5 Polish. Where a border moved, it refuses: PL12, split in
-2016, and NL31, NL33, PT16, PT17 and PT18, redrawn in 2024. The United
+territory, the engine fetches the current code and says so: 26 regions, 21
+French and 5 Polish. Greece needs no translation: nineteen of the archive's
+labels name another region altogether, and `run_mrio_labels.py` corrects them
+before anything is fetched, which leaves Greece on the codes Eurostat serves
+and turns the archive's `PL12` into PL91. Where a border moved, the engine
+refuses: NL31, NL33, PT16, PT17 and PT18, redrawn in 2024. The United
 Kingdom's 33 regions are not in the release at all, and no correspondence can
-supply them. So 229 of the 268 get employment from Eurostat.
+supply them. So 230 of the 268 get employment from Eurostat.
 
 The engine holds the two lists as constants, `config.MRIO_EUROSTAT_CODE` and
 `config.MRIO_REDRAWN`, and never reads these tables at run time. This file
@@ -31,7 +34,7 @@ WHAT IS CHECKED
 - every refused region was split or had its border moved, by the tables' own
   account, and its old code carries nothing in the release;
 - the release carries no region of the United Kingdom;
-- with the archive present, its 268 regions add up: 194 + 35 + 33 + 6.
+- with the archive present, its 268 regions add up: 204 + 26 + 33 + 5.
 
 WHAT IT CANNOT CHECK EVERYWHERE, AND SAYS
 -------------------------------------------
@@ -259,10 +262,10 @@ def main() -> int:
               f"{len(own)} under their own code, {len(translated)} "
               f"translated, {len(british)} British, {len(redrawn)} redrawn: "
               f"{len(codes)}")
-        check("which is 229 of 268 with employment from Eurostat, as the guide "
+        check("which is 230 of 268 with employment from Eurostat, as the guide "
               "says",
               (len(own), len(translated), len(british), len(redrawn),
-               len(codes)) == (194, 35, 33, 6, 268),
+               len(codes)) == (204, 26, 33, 5, 268),
               f"{len(own) + len(translated)} of {len(codes)}")
         shifted = []
         for c in own:

@@ -5427,6 +5427,67 @@ def test_the_refusals_the_EUROPEAN_MRIO_makes_when_deformed():
                   "mrio:eu2018:AA11", "mrio:eu2018:AA12"], ", ".join(got))
 
 
+def test_the_archives_greek_and_finnish_labels_are_corrected():
+    """The archive prints Greece's and Finland's labels over other rows.
+
+    Measured against the archive's own side files and Eurostat's regional GDP
+    (`run_mrio_labels.py`): the rows the block calls `EL11` are Attiki's. The
+    loader relabels them, so a user who asks for `EL30` gets those rows, and a
+    NUTS 2010 code is refused with the code to ask for instead.
+    """
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.io_loader import (LoaderError, _MRIO_SECTORS, _mrio_relabel,
+                                    load_eu_mrio)
+
+    sectors = list(_MRIO_SECTORS)
+    labels = [f"{r}-{s}" for r in ("EL11", "EL30") for s in sectors]
+    n = len(labels)
+    i, j = np.indices((n, n))
+    Z = 1.0 + (i * 7 + j * 3) % 5
+    Z[:10] *= 3.0                       # the rows the block calls EL11
+    X = Z.sum(1) + 75.0
+    FD = np.column_stack([np.full(n, v) for v in (50, 10, 10, 5, 1, 4)] + [X])
+    VA = np.vstack([np.full(n, 2.0), X - Z.sum(0) - 6.0, np.full(n, 3.0), X])
+    tmp = Path(tempfile.mkdtemp(prefix="quadrium_labels_"))
+    for name, head, body, rows in (
+            ("MRIO_2018_272regions.xlsx", labels, Z, labels),
+            ("Final_demand_2018.xlsx", ["HFCE", "NPISH", "GGFC", "GFCF",
+                                        "INVNT", "EX", "TOTAL"], FD, labels),
+            ("TAXSUB_VA_2018.xlsx", labels, VA,
+             ["TAXSUB", "VA", "IM", "INPUT"])):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([None] + list(head))
+        for lab, r in zip(rows, body):
+            ws.append([lab] + [float(x) for x in r])
+        wb.save(tmp / name)
+
+    check("the relabelling moves Greece and Finland and nothing else",
+          _mrio_relabel(["EL11-A", "EL30-A", "FI1B-A", "ES51-A", "FR21-A"])
+          == ["EL30-A", "EL62-A", "FI20-A", "ES51-A", "FR21-A"],
+          "EL11 is Attiki, EL30 the Ionian Islands, FI1B Åland")
+
+    t = load_eu_mrio(tmp, "EL30", 2018)
+    check("asking for EL30 gives the rows the archive prints as EL11",
+          np.array_equal(t.X, X[:10]) and t.table_id.endswith("EL30"),
+          f"output {t.X.sum():,.0f} against {X[:10].sum():,.0f}")
+    check("and the table says whose label the archive printed over them",
+          "EL11" in (t.notes or "") and "EL30" in (t.notes or ""),
+          (t.notes or "")[-160:])
+
+    try:
+        load_eu_mrio(tmp, "EL11", 2018)
+    except LoaderError as exc:
+        check("a NUTS 2010 Greek code is refused with the code to ask for",
+              "EL51" in str(exc), str(exc)[:120])
+    else:
+        check("a NUTS 2010 Greek code is refused with the code to ask for",
+              False, "it loaded")
+
+
 def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     """A region's employment account, from a kept Eurostat download, offline.
 
@@ -5585,6 +5646,25 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     ir = cfg["table"].interregional
     got = (ir.get("share_of_demand"), ir.get("share_of_demand_if_surveyed"),
            jb.get("share_of_demand"), jb.get("share_of_demand_if_surveyed"))
+    # Regions whose output in the archive is far below what their employment
+    # implies are named, not dropped: the owner's choice on 2026-09-11.
+    from quadrium.io_loader import _implausible_output
+    flagged = _implausible_output({"A1": 1.0, "A2": 1.2, "A3": 40.0,
+                                   "A4": 0.9, "A5": 1.1})
+    check("a region with more than ten times the median region's jobs per "
+          "unit of output is named, and only that one",
+          list(flagged) == ["A3"] and abs(flagged["A3"] - 40.0 / 1.1) < 1e-9,
+          f"{flagged}")
+    check("and the jobs record says which regions those are and how much of "
+          "the jobs elsewhere fall in them, here none",
+          jb.get("implausible") == [] and jb.get("from_implausible") == 0.0
+          and jb.get("loaded_implausible") is None,
+          f"{jb.get('implausible')}, {jb.get('from_implausible')}")
+    check("and the jobs record carries how far that figure moves across the "
+          "deposit's years, as EVIDENCE records it",
+          jb.get("years_check") == EVIDENCE.get("employment_by_year")
+          and bool(jb.get("years_check")),
+          f"{jb.get('years_check')}")
     check("weighted by the final demand for the region's products, the share "
           "of the output and of the jobs set off elsewhere is the direct one, "
           "as the archive stands and at the surveys' level",

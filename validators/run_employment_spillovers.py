@@ -7,34 +7,35 @@ WHY
 OUTPUT multiplier: the part of an impulse that travels to other regions and
 comes back. `mrio_employment` attaches Eurostat's employment to a region of
 the European MRIO, and the question a reader of an employment multiplier asks
-is the same one in jobs. Eurostat publishes employment for 229 of the archive's
-268 regions with data (`run_mrio_eurostat_codes.py`), so the whole system can
-be weighted by jobs.
+is the same one in jobs. Eurostat publishes employment for 230 of the archive's
+268 regions with data (`run_mrio_eurostat_codes.py`, and `run_mrio_labels.py`
+for the nineteen labels the archive gets wrong), so the whole system can be
+weighted by jobs.
 
 THE MEASUREMENT
 -----------------
 For each unit j, the jobs its final demand creates are `c L[:, j]`, where `c`
 is employment over output for every unit that has both. Split into the rows of
 j's own region and the rest, exactly as the output version splits the column
-sum. On the 2,200 units of the 220 regions that have employment and trade with
+sum. On the 2,210 units of the 221 regions that have employment and trade with
 anyone (2018):
 
-    jobs that land in other regions    p10  2.9 %   median 12.1 %   p90 47.1 %
+    jobs that land in other regions    p10  3.0 %   median 11.4 %   p90 45.0 %
     output, on the same units          p10  4.7 %   median 13.6 %   p90 42.8 %
 
 **The count is nearly complete.** The regions without employment -- the United
-Kingdom's, and six that were redrawn -- hold a median 0.2 % of a unit's output
-multiplier, 1.7 % at the ninetieth percentile. What is missing from the job
+Kingdom's, and five that were redrawn -- hold a median 0.2 % of a unit's output
+multiplier, 1.5 % at the ninetieth percentile. What is missing from the job
 count is small, and it is measured rather than assumed.
 
 **Jobs leak a little less than output at the median, and the sectors differ
 more than the medians do.** Real estate's jobs leak twice as far as its output
-(28.3 % against 14.3 %); public services and leisure half as far (5.2 against
-9.6 %; 5.9 against 12.0 %). An employment multiplier from a one-region table
+(27.5 % against 14.4 %); public services and leisure half as far (5.1 against
+9.6 %; 5.7 against 11.9 %). An employment multiplier from a one-region table
 is short by a different amount in each sector, and not by the output figure.
 
 **At the surveys' level of domestic trade** (`run_spillover_sensitivity.py`,
-the same factor, from `EVIDENCE`) the median is 21.4 %, against 24.6 % for
+the same factor, from `EVIDENCE`) the median is 20.7 %, against 24.6 % for
 output on the same units. The archive's own figure is a floor here for the
 reason it is one for output.
 
@@ -95,7 +96,7 @@ def main() -> int:
 
     from quadrium.config import MRIO_EUROSTAT_CODE, MRIO_REDRAWN
     from quadrium.eurostat import _Cube
-    from quadrium.io_loader import _mrio_move_to_country
+    from quadrium.io_loader import _mrio_move_to_country, _mrio_relabel
     from quadrium.regionalise import EVIDENCE
 
     ev = EVIDENCE.get("employment_spillover_pct")
@@ -109,7 +110,10 @@ def main() -> int:
         "axis", ROOT / "validators" / "run_mrio_axis_scale.py")
     axis = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(axis)
+    # `load_Z` returns the block's own labels; Greece's and Finland's do not
+    # describe their rows, and employment is attached by label.
     Z, labels = axis.load_Z()
+    labels = _mrio_relabel(labels)
     _, fd_head, FD = axis.load_side(axis.FD, "rows")
     X = FD[:, fd_head.index("TOTAL")]
     regions = list(dict.fromkeys(l.split("-", 1)[0] for l in labels))
@@ -132,8 +136,8 @@ def main() -> int:
             emp[ri * S:(ri + 1) * S] = v
     full = np.array([np.isfinite(emp[r * S:(r + 1) * S]).all()
                      for r in range(R)])
-    check("229 regions carry employment for all ten sectors",
-          int(full.sum()) == 229, f"{int(full.sum())} of {R}")
+    check("230 regions carry employment for all ten sectors",
+          int(full.sum()) == 230, f"{int(full.sum())} of {R}")
 
     island = np.array([
         (Z[r * S:(r + 1) * S, :].sum()
@@ -177,7 +181,7 @@ def main() -> int:
           and u90 < 5,
           f"median {u50} %, p90 {u90} % of a unit's output multiplier falls "
           f"in them")
-    check("a one-region table omits a median 12.1 % of the jobs, as EVIDENCE "
+    check("a one-region table omits a median 11.4 % of the jobs, as EVIDENCE "
           "records", (n, p10, p50, p90) == (ev["units"], ev["p10"],
                                              ev["median"], ev["p90"]),
           f"{n} units: p10 {p10} %, median {p50} %, p90 {p90} %")
@@ -203,7 +207,7 @@ def main() -> int:
     js4, os4, _, _, _, per_cat4 = measure(
         _mrio_move_to_country(Z, regions, {r: f for r in live}, S))
     q50 = round(100 * float(np.median(js4)), 1)
-    check("at the surveys' level of domestic trade, 21.4 % of the jobs",
+    check("at the surveys' level of domestic trade, 20.7 % of the jobs",
           q50 == ev["median_if_surveyed"],
           f"factor {f:g}: jobs {q50} %, output "
           f"{round(100 * float(np.median(os4)), 1)} %")

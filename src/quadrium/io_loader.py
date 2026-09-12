@@ -2099,8 +2099,54 @@ def _mrio_files(path: Path | str,
     return found
 
 
+# THE ARCHIVE'S GREEK, FINNISH AND ONE POLISH LABEL DO NOT DESCRIBE THEIR ROWS.
+# The block prints Greece's NUTS 2010 codes in NUTS 2010 order over data that
+# are in NUTS 2013 order, and Finland's shifted by one. Two independent
+# sources say so, measured 2026-09-12 (`run_mrio_labels.py`): the archive's
+# OWN side files carry the second order region by region, and Eurostat's
+# regional GDP matches it in all eleven years -- a region's share of its
+# country is within 5 % under this mapping and out by up to 64 times under
+# the block's labels. So the rows the block calls EL11 are Attiki's, and this
+# loader labels them EL30. Every other country's labels describe their rows.
+MRIO_RELABEL = {
+    # Greece: the block's NUTS 2010 code -> the region the rows belong to
+    "EL11": "EL30", "EL12": "EL41", "EL13": "EL42", "EL14": "EL43",
+    "EL21": "EL51", "EL22": "EL52", "EL23": "EL53", "EL24": "EL54",
+    "EL25": "EL61", "EL30": "EL62", "EL41": "EL63", "EL42": "EL64",
+    "EL43": "EL65",
+    # Finland: shifted by one, Åland first. FI19 keeps its own rows, and is
+    # listed so the mapping covers the country whole.
+    "FI19": "FI19",
+    "FI1B": "FI20", "FI1C": "FI1B", "FI1D": "FI1C", "FI20": "FI1D",
+    # Poland: the block's PL12 is the whole of Mazowieckie's old code, but the
+    # rows are PL91's -- Warsaw and its ring. Its share of Poland is 16.8 % to
+    # 18.3 % across the deposit against Eurostat's 15.9 % to 17.2 % for PL91,
+    # and 21.0 % to 22.5 % for Mazowieckie whole; the side files say PL91 too.
+    "PL12": "PL91",
+}
+# What a Greek NUTS 2010 code means, for the user who types one: the region it
+# names, under the code Eurostat and this loader now use for it.
+_MRIO_GREEK_2010 = {"EL11": "EL51", "EL12": "EL52", "EL13": "EL53",
+                    "EL14": "EL61", "EL21": "EL54", "EL22": "EL62",
+                    "EL23": "EL63", "EL24": "EL64", "EL25": "EL65"}
+
+
+def _mrio_relabel(labels: list[str]) -> list[str]:
+    """The archive's unit labels with the Greek and Finnish ones corrected."""
+    out = []
+    for lab in labels:
+        region, _, rest = lab.partition("-")
+        fixed = MRIO_RELABEL.get(region, region)
+        out.append(f"{fixed}-{rest}" if rest else fixed)
+    return out
+
+
 def _mrio_block(path: Path) -> tuple[np.ndarray, list[str]]:
-    """The 2,720 x 2,720 block and its labels, parsed once per process."""
+    """The 2,720 x 2,720 block and its labels, parsed once per process.
+
+    The labels come back CORRECTED for Greece and Finland (`MRIO_RELABEL`):
+    the archive prints those two countries' labels over other regions' rows.
+    """
     import openpyxl
 
     st = path.stat()
@@ -2129,6 +2175,7 @@ def _mrio_block(path: Path) -> tuple[np.ndarray, list[str]]:
         raise LoaderError(f"{path.name}: the row labels are not the column "
                           f"labels in the same order, so the block is not "
                           f"square in the sense a coefficient needs")
+    labels = _mrio_relabel(labels)
     _MRIO_CACHE.clear()
     _MRIO_CACHE[key] = (Z, labels)
     return Z, labels
@@ -2195,6 +2242,27 @@ def _mrio_move_to_country(Z: np.ndarray, regions: list[str], factors: dict,
     return Zn
 
 
+# A region whose jobs per unit of output are more than this many times the
+# median region's has output in the archive far below what its employment
+# implies. Measured on 2018: FI1B, EL30 and EL12 at 25 to 40 times, the next
+# region at 5.1 (`run_demand_spillovers.py`). They are named and warned
+# about, not dropped -- the owner's choice of 2026-09-11.
+IMPLAUSIBLE_TIMES_MEDIAN = 10
+
+
+def _implausible_output(per_region: dict,
+                        factor: float = IMPLAUSIBLE_TIMES_MEDIAN) -> dict:
+    """`{region: times the median}` for the regions whose jobs per unit of
+    output exceed `factor` times the median region's, in code order."""
+    if not per_region:
+        return {}
+    med = float(np.median(list(per_region.values())))
+    if med <= 0:
+        return {}
+    return {r: v / med for r, v in sorted(per_region.items())
+            if v > factor * med}
+
+
 # The full system's columns for a loaded region, as the archive stands and at
 # the surveys' level, kept per process like the block itself: `mrio_jobs`
 # weights them by jobs once every region's employment is known, and the two
@@ -2225,6 +2293,7 @@ def mrio_jobs(path: Path | str, region: str, year: int,
     c = np.zeros(len(X_all))
     known = np.zeros(len(X_all), bool)
     counted = 0
+    per_region = {}
     for j, r in enumerate(regions):
         v = employment_of(r)
         if v is None:
@@ -2235,6 +2304,8 @@ def mrio_jobs(path: Path | str, region: str, year: int,
                          0.0)
         known[sl] = True
         counted += 1
+        if x.sum() > 0:
+            per_region[r] = float(np.sum(v)) / float(x.sum())
     k = regions.index(region)
     s = slice(k * S, (k + 1) * S)
 
@@ -2257,7 +2328,21 @@ def mrio_jobs(path: Path | str, region: str, year: int,
     per, agg = shares(Ls)
     per4, agg4 = shares(Ls4)
     unmeasured = Ls[~known].sum(0) / Ls.sum(0)
-    return {"share_of_demand": by_demand(Ls),
+
+    # REGIONS WHOSE OUTPUT THE ARCHIVE PUTS FAR BELOW THEIR EMPLOYMENT, and how
+    # much of the jobs this region's demand creates elsewhere falls in them.
+    # Every purchase from such a region counts many jobs, so a neighbour's
+    # figure turns on them; they are named and counted, not dropped.
+    flagged = _implausible_output(per_region)
+    rows = np.repeat([q in flagged and q != region for q in regions], S)
+    jd = c * (Ls @ y)
+    outside = float(jd.sum() - jd[s].sum())
+    from_flagged = float(jd[rows].sum() / outside) if outside > 0 else 0.0
+    return {"implausible": [[r, float(t)] for r, t in flagged.items()],
+            "from_implausible": from_flagged,
+            "loaded_implausible": (float(flagged[region]) if region in flagged
+                                   else None),
+            "share_of_demand": by_demand(Ls),
             "share_of_demand_if_surveyed": by_demand(Ls4),
             "share": agg, "share_by_sector": [float(x) for x in per],
             "share_if_surveyed": agg4,
@@ -2372,11 +2457,17 @@ def load_eu_mrio(path: Path | str, region: str,
         listing = (f"Its {region[:2]} regions are: {', '.join(same)}." if same
                    else f"Its countries are: "
                         f"{', '.join(sorted({r[:2] for r in regions}))}.")
+        greek = _MRIO_GREEK_2010.get(region)
         raise LoaderError(
             f"region {region!r} is not in the archive. {listing} The block "
-            f"codes France on NUTS 2013 and Greece on NUTS 2010, so a current "
-            f"code can be absent under an older one; Eurostat's NUTS "
-            f"correspondence tables give the older code.")
+            f"codes France on NUTS 2013, so a current code can be absent "
+            f"under an older one; Eurostat's NUTS correspondence tables give "
+            f"the older code."
+            + (f" {region} is NUTS 2010's code for a Greek region that is "
+               f"{greek} now, which is what to ask for. The archive prints "
+               f"{region} over ANOTHER region's rows, and this loader corrects "
+               f"its Greek and Finnish labels (`run_mrio_labels.py`)."
+               if greek else ""))
 
     fd_head, FD = _mrio_side(fdf, "rows")
     va_head, VA = _mrio_side(vaf, "columns")
@@ -2533,8 +2624,14 @@ def load_eu_mrio(path: Path | str, region: str,
 
     total = float(X.sum())
     neg = [sectors[j] for j in range(S) if X[j] - Z_all[s][j].sum() < 0]
+    printed_as = {v: k for k, v in MRIO_RELABEL.items()}.get(region)
     notes = (
-        f"NEITHER IDENTITY CLOSES IN THIS ARCHIVE. For {region} the row "
+        (f"THE ARCHIVE PRINTS `{printed_as}` OVER THESE ROWS, and they are "
+         f"{region}'s. Its own side files carry them in that order and "
+         f"Eurostat's regional GDP agrees in every year of the deposit, so "
+         f"this loader corrects the Greek and Finnish labels; nothing in the "
+         f"data is moved (`run_mrio_labels.py`). " if printed_as else "")
+        + f"NEITHER IDENTITY CLOSES IN THIS ARCHIVE. For {region} the row "
         f"residue is {100 * np.abs(res_y).sum() / total:.1f} % of output and "
         f"the column residue {100 * np.abs(res_v).sum() / total:.1f} %, in "
         f"absolute value; both are carried in a RESIDUAL column and row "

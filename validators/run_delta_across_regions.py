@@ -150,15 +150,31 @@ def fit_delta(A_nat, X_nat, part):
     base = math.log2(1.0 + share)
     s = (Xr / Xr.sum()) / (X_nat / X_nat.sum())
     s = np.where(np.isfinite(s) & (s > 0), s, 1e-12)
-    best = None
+    # Delta is the value that minimises SOME criterion, and the criterion is a
+    # choice. CORE_034 fits on mu1 and this file followed it; published work
+    # that fits on several reports different optima by criterion, so a spread
+    # in fitted delta is partly a spread in what it was fitted to. Three are
+    # carried here so the question can be answered instead of assumed:
+    # mu1 and mu2 are CORE_034's own two, and the third is the plain mean
+    # absolute error over sectors, which weights every sector alike.
+    best = best2 = best_mae = None
     for d in DELTAS:
-        m1, m2 = mu(multipliers(A_nat * flq(s, base ** d)), true)
+        est = multipliers(A_nat * flq(s, base ** d))
+        m1, m2 = mu(est, true)
+        ok = true > 0
+        mae = float(np.mean(np.abs(est[ok] - true[ok]) / true[ok]) * 100.0)
         if best is None or abs(m1) < abs(best[1]):
             best = (d, m1, m2)
+        if best2 is None or abs(m2) < abs(best2[1]):
+            best2 = (d, m2)
+        if best_mae is None or mae < best_mae[1]:
+            best_mae = (d, mae)
     at_default = mu(multipliers(A_nat * flq(s, base ** FINLAND_MODE)), true)[0]
     slq_m1 = mu(multipliers(A_nat * slq_only(s, len(Xr))), true)[0]
     return {"share": share * 100.0, "delta": best[0], "mu1": best[1],
-            "mu2": best[2], "mu1_default": at_default, "mu1_slq": slq_m1}
+            "mu2": best[2], "mu1_default": at_default, "mu1_slq": slq_m1,
+            "delta_mu2": best2[0], "delta_mae": best_mae[0],
+            "mae": best_mae[1]}
 
 
 def main() -> int:
@@ -196,6 +212,31 @@ def main() -> int:
           f"min {d.min():.2f}, median {np.median(d):.2f}, max {d.max():.2f}")
     print(f"    {'Catalonia, measured against IDESCAT':<44}{CATALONIA[1]:.2f}")
     print(f"    {'Finland, modal over 20 regions (CORE_034)':<44}{FINLAND_MODE:.2f}")
+
+    # Does the spread survive the criterion? A delta is whatever minimises
+    # something, and if the three criteria disagreed region by region, part of
+    # "delta varies by a factor of four" would be "delta depends on what you
+    # fit it to". Asked outright rather than assumed.
+    print()
+    print(f"    {'delta fitted on':<30}{'min':>7}{'median':>8}{'max':>7}"
+          f"{'spread':>9}")
+    spans = {}
+    for lbl, key in (("mu1 -- CORE_034's, and ours", "delta"),
+                     ("mu2 -- CORE_034's other one", "delta_mu2"),
+                     ("mean absolute error", "delta_mae")):
+        v = np.array([fits[r][key] for r in REGIONS], dtype=float)
+        spans[key] = float(v.max() - v.min())
+        print(f"    {lbl:<30}{v.min():>7.2f}{float(np.median(v)):>8.2f}"
+              f"{v.max():>7.2f}{spans[key]:>9.2f}")
+    check("the spread in delta is not an artefact of the criterion it is "
+          "fitted on",
+          min(spans.values()) >= 0.20,
+          "on all three criteria the fitted deltas span at least "
+          f"{min(spans.values()):.2f} of the unit interval "
+          f"({', '.join(f'{k} {v:.2f}' for k, v in spans.items())}). The "
+          "criterion moves individual regions and does not close the range, "
+          "so a single delta is no more defensible under one of them than "
+          "under another")
 
     check("the FLQ at a fitted delta beats the rest of the family on every region",
           all(abs(fits[r]["mu1"]) < 1.0 for r in REGIONS)

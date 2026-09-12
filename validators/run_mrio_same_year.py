@@ -114,7 +114,13 @@ def main() -> int:
         "axis", ROOT / "validators" / "run_mrio_axis_scale.py")
     axis = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(axis)
+    from quadrium.io_loader import _mrio_relabel
+
+    # `load_Z` reads the block's own labels and `_mrio_block` below returns
+    # them corrected, so both sides are read the same way before comparing
+    # (`run_mrio_labels.py`).
     Z18, lab18 = axis.load_Z()
+    lab18 = _mrio_relabel(lab18)
     _, fh18, FD18 = axis.load_side(axis.FD, "rows")
     _, vh18, VA18 = axis.load_side(axis.VA, "columns")
     X18 = FD18[:, fh18.index("TOTAL")]

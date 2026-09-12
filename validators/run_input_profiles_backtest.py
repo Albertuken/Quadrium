@@ -154,6 +154,10 @@ conclusion that borrowing is not an improvement is unchanged.
 
 Run:
     python3 validators/run_input_profiles_backtest.py
+    python3 validators/run_input_profiles_backtest.py --all
+        balances every table rather than France 2021 alone -- minutes, not
+        seconds -- and writes data/_profile_balancing.json, which the default
+        run then quotes with its date
 """
 
 from __future__ import annotations
@@ -179,6 +183,14 @@ FINE = {"FR 2021": "naio_10_cp1700_FR_2021.json",
         "HU 2022": "naio_10_cp1700_HU_2022.json",
         "HU 2023": "naio_10_cp1700_HU_2023.json"}
 COARSE = "naio_10_cp1700_ES_2022.json"
+# What balancing does to a profile, over every table rather than one. Taken by
+# this file under `--all`, which balances 96 profiled scenarios and takes
+# minutes where the suite takes seventy seconds, and read back by the default
+# run. Same shape as data/_refusal_coverage.json: a slow measurement recorded
+# once, and a fast check that quotes it WITH ITS DATE instead of a number
+# somebody typed. Until 2026-09-12 the four-table figures here were literals in
+# the check messages, indistinguishable in the output from what was computed.
+RECORD = ROOT / "data" / "_profile_balancing.json"
 FAIL: list[str] = []
 
 
@@ -432,8 +444,22 @@ def main() -> int:
     # docstring; the effect is the same in each — seed 4.36/14.70/3.17/2.25
     # against balanced 12.21/14.86/6.70/3.67 for FR/BE/HU/SK.
     LIVE = "FR 2021"   # keyed by country-year since Hungary supplies four
+    ALLT = "--all" in sys.argv
+    TARGETS = [g for g in FINE if g in tables] if ALLT else [LIVE]
+    REC = (json.loads(RECORD.read_text())
+           if RECORD.exists() and not ALLT else None)
+
+    def over_tables(text: str) -> str:
+        """What the other tables say, quoted from the record and dated."""
+        if ALLT:
+            return ""
+        if REC is None:
+            return (f"; the other tables are not recorded — take them with "
+                    f"`{Path(__file__).name} --all`")
+        return "; " + text.format(**REC["pooled"], taken=REC["taken"])
+
     paired, refused, noop, head = [], 0, 0, []
-    for r in [x for x in live if x["geo"] == LIVE]:
+    for r in [x for x in live if x["geo"] in TARGETS]:
         geo, parent, kids = r["geo"], r["parent"], None
         fine = tables[geo]
         kids = [c for c in fine.sector_codes
@@ -487,18 +513,22 @@ def main() -> int:
         except Exception:
             pass
 
-    n_live = len([x for x in live if x["geo"] == LIVE])
+    n_live = len([x for x in live if x["geo"] in TARGETS])
     check("without a profile, balancing is a no-op",
           noop >= n_live * 0.9,
           f"the delivered table matches the seed in {noop} of {n_live} "
-          f"({LIVE}; 51 of 51 across all four) — a "
+          f"({', '.join(TARGETS) if ALLT else LIVE}"
+          + over_tables("{noop} of {n} over {tables} tables, recorded {taken}")
+          + ") — a "
           f"proportional split already satisfies every margin, so every number "
           f"in run_split_backtest.py and run_split_screen.py is a DELIVERED "
           f"number, not a seed number")
 
     check("but the profiled scenario is refused outright in a third of cases",
           refused > n_live * 0.2,
-          f"{refused} of {n_live} in {LIVE}, 19 of 54 across all four — "
+          f"{refused} of {n_live} in "
+          f"{'all ' + str(len(TARGETS)) + ' tables' if ALLT else LIVE}"
+          + over_tables("{refused} of {n} over {tables} tables") + " — "
           f"ScenarioInfeasible or BalancingError. "
           f"The internal block has to absorb whatever the profiled column "
           f"leaves over, and often it cannot")
@@ -516,9 +546,10 @@ def main() -> int:
               f"the seed is {np.median(ps):.2f} % and the delivered table "
               f"{np.median(pb):.2f} %, against {np.median(nb):.2f} % for doing "
               f"nothing — a wash. The profile still edges it in "
-              f"{int((pb < nb).sum())} of {len(paired)} here and in 30 of 56 "
-              f"over all seven tables, but by margins the medians do not "
-              f"show")
+              f"{int((pb < nb).sum())} of {len(paired)}"
+              + (" over all of them" if ALLT else " here")
+              + over_tables("{better} of {paired} over {tables} tables")
+              + ", but by margins the medians do not show")
         check("because the whole adjustment lands in the internal block",
               True,
               "run_scenario balances the internal block only — correct without "
@@ -527,6 +558,31 @@ def main() -> int:
               "leaves over, and it is the worst-estimated part of a split "
               "(run_internal_block_backtest.py). A profile buys a better "
               "off-block column and pays for it there")
+
+    if ALLT:
+        RECORD.write_text(json.dumps({
+            "_note": "What balancing does to a true input profile, over every "
+                     "table that publishes a parent and its parts. Taken by "
+                     "run_input_profiles_backtest.py --all; the default run "
+                     "quotes it with this date rather than a typed number.",
+            "taken": __import__("datetime").date.today().isoformat(),
+            "pooled": {
+                "tables": len(TARGETS), "n": n_live, "noop": noop,
+                "refused": refused, "paired": len(paired),
+                "better": int((np.array([p[2] for p in paired])
+                               < np.array([p[0] for p in paired])).sum())
+                if paired else 0,
+                "no_profile_balanced_pct": round(float(np.median(
+                    [p[0] for p in paired])), 2) if paired else None,
+                "true_profile_seed_pct": round(float(np.median(
+                    [p[1] for p in paired])), 2) if paired else None,
+                "true_profile_balanced_pct": round(float(np.median(
+                    [p[2] for p in paired])), 2) if paired else None,
+            },
+            "tables_measured": TARGETS,
+        }, indent=1) + "\n")
+        print(f"\n    recorded {RECORD.relative_to(ROOT)} over "
+              f"{len(TARGETS)} tables")
 
     # 6 -- and the engine could have said so before it tried.
     #
@@ -554,9 +610,11 @@ def main() -> int:
         check("a negative headroom in the seed IS the refusal, exactly",
               wrong == 0 and len(ref_h) > 0,
               f"every refusal had a negative headroom and no seed with room "
-              f"to spare was refused -- {len(head)} of {len(head)} in {LIVE}, "
-              f"51 of 51 across all four (16 negative, 16 refused; 35 "
-              f"positive, 0 refused). The engine computes this BEFORE it calls "
+              f"to spare was refused -- {len(head)} of {len(head)} in "
+              f"{'all ' + str(len(TARGETS)) + ' tables' if ALLT else LIVE}. "
+              f"RECORDED, not recomputed here: 51 of 51 across four (16 "
+              f"negative, 16 refused; 35 positive, 0 refused). "
+              f"The engine computes this BEFORE it calls "
               f"the balancer, so a profile that cannot work could be turned "
               f"away by name instead of dying as ScenarioInfeasible")
 
@@ -571,7 +629,8 @@ def main() -> int:
                       f"{np.median(dmg[m]):>+6.2f} points   n={int(m.sum())}")
             check("but it does NOT say how much a surviving profile will cost",
                   r_h < 0,
-                  f"r = {r_h:+.3f} here, and {-0.42:+.3f} across all four "
+                  f"r = {r_h:+.3f} here, and, RECORDED rather than "
+                  f"recomputed, {-0.42:+.3f} across four "
                   f"(FR {-0.28:+.2f}, BE {-0.43:+.2f}, HU {-0.48:+.2f}, "
                   f"SK {-0.48:+.2f}). The sign is the same everywhere -- less "
                   f"room, more damage -- but the split by median is +7.5 "

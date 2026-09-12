@@ -728,6 +728,37 @@ def build_report(results: list[DisaggregationResult], meta: dict,
             jb = ir.get("jobs") or {}
             if jb:
                 worst = max(jb.get("unmeasured_by_sector") or [0.0])
+                # Regions whose output the archive puts far below their
+                # employment: said when they carry a tenth or more of the
+                # jobs elsewhere, or when this region is one of them.
+                imp = jb.get("implausible") or []
+                imp_note = ""
+                if jb.get("loaded_implausible"):
+                    imp_note += (
+                        f" **The archive puts this region's own output far "
+                        f"below what its employment implies**: its jobs per "
+                        f"unit of output are "
+                        f"{jb['loaded_implausible']:.0f} times the median "
+                        f"region's, which means the archive's output and this "
+                        f"employment are not describing the same place: the "
+                        f"employment multipliers above cannot be read with "
+                        f"confidence.")
+                if imp and (jb.get("from_implausible") or 0) >= 0.10:
+                    times = [t for _, t in imp]
+                    imp_note += (
+                        f" **{_fmt(100 * jb['from_implausible'])} % of the "
+                        f"jobs this region's demand creates elsewhere fall in "
+                        f"{', '.join(f'`{r}`' for r, _ in imp)}**, whose jobs "
+                        f"per unit of output in the archive are "
+                        f"{min(times):.0f} to {max(times):.0f} times the "
+                        f"median region's: the archive's output and "
+                        f"Eurostat's employment are not describing the same "
+                        f"place there, so a figure that multiplies one by the "
+                        f"other cannot be read with confidence in either "
+                        f"direction, and neither can the job figures here, as "
+                        f"far as they carry. Until 2026-09-12 this was the "
+                        f"archive's own Greek and Finnish labels naming other "
+                        f"regions, which the loader now corrects.")
                 prov += [
                     "", f"**In jobs.** Weighted by Eurostat's employment for "
                     f"{jb['regions_counted']} of the archive's "
@@ -746,7 +777,19 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                        f"of the jobs it creates are elsewhere "
                        f"({_fmt(100 * jb['share_of_demand_if_surveyed'])} % "
                        f"at the surveys' level); the median region's is "
-                       f"{jb.get('demand_median_pct', '—')} %."), "",
+                       f"{jb.get('demand_median_pct', '—')} %.")
+                    + ("" if not jb.get("years_check") else
+                       f" It is the figure for {tbl.year}: across the "
+                       f"deposit's eleven years a region's figure moves by a "
+                       f"median of "
+                       f"{jb['years_check']['region_range_median_pts']} "
+                       f"points between its highest and lowest year "
+                       f"({jb['years_check']['region_range_p90_pts']} at the "
+                       f"90th percentile), while the archive's median stays "
+                       f"between {jb['years_check']['demand_median_min']} % "
+                       f"and {jb['years_check']['demand_median_max']} %.")
+                    + imp_note,
+                    "",
                     "| sector | jobs through other regions | at the surveys' "
                     "level |", "|---|---:|---:|"]
                 for c, a, b in zip(tbl.sector_codes, jb["share_by_sector"],

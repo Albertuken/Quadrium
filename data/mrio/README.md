@@ -64,7 +64,11 @@ engine loads one with `mrio_year`. `run_eu_mrio_employment` loads Catalonia
 `data/eurostat/`, offline, and `run_employment_spillovers` weights the whole
 archive by that same file to measure how much of the jobs a one-region table
 misses; `run_demand_spillovers` does the same region by region, weighted by
-the final demand for each region's products. The first run reads the 33 MB sheet and caches it as
+the final demand for each region's products, and `run_employment_years` for
+every year from 2008 to 2018 that has both the archive and Eurostat's file.
+`run_mrio_labels` shows that nineteen of the archive's own region labels name
+another region — Greece's, Finland's and `PL12` — against the archive's side
+files and Eurostat's regional GDP, and the engine corrects them on load. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region
