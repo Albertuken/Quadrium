@@ -141,6 +141,51 @@ def main() -> int:
           f"median {min(med1):.1f} % to {max(med1):.1f} %, up to "
           f"{max(r[4] for r in rows):.0f} % in a single sector")
 
+    # ---- the landing table the report prints, against the full system.
+    # `lands` is read off three blocks; `share_by_sector` off all 2,720. They
+    # measure the same thing from the two ends, so `stays here` and `a
+    # one-region table omits` should add to a hundred.
+    from quadrium.regionalise import EVIDENCE
+
+    gaps = []
+    for region in REGIONS:
+        w = load_eu_mrio_wide(MRIO, region, 2018)
+        lands = np.array(w.interregional["lands"], dtype=float)
+        stays = 100 * lands[:, 0] / lands.sum(1)
+        omits = 100 * np.array(
+            w.interregional["share_by_sector_if_one_region"], dtype=float)
+        gaps.append(np.abs((100 - stays) - omits))
+    med = float(np.median(np.concatenate(gaps)))
+    worst = float(max(g.max() for g in gaps))
+    ev = EVIDENCE["wide_lands_vs_full"]
+    check("where an impulse lands, read off three blocks, is what the full "
+          "system says",
+          med < 0.2 and worst < 3.0,
+          f"the two add to a hundred within a median {med:.2f} points and "
+          f"{worst:.1f} at the worst sector, over {len(REGIONS)} regions")
+    check("and the report quotes that measurement and no other",
+          (ev["regions"], round(med, 2), round(worst, 1))
+          == (len(REGIONS), ev["median_pts"], ev["max_pts"]),
+          f"EVIDENCE says {ev['median_pts']} / {ev['max_pts']} over "
+          f"{ev['regions']}; measured {round(med, 2)} / {round(worst, 1)} "
+          f"over {len(REGIONS)}")
+
+    # ---- and the three figures the guide quotes from this table, because a
+    # number in prose drifts silently while a number in a report is rebuilt
+    # every run.
+    guide = (ROOT / "docs" / "GUIDE.md").read_text()
+    w = load_eu_mrio_wide(MRIO, "ES51", 2018)
+    lands = np.array(w.interregional["lands"], dtype=float)
+    pct = 100 * lands / lands.sum(1, keepdims=True)
+    quoted = {f"{pct[0, 0]:.1f} %": "agriculture stays",
+              f"{pct[0, 1]:.1f} %": "agriculture to the rest of Spain",
+              f"{pct[3, 0]:.1f} %": "trade and transport stays"}
+    absent = [what for fig, what in quoted.items() if fig not in guide]
+    check("the guide quotes this table's own figures for Catalonia",
+          not absent,
+          "; ".join(f"{f} ({w})" for f, w in quoted.items()) if not absent
+          else "not in docs/GUIDE.md: " + ", ".join(absent))
+
     # ---- and from a workbook, which is how the owner reaches it. Nothing
     # else renders a report for a three-block table, so the section the
     # report prints for one was code no check had ever run.
@@ -189,6 +234,13 @@ def main() -> int:
           "What this table holds that a one-region table cannot" in text
           and "aggregates" in text,
           f"{len(text.splitlines())} lines of report")
+    check("and prints where an impulse lands, sector by sector",
+          "stays in" in text and "Where an impulse lands" in text
+          and text.count("%** of its output") <= 1
+          and sum(1 for l in text.splitlines()
+                  if l.startswith("| `") and l.count("%") == 4) == 10,
+          "ten sectors, each with the three blocks and what a one-region "
+          "table would have missed")
     check("and carries the reservation beside the figures, not in a footnote",
           "drawn in favour of here" in text and "72.7 %" in text,
           "the split between this region and the rest of its country is a "

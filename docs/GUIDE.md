@@ -509,6 +509,14 @@ of the regions inside them, so the table answers what your region's demand
 sets off everywhere — not what each other region does. A sector code names
 your region's own block, which is what a split divides.
 
+**What the report does with it.** It prints, for each of your region's ten
+sectors, where an impulse starting there lands: the share of the output it
+sets off that is produced in your region, in the rest of its country and in
+the rest of the archive. For Catalonia in 2018 that runs from agriculture,
+where 46.2 % stays and 44.4 % goes to the rest of Spain, to trade and
+transport, where 96.3 % stays. A one-region table cannot ask the question at
+all.
+
 **One reservation, and it is measured.** How much of an impulse stays in your
 region is the archive's answer, and the archive keeps trade at home: against
 the surveys that can check it, it records about a quarter of the purchases a

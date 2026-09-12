@@ -2876,6 +2876,23 @@ def load_eu_mrio_wide(path: Path | str, region: str,
 
     rest_country = f"{region[:2]}_REST"
     total = float(X3.sum())
+
+    # WHERE AN IMPULSE LANDS, sector by sector. The column sum of the inverse
+    # is the output one unit of demand for that sector sets off; split by the
+    # block the output is produced in, it says how much stays here. Computed
+    # on the table AS LOADED, like every other figure in `interregional`, and
+    # cheap: thirty by thirty.
+    #
+    # READ IT AS A BOUND, not as a measurement of this region. The archive
+    # keeps trade at home -- a quarter of what surveys record a region buying
+    # from the rest of its country -- and on nine surveyed regions correcting
+    # that moves the total an impulse sets off by a median 0.09 % while moving
+    # the share that stays here from 88.9 % to 72.7 %
+    # (`run_wide_against_surveys.py`). The bias is in the split and not in the
+    # level, so this table is where it shows.
+    L3 = np.linalg.inv(np.eye(3 * S) - Z3 / X3)
+    lands = [[float(L3[b * S:(b + 1) * S, j].sum()) for b in range(3)]
+             for j in range(S)]
     notes = (
         f"THREE BLOCKS THAT COVER THE ARCHIVE: {region}, the rest of "
         f"{region[:2]} ({len(same)} "
@@ -2935,6 +2952,7 @@ def load_eu_mrio_wide(path: Path | str, region: str,
             "share_by_sector_if_one_region":
                 list(one.interregional["share_by_sector"]),
             "archive_median_pct": one.interregional.get("archive_median_pct"),
+            "lands": lands,
             "year": year})
     _assert_balances(table, f"{blk.name} ({region} with the rest)")
     return table

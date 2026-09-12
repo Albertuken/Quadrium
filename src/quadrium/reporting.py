@@ -706,11 +706,37 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"{_fmt(EVIDENCE['wide_vs_surveys']['here_pct_survey'])} %. "
                 f"So trust the total; read the split as a bound "
                 f"(`run_wide_against_surveys.py`)."]
-            if per:
-                prov += ["", "| sector | omitted by a one-region table |",
-                         "|---|---:|"]
-                for c, v in zip(tbl.sector_codes[:len(per)], per):
-                    prov.append(f"| `{c}` | {_fmt(100 * v)} % |")
+            lands = ir.get("lands") or []
+            if lands:
+                # WHERE AN IMPULSE LANDS, which is the question three blocks
+                # can answer and one region cannot. The last column is what a
+                # table of this region alone would have missed for that
+                # sector, kept from the earlier version of this section so
+                # nothing it said is lost.
+                prov += [
+                    "", "Where an impulse lands, by the sector it starts in "
+                    "— the share of the output one unit of demand sets off "
+                    "that is produced in each block. The last column is the "
+                    "same quantity measured on all 2,720 units of the "
+                    "archive rather than on these three, so it and the first "
+                    f"column should add to a hundred; over "
+                    f"{EVIDENCE['wide_lands_vs_full']['regions']} regions "
+                    f"they differ by a median "
+                    f"{EVIDENCE['wide_lands_vs_full']['median_pts']} points "
+                    f"and at most "
+                    f"{EVIDENCE['wide_lands_vs_full']['max_pts']} "
+                    f"(`run_eu_mrio_wide.py`).", "",
+                    f"| sector | stays in `{blocks[0]}` | "
+                    f"`{blocks[1]}` | `{blocks[2]}` | a one-region "
+                    f"table omits |", "|---|---:|---:|---:|---:|"]
+                for i, (c, row) in enumerate(zip(tbl.sector_codes, lands)):
+                    tot = sum(row) or 1.0
+                    omit = (f"{_fmt(100 * per[i])} %"
+                            if i < len(per) else "—")
+                    prov.append(
+                        f"| `{c}` | {_fmt(100 * row[0] / tot)} % | "
+                        f"{_fmt(100 * row[1] / tot)} % | "
+                        f"{_fmt(100 * row[2] / tot)} % | {omit} |")
         if ir.get("share_by_sector"):
             sc = ir.get("survey_check") or {}
             low = (f" And the archive keeps trade at home: where "
