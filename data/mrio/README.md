@@ -68,13 +68,37 @@ the final demand for each region's products, and `run_employment_years` for
 every year from 2008 to 2018 that has both the archive and Eurostat's file.
 `run_mrio_labels` shows that nineteen of the archive's own region labels name
 another region — Greece's, Finland's and `PL12` — against the archive's side
-files and Eurostat's regional GDP, and the engine corrects them on load. The first run reads the 33 MB sheet and caches it as
+files and Eurostat's regional GDP, and the engine corrects them on load.
+`run_mrio_sectors` asks the same of the ten branches inside each region,
+against Eurostat's value added by branch, and finds them right. The first run reads the 33 MB sheet and caches it as
 `_mrio2018_cache.npz`; the rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region
 at a time (`docs/GUIDE.md`, Route B). The archive does not balance, and the
 loader does not balance it: the residue is carried in a column and a row
 labelled RESIDUAL and sized in the report, and every cell is marked ESTIMATED.
+
+## What this archive gets wrong, and what it gets right
+
+Everything below is measured by a validator in this repository, named beside
+it. Nothing here is an impression.
+
+| What it gets wrong | Where it shows |
+|---|---|
+| Nineteen region labels name another region: Greece's thirteen, four of Finland's, and `PL12`, whose rows are PL91's. The engine corrects them on load | `run_mrio_labels.py` |
+| Neither accounting identity closes. The residue is 7.8 % of output on the row side and 5.4 % on the column side for Catalonia, carried in a labelled RESIDUAL column and row | `run_mrio_real_output.py` |
+| Four regions are empty and nine trade with no other region — Île-de-France among them, with 1.5 million of output and not a euro of interregional trade | `run_mrio_spillovers.py` |
+| It keeps trade at home: against ten surveyed regions it records 0.25 times the purchases a region makes from the rest of its country, so what a one-region table omits is a floor, not an estimate | `run_mrio_against_surveys.py` |
+| Ten to fourteen units a year carry an output more than ten times their own value added — nine of them always, agriculture in metropolitan regions | `run_mrio_scale.py` |
+| Thessalia's construction is one of them in 2013 and 2014: output 1,063 in 2012, 8,820 in 2013, 710 in 2015, with its value added unchanged. It is the one year-to-year jump the employment figures still have | `run_mrio_scale.py`, `run_employment_years.py` |
+
+| What it gets right | Where it shows |
+|---|---|
+| The ten branches inside a region carry the shares Eurostat gives them: the worst differs 1.2 points at the median, and reordering them gains nothing | `run_mrio_sectors.py` |
+| Every country is to scale: each country's value added is Eurostat's own, converted — a median 0.9928 of it in 2018 | `run_mrio_scale.py` |
+| The unit is dollars, measured rather than quoted: only the year's euro-dollar rate turns the ratio to Eurostat's GDP into a constant | `run_mrio_scale.py` |
+| Output by rows equals output by columns, unit by unit, so one output vector serves both identities | `run_mrio_real_output.py` |
+| Every year from 2008 to 2018 is the same kind of object as 2018: same units, same order, same joins | `run_mrio_years.py` |
 
 `run_mrio_axis_scale.py` was **not** in this repository until 2026-09-06, on the
 rule that a validator which cannot run is removed rather than left to pass

@@ -38,8 +38,17 @@ against +0.86.
 corrected**: seven regions jumped by more than 20 points from one year to the
 next, all Finnish or Greek, because Eurostat's employment was being attached
 to the wrong region (`run_mrio_labels.py`). With the labels corrected one
-region does: EL61, by 36 points. A region's job figure is the loaded year's,
-and the report says so.
+region does.
+
+**That one is a single cell of the archive.** EL61 (Thessalia) moves 36 points
+between 2012 and 2013. Eurostat's employment for it is smooth -- 279 to 317
+thousand across the deposit -- and what jumps is the archive's construction:
+output 1,063 in 2012, 8,820 in 2013, 3,225 in 2014 and 710 in 2015, while its
+construction value added stays between 411 and 454. Greek construction as a
+whole rises 16 % in 2013, so the archive is not adding output to the country,
+it is putting it in Thessalia. `run_mrio_scale.py` lists that unit among the
+handful whose output exceeds ten times their own value added. A region's job
+figure is the loaded year's, and the report says so.
 
 Regions that trade with no other region, and units without employment, are
 excluded as in the 2018 validators. Each year's results are cached beside its

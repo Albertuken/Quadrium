@@ -2070,8 +2070,10 @@ _MRIO_SECTORS = {"A": "Primary", "B-E": "Industry", "F": "Construction",
                  "G-I": "Distribution", "J": "ICT", "K": "Financial services",
                  "L": "Real estate activities", "M_N": "Professional services",
                  "O-Q": "Public services", "R-U": "Other services"}
-_MRIO_UNIT = ("million US dollars, as Huang & Koutroumpis (2023) state it; "
-              "price basis not stated")
+_MRIO_UNIT = ("million US dollars: Huang & Koutroumpis (2023) state it, and "
+              "the archive's own country totals are Eurostat's value added "
+              "converted at each year's euro-dollar rate, which no other "
+              "currency fits (`run_mrio_scale.py`); price basis not stated")
 # One parsed block per process. The workbook takes about 30 s to read and a
 # workbook run, its report and a validator may each ask for it.
 _MRIO_CACHE: dict = {}

@@ -317,6 +317,15 @@ the engine could ask for it; the provenance beside it records that URL. It
 replaced a Catalonia-only file and a totals-only file, which it contains.
 `run_mrio_eurostat_codes.py` measures coverage against it.
 
+`nama_10r_2gdp_ALL_{year}.json`, GDP by NUTS-2 region for each year from 2008
+to 2018, is the outside measure that showed nineteen of the archive's region
+labels name another region (`run_mrio_labels.py`), and
+`nama_10r_3gva_ALL_2018.json` is regional value added by A10 branch, which
+shows the branches inside a region are right (`run_mrio_sectors.py`).
+`ert_bil_eur_a_USD_{year}.json` is the year's average euro-dollar rate, which
+turns those comparisons into one currency and shows the archive is in dollars
+(`run_mrio_scale.py`). All were fetched through `eurostat.fetch`.
+
 The same file for every year from 2008 to 2017
 (`nama_10r_3empers_ALL_{year}.json`, 325 to 342 KB each) was fetched on
 2026-09-11 through `eurostat.fetch` itself, so each sidecar is the engine's

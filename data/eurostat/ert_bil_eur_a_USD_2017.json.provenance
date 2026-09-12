@@ -1,0 +1,10 @@
+{
+  "dataset": "ert_bil_eur_a",
+  "url": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/ert_bil_eur_a?format=JSON&lang=EN&time=2017&unit=NAC&currency=USD&statinfo=AVG",
+  "geo": null,
+  "year": 2017,
+  "bytes": 2561,
+  "sha256": "ea232037a89081991f51febfffc921c79c41ef275b6d0695c02f9aa359f6d936",
+  "retrieved_at": "2026-09-12T05:46:00.647661+00:00",
+  "n_values": 1
+}
