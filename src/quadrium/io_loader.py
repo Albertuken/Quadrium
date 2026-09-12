@@ -1449,6 +1449,12 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
                           f"requires at least one final-demand column")
     Y_labels = header[1 + n:1 + n_cols_total]
 
+    # THE REGIONAL AXIS, written by `_write_interchange_sheets` as run lengths
+    # (`AA11*11; AA_REST*10; REST*10`). Absent from every file written before
+    # it existed and from every file a person wrote by hand, and that is not
+    # an error: a table without an axis is the ordinary case.
+    region_codes = _read_regions(meta.get("regions"), n, Path(path).name)
+
     Z = np.array([[_num(R[1 + i][1 + j]) for j in range(n)] for i in range(n)])
     Y = np.array([[_num(R[1 + i][1 + n + c]) for c in range(len(Y_labels))]
                   for i in range(n)])
@@ -1461,23 +1467,70 @@ def load_io_table(path: Path | str, sheet: str = "table") -> IOTable:
         country=str(meta["country"]), year=int(meta["year"]),
         unit=str(meta["unit"]), classification=str(meta["classification"]),
         sector_codes=sector_codes,
+        region_codes=region_codes,
         # `meta` keys were lowercased on the way in, so the lookup must be
         # too. It was not, so every `label_B` row in a metadata sheet was
         # silently ignored and the report named sectors by their codes.
-        sector_labels=[str(meta.get(f"label_{c}".lower(), c))
-                       for c in sector_codes],
+        #
+        # `label_{region}|{code}` first, because an interregional table's ten
+        # codes appear once per block and a lookup by code alone gives all
+        # three blocks the last block's label. `label_{code}` is still read:
+        # it is what every file written before the axis existed carries.
+        sector_labels=[str(meta.get(f"label_{r}|{c}".lower(),
+                                    meta.get(f"label_{c}".lower(), c)))
+                       for r, c in zip(region_codes or [None] * len(sector_codes),
+                                       sector_codes)],
         Z=Z, Y=Y, Y_labels=Y_labels, VA=VA, VA_labels=va_labels, X=X,
         source=str(meta["source"]), retrieved_at=datetime.now(timezone.utc),
         notes=str(meta.get("notes") or "") or None,
         provenance=_read_provenance(sheets, sector_codes),
-        satellites=_read_satellites(sheets, sector_codes, Path(path).name),
+        satellites=_read_satellites(sheets, sector_codes, Path(path).name,
+                                    region_codes),
         type_ii=_read_type_ii(meta),
         lineage=_read_lineage(meta))
     _assert_balances(table, Path(path).name)
     return table
 
 
-def _read_satellites(sheets: dict, sector_codes: list[str], name: str) -> dict:
+def _read_regions(raw, n: int, name: str):
+    """The `regions` metadata row back into one code per unit.
+
+    `AA11*11; AA_REST*10; REST*10` -> eleven `AA11`, ten `AA_REST`, ten
+    `REST`. Run lengths, because the layout is one contiguous run per region
+    and a split leaves those runs unequal.
+
+    REFUSES a row that does not cover the table. The alternative is to pad or
+    truncate, and a regional axis one unit out of step labels every block
+    after the gap with its neighbour's region -- silently, because every code
+    in it is a real region.
+    """
+    if raw in (None, ""):
+        return None
+    out: list[str] = []
+    for part in str(raw).split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        code, _, count = part.partition("*")
+        try:
+            k = int(count)
+        except ValueError:
+            raise LoaderError(
+                f"{name}: the `regions` row reads {part!r}, which is not "
+                f"`CODE*count`. It is written by this engine, so a file "
+                f"without that shape was edited by hand.") from None
+        out += [code.strip()] * k
+    if len(out) != n:
+        raise LoaderError(
+            f"{name}: the `regions` row covers {len(out)} unit(s) and the "
+            f"table has {n}. An axis that does not cover the table puts every "
+            f"block after the gap in its neighbour's region, and every code "
+            f"in it is a real region, so nothing downstream would notice.")
+    return out
+
+
+def _read_satellites(sheets: dict, sector_codes: list[str], name: str,
+                     region_codes: list[str] | None = None) -> dict:
     """Read the `Satellites` sheet back, with each value's origin.
 
     Written on 2026-09-08 and not read until 2026-09-09, so an employment
@@ -1510,6 +1563,26 @@ def _read_satellites(sheets: dict, sector_codes: list[str], name: str) -> dict:
             f"version.")
     at = {c: head.index(c) for c in need}
 
+    # WHICH COLUMN IDENTIFIES A ROW. `sector_code` alone until a table could
+    # have a regional axis: three blocks repeat the same ten codes, ten rows
+    # overwrite the other twenty, and the account comes back with the last
+    # block's figures in all three. Nothing complains -- the coverage check
+    # below counts ten codes of ten.
+    has_region = "region" in head
+    if region_codes is not None and not has_region:
+        raise LoaderError(
+            f"{name}: the table carries a regional axis and its Satellites "
+            f"sheet has no `region` column, so each of its "
+            f"{len(set(sector_codes))} sector code(s) names "
+            f"{len(sector_codes) // max(len(set(sector_codes)), 1)} units and "
+            f"there is no way to tell which row is which. The file was "
+            f"written before the column existed; write it again from the "
+            f"table it came from.")
+    if has_region:
+        at["region"] = head.index("region")
+    want = ([(r, c) for r, c in zip(region_codes, sector_codes)]
+            if region_codes is not None else list(sector_codes))
+
     acc: dict = {}
     for r in rows[1:]:
         if not r or r[at["name"]] in (None, ""):
@@ -1520,17 +1593,19 @@ def _read_satellites(sheets: dict, sector_codes: list[str], name: str) -> dict:
                                  "year": r[at["source_year"]],
                                  "values": {}, "origin": {}})
         code = str(r[at["sector_code"]]).strip()
+        if region_codes is not None:
+            code = (str(r[at["region"]] or "").strip(), code)
         a["values"][code] = float(r[at["value"]])
         a["origin"][code] = str(r[at["origin"]] or "observed").strip()
 
     out = {}
     for key, a in acc.items():
-        missing = [c for c in sector_codes if c not in a["values"]]
+        missing = [c for c in want if c not in a["values"]]
         if missing:
             raise LoaderError(
                 f"{name}: satellite {key!r} covers "
                 f"{len(a['values'])} of {len(sector_codes)} sectors and is "
-                f"missing {', '.join(missing[:6])}"
+                f"missing {', '.join(str(c) for c in missing[:6])}"
                 f"{' …' if len(missing) > 6 else ''}. A partial account read "
                 f"as a whole one would put zeros where nothing was measured.")
         try:
@@ -1539,8 +1614,8 @@ def _read_satellites(sheets: dict, sector_codes: list[str], name: str) -> dict:
             year = 0
         out[key] = Satellite(
             name=key, unit=a["unit"], source=a["source"], source_year=year,
-            values=[a["values"][c] for c in sector_codes],
-            origin=[a["origin"][c] for c in sector_codes])
+            values=[a["values"][c] for c in want],
+            origin=[a["origin"][c] for c in want])
     return out
 
 

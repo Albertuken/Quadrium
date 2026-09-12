@@ -1,7 +1,7 @@
 {
  "_note": "Which of the engine's own refusals anything in the suite has ever reached. Re-taken by library/tools/sweep_refusals.py, which patches each quadrium exception type to record its raise site and runs every validator and the unit tests as separate processes. Sites are recorded as file:line and translated to file::function keys through the same syntax-tree pass run_refusal_coverage.py uses.",
  "taken": "2026-09-12",
- "n_sites": 221,
+ "n_sites": 224,
  "fired": [
   "acquire.py::_open::answered HTTP .",
   "acquire.py::_open::answered HTTP . That is access control, and this eng",
@@ -27,6 +27,7 @@
   "config.py::_eurostat_sut_paths::project_to_year is , not a year. project_to_year",
   "config.py::_eurostat_sut_paths::sut_unbalanced must be 'refuse' (the default) or 'ca",
   "config.py::_eurostat_sut_paths::table_path is , which exists and is a file. A supply",
+  "config.py::_load_declared_table::mrio_employment does not work with mrio_scope 'with_",
   "config.py::_load_declared_table::mrio_employment= applies only to table_kind 'eu_mrio",
   "config.py::_load_declared_table::mrio_region= applies only to table_kind 'eu_mrio', n",
   "config.py::_load_declared_table::mrio_scope must be 'region' or 'with_rest'. region t",
@@ -160,8 +161,11 @@
   "io_loader.py::_open_workbook",
   "io_loader.py::_read_provenance::Provenance cell ( , ) reads ; expected one of . ,",
   "io_loader.py::_read_provenance::the Provenance sheet has data row(s) for sectors. A ",
+  "io_loader.py::_read_regions::: the `regions` row covers unit(s) and the table has",
+  "io_loader.py::_read_regions::: the `regions` row reads , which is not `CODE*count",
   "io_loader.py::_read_satellites::: satellite covers of sectors and is missing . A par",
   "io_loader.py::_read_satellites::: the Satellites sheet is missing the column(s) . It",
+  "io_loader.py::_read_satellites::: the table carries a regional axis and its Satellit",
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w",
   "io_loader.py::_tod_need",
@@ -427,8 +431,11 @@
   "io_loader.py::_open_workbook": "workbook",
   "io_loader.py::_read_provenance::Provenance cell ( , ) reads ; expected one of . ,": "workbook",
   "io_loader.py::_read_provenance::the Provenance sheet has data row(s) for sectors. A ": "workbook",
+  "io_loader.py::_read_regions::: the `regions` row covers unit(s) and the table has": "workbook",
+  "io_loader.py::_read_regions::: the `regions` row reads , which is not `CODE*count": "workbook",
   "io_loader.py::_read_satellites::: satellite covers of sectors and is missing . A par": "source",
   "io_loader.py::_read_satellites::: the Satellites sheet is missing the column(s) . It": "source",
+  "io_loader.py::_read_satellites::: the table carries a regional axis and its Satellit": "workbook",
   "io_loader.py::_tod_axes::the sheet has no activity index row. Row 9 should nu": "source",
   "io_loader.py::_tod_axes::the sheet has no product labelled '1. \u2026' in column w": "source",
   "io_loader.py::_tod_need": "source",
@@ -492,5 +499,5 @@
  },
  "_classification": "What each refusal judges. Keyed by the FUNCTION it sits in, with a few identified by a distinctive fragment of their own message where one function judges both a caller's arguments and a table's contents. NOT by file:line -- that version silently re-labelled 38 sites when the Catalan loader was inserted above them. `workbook` the user's own spreadsheet, `source` a file from a statistical office, `scenario` what they asked for, `upstream` a failure re-raised with guidance, `caller` an internal API contract, `data` the numbers themselves.",
  "key_format": "file.py::function, plus a fragment of the message when one function raises more than once. NOT file:line -- editing a module shifts every line below the edit, which silently re-labelled 38 sites once and broke this check again on 2026-09-01.",
- "floor": 213
+ "floor": 217
 }

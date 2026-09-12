@@ -293,22 +293,28 @@ class IOTable:
                             f"region_codes; the layout must be region-major "
                             f"(Chenery-Moses), one contiguous block per region")
                     seen.append(code)
-            size = n // len(seen)
-            if size * len(seen) != n:
-                raise ValueError(
-                    f"{n} rows do not divide into {len(seen)} equal regional "
-                    f"blocks; an IRIO carries the same sectors in every region")
-            for k, code in enumerate(seen):
-                block = self.region_codes[k * size:(k + 1) * size]
-                if any(c != code for c in block):
-                    raise ValueError(
-                        f"region {code!r} does not occupy a contiguous block "
-                        f"of {size} rows")
-                if self.sector_codes[k * size:(k + 1) * size] != \
-                        self.sector_codes[:size]:
-                    raise ValueError(
-                        f"region {code!r} does not carry the same sectors, in "
-                        f"the same order, as the first region")
+            # THE BLOCKS NEED NOT BE THE SAME SIZE, and this used to require
+            # it: "an IRIO carries the same sectors in every region" is true
+            # of one as an office or an archive publishes it, and stops being
+            # true the moment somebody divides a sector of ONE region -- which
+            # is the only operation a three-block table exists for. There is
+            # no key for an aggregate's G-I, so its block keeps ten sectors
+            # while the region's has eleven. Requiring equality here refused
+            # the result of the engine's own documented route.
+            #
+            # What must hold is what the blocks are READ by: one contiguous
+            # run per region, checked above, so `_region_slice` can find each
+            # from its own run instead of from n // R.
+            # "and every region carries the same sectors, in the same order"
+            # was checked here too, and it is a rule about a table as it is
+            # BUILT rather than about the class: an archive's table has it by
+            # construction, and a split of one region's sector ends it. It is
+            # kept where it can still be true -- `load_eu_mrio_wide` lays the
+            # three blocks out from one list of ten codes, and the unit test
+            # pins that they are the same ten -- instead of here, where it
+            # would refuse a divided table that is perfectly well formed.
+            #
+            # The run check above is what `block()` needs, and it stays.
 
     @property
     def derived(self) -> bool:
@@ -370,19 +376,44 @@ class IOTable:
 
     @property
     def sectors_per_region(self) -> int:
-        """S, where the table is (S x R) square. Equals n when single-region."""
-        return self.n // self.n_regions if self.region_codes is not None else self.n
+        """S, where every region carries S sectors. `n` when single-region.
+
+        REFUSES when the regions carry different numbers of sectors, which a
+        divided interregional table does: there is no single S to return, and
+        `n // R` would quietly give a number that is nobody's block.
+        """
+        if self.region_codes is None:
+            return self.n
+        sizes = {r: self.region_codes.count(r) for r in self.regions}
+        if len(set(sizes.values())) != 1:
+            raise ValueError(
+                f"the regions of {self.table_id!r} carry different numbers of "
+                f"sectors ("
+                + ", ".join(f"{r}: {k}" for r, k in sizes.items())
+                + "), so there is no sectors-per-region. A table divided in "
+                  "one region is like this; read a block with `block()`, "
+                  "which finds each region's own run.")
+        return next(iter(sizes.values()))
 
     def _region_slice(self, region: str) -> slice:
-        try:
-            k = self.regions.index(region)
-        except ValueError:
-            have = ", ".join(self.regions) if self.regions else \
-                "none - this table has no regional axis"
+        """Where `region`'s own run sits on the axis.
+
+        FROM THE RUN ITSELF, not from `n // R`: after a split one region
+        carries a sector the others do not, and the arithmetic version put
+        every block after the divided one a cell out of place.
+        """
+        if self.region_codes is None:
             raise KeyError(f"region {region!r} not in table "
-                           f"{self.table_id!r}; available: {have}") from None
-        s = self.sectors_per_region
-        return slice(k * s, (k + 1) * s)
+                           f"{self.table_id!r}; available: none - this table "
+                           f"has no regional axis")
+        start = 0
+        for code in self.regions:
+            size = self.region_codes.count(code)
+            if code == region:
+                return slice(start, start + size)
+            start += size
+        raise KeyError(f"region {region!r} not in table {self.table_id!r}; "
+                       f"available: {', '.join(self.regions)}")
 
     def block(self, origin: str, destination: str) -> np.ndarray:
         """The S x S flows from `origin`'s sectors into `destination`'s.

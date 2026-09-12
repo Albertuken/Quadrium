@@ -731,6 +731,21 @@ def split_sectors(table: IOTable, specs: list[SplitSpec], scenario: Scenario,
             satellites=_divide_satellites(
                 current.satellites, seed, splits[-1], assumed),
             type_ii=current.type_ii,
+            # THE REGIONAL AXIS RIDES ALONG TOO, and it is read from the same
+            # map the provenance is: `seed["mapping"]` says which unit of the
+            # table that came in each unit of the new one is, so a subsector
+            # inherits the region of the sector it was cut from. The blocks
+            # come out unequal -- the divided region has one sector more --
+            # which the object now holds, because that is what a divided
+            # interregional table is.
+            region_codes=([current.region_codes[i] for i in seed["mapping"]]
+                          if current.region_codes is not None else None),
+            # `interregional` is NOT carried, and the object would refuse it:
+            # it holds a share per sector of the table it was measured on, and
+            # this table has one sector more. That is the same decision
+            # `run_scenario` states at the end -- the leakage belongs to the
+            # region as loaded, a split changes the block it was measured on,
+            # and the report reads it from the original table.
             sector_codes=seed["codes"], sector_labels=seed["labels"],
             Z=seed["Z"], Y=seed["Y"], Y_labels=current.Y_labels,
             VA=seed["VA"], VA_labels=current.VA_labels, X=seed["X"],

@@ -74,8 +74,13 @@ against Eurostat's value added by branch, and finds them right.
 `run_eu_mrio_wide` checks the three-block table — a region, the rest of its
 country and the rest of the archive — against the full 2,720-unit system:
 its multipliers are the full system's to within 0.35 % at the worst region,
-where a one-region table is out by 2.7 % to 9.2 %. The first run reads the 33 MB sheet and caches it as
-`_mrio2018_cache.npz`; the rest are fast.
+where a one-region table is out by 2.7 % to 9.2 %.
+`run_regional_roundtrip` divides a sector of that three-block table, writes it
+and reads it back: the blocks come out unequal — eleven sectors in the region,
+ten in each aggregate, because there is no allocation key for an aggregate's —
+and the axis, the labels and a satellite account all survive the file. The
+first run reads the 33 MB sheet and caches it as `_mrio2018_cache.npz`; the
+rest are fast.
 
 **The engine reads the same three files** as `table_kind: eu_mrio`, one region
 at a time (`docs/GUIDE.md`, Route B). The archive does not balance, and the

@@ -506,7 +506,10 @@ table is out by 2.7 % to 9.2 % (`validators/run_eu_mrio_wide.py`). What it
 does cost is that those two blocks are aggregates, whose technology is a mix
 of the regions inside them, so the table answers what your region's demand
 sets off everywhere — not what each other region does. A sector code names
-your region's own block, which is what a split divides. Employment
+your region's own block, which is what a split divides — and the split keeps
+the three blocks: the two new subsectors join your region's, whose block then
+carries one sector more than the other two, which is what a divided
+interregional table is (`validators/run_regional_roundtrip.py`). Employment
 (`mrio_employment`) is refused with this scope for now: an account for the
 aggregates would have to say how much of each block Eurostat covers.
 
@@ -1229,6 +1232,17 @@ warning naming the share of cells that were already estimates and the chain of
 splits that produced them, oldest first. On the small test fixture, twelve of
 thirty-six cells would be quietly promoted from estimate to observation by one
 trip through a file if this did not happen.
+
+**And the regional axis travels too, since 2026-09-12.** If the table was
+loaded with `mrio_scope: with_rest`, the file records which block each row
+belongs to — `metadata` carries a `regions` row, and the `Satellites` sheet a
+`region` column — so a three-block table written out comes back as three
+blocks. It matters for the same reason the provenance does: the three blocks
+repeat the same ten sector codes, and a file that identifies a row by its code
+alone gives all three blocks the last block's labels and the last block's
+employment figures, with no error and every code accounted for. A file written
+before this existed still loads; it simply has no axis, and an employment
+account in one is refused rather than aligned by guesswork.
 
 Two practical consequences:
 

@@ -63,7 +63,9 @@ DECLARED = {
         "so both are set on the next lines. `interregional` is set EMPTY on "
         "purpose: it is the archive's leakage for the table as loaded, a "
         "split changes the block it was measured on, and the report reads it "
-        "from the original table instead."),
+        "from the original table instead. `region_codes` IS passed in the "
+        "call, through the same map as the sector codes: which region a row "
+        "belongs to is known before the split runs and stays true after it."),
     "regionalise.py::to_table": (
         "constructor",
         "`satellites=` scaled by the region's share of national output. "
@@ -72,15 +74,23 @@ DECLARED = {
         "and one final-demand column, both residuals. Said in the lineage."),
     "io_loader.py::load_io_table": (
         "constructor",
-        "the interchange format carries both, so reading them back is the "
-        "whole point of the Satellites sheet."),
+        "the interchange format carries all three, so reading them back is the "
+        "whole point of the Satellites sheet and of the `regions` row. A "
+        "file written before either existed still reads: the axis is absent "
+        "rather than wrong, and an account without a region column is "
+        "refused only when the table it sits beside has an axis."),
     "disaggregation.py::split_sectors": (
         "constructor",
         "the loop variable between one split and the next, with the accounts "
         "DIVIDED as it goes: carrying the parent's values into a table that "
         "has grown leaves 64 figures on 65 sectors, which __post_init__ now "
         "refuses. Dividing per iteration keeps the object well formed after "
-        "each."),
+        "each. `region_codes` grows through the same map, so a subsector "
+        "inherits the region of the sector it was cut from and the blocks "
+        "come out unequal, which is what a divided interregional table is. "
+        "`interregional` is NOT carried, and the object refuses it if it is: "
+        "it holds one share per sector of the table it was measured on, and "
+        "this one has a sector more. Same decision as `run_scenario`."),
     "models.py::to_iot": (
         "no-parent",
         "built from a supply-use pair, which has neither field. A workbook "
@@ -109,7 +119,12 @@ DECLARED = {
 # answer is almost everywhere NOT to travel: it is the archive's leakage for a
 # region as loaded, and a split changes the block it was measured on. Being
 # listed here is what makes each site say so rather than drop it quietly.
-FIELDS = ("satellites", "type_ii", "interregional")
+# `region_codes` joined on 2026-09-12, the day the first table that has one
+# could be divided. Until then the engine had exactly one construction that
+# set it and nothing downstream that could receive it, so losing it cost
+# nothing and showed nothing -- which is the state every other member of this
+# family was in the day before it cost something.
+FIELDS = ("satellites", "type_ii", "interregional", "region_codes")
 
 
 def check(label, ok, detail=""):
@@ -206,9 +221,16 @@ def main():
                   bool(got["passed"]),
                   why + f" — passes {sorted(got['passed']) or 'nothing'}")
         elif how == "after":
+            # PASSED OR ASSIGNED. The question this file asks is whether the
+            # function handles the field, not which line it handles it on:
+            # `run_scenario` sets three on the next lines because they need
+            # the split's weights, and passes the regional axis in the call
+            # because that one is known before it.
             check(f"{key} sets them on the table it built",
-                  got["after"] >= set(FIELDS),
-                  why + f" — assigns {sorted(got['after'])}")
+                  (got["after"] | got["passed"]) >= set(FIELDS),
+                  why + f" — assigns {sorted(got['after'])}"
+                  + (f", passes {sorted(got['passed'])}"
+                     if got["passed"] else ""))
         else:
             check(f"{key} carries nothing, and {how} is why",
                   not got["passed"] and not got["after"], why)

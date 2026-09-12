@@ -285,6 +285,14 @@ def run_scenario(table: IOTable, splits: list[SplitSpec], scenario: Scenario,
         country=table.country, year=table.year, unit=table.unit,
         classification=table.classification,
         sector_codes=seed["codes"], sector_labels=seed["labels"],
+        # The regional axis, carried through the same map as everything else:
+        # `seed["mapping"]` gives each new unit's place in the table that came
+        # in, so a subsector keeps the region of its parent. `interregional`
+        # is set empty below, for the reason written there; the axis is not,
+        # because which region a row belongs to is a fact about the rows and
+        # does not stop being true when one of them is divided.
+        region_codes=([table.region_codes[i] for i in seed["mapping"]]
+                      if table.region_codes is not None else None),
         Z=Z_bal, Y=seed["Y"], Y_labels=table.Y_labels,
         VA=seed["VA"], VA_labels=table.VA_labels, X=seed["X"],
         source=f"{table.source} (disaggregated, scenario {scenario.scenario_id})",

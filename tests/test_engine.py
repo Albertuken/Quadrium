@@ -3332,11 +3332,23 @@ def test_an_interregional_table_is_an_IOTable_and_says_how_to_cut_it():
     # Interleaved regions would give silently wrong blocks.
     refuses("contiguous block", lambda: build(["R1", "R2"] * S))
 
-    # A region carrying different sectors, or the same ones in a different
-    # order, breaks the correspondence between one block and the next.
-    refuses("same sectors",
-            lambda: build(["R1"] * S + ["R2"] * S,
-                          sector_codes=["a", "b", "c", "a", "c", "b"]))
+    # A REGION CARRYING DIFFERENT SECTORS IS NOT REFUSED, and until
+    # 2026-09-12 it was. The rule -- "an IRIO carries the same sectors in
+    # every region" -- is true of a table as an archive publishes it and false
+    # the moment somebody divides a sector of ONE region, which is the only
+    # operation a three-block table exists for: there is no allocation key for
+    # an aggregate's G-I, so its block keeps ten sectors while the region's
+    # has eleven. Enforced here, the object refused the result of the engine's
+    # own documented route. The rule now lives where it can hold:
+    # `load_eu_mrio_wide` lays the blocks out from one list of ten codes.
+    ragged = build(["R1"] * 4 + ["R2"] * 2,
+                   sector_codes=["a", "b", "c", "d", "a", "b"])
+    assert ragged.regions == ["R1", "R2"]
+    assert ragged.block("R1", "R2").shape == (4, 2)
+    assert np.array_equal(ragged.regional_output("R2"), ragged.X[4:])
+    # And there is no sectors-per-region to give, so it says so rather than
+    # returning n // R, which is nobody's block.
+    refuses("different numbers of sectors", lambda: ragged.sectors_per_region)
 
     # Length is checked against the axis it sits parallel to.
     refuses("length 6", lambda: build(["R1"] * S))
@@ -5488,24 +5500,20 @@ def test_the_archives_greek_and_finnish_labels_are_corrected():
               False, "it loaded")
 
 
-def test_the_EUROPEAN_MRIO_can_carry_the_rest_of_the_country():
-    """`mrio_scope: with_rest` returns three blocks instead of one.
+def _wide_mrio_fixture():
+    """A four-region archive on disk: two regions of AA, two of BB.
 
-    The region, the rest of its country and the rest of the archive, each ten
-    sectors. The three cover the archive, so the trade between regions is
-    inside the table: the feedback a one-region table can only mention in a
-    note is in its multipliers.
+    Written once and used by both tests that need three blocks, because a
+    fixture copied into a second test is a fixture that drifts away from the
+    first.
     """
     import tempfile
 
     import openpyxl
 
-    from quadrium.config import ConfigError, build_config
-    from quadrium.io_loader import (LoaderError, _MRIO_SECTORS, load_eu_mrio,
-                                    load_eu_mrio_wide)
+    from quadrium.io_loader import _MRIO_SECTORS
 
     sectors = list(_MRIO_SECTORS)
-    S = len(sectors)
     regs = ("AA11", "AA12", "BB11", "BB12")
     labels = [f"{r}-{s}" for r in regs for s in sectors]
     n = len(labels)
@@ -5529,6 +5537,22 @@ def test_the_EUROPEAN_MRIO_can_carry_the_rest_of_the_country():
         for lab, r in zip(rows, body):
             ws.append([lab] + [float(x) for x in r])
         wb.save(folder / name)
+    return tmp, folder, sectors, Z, X
+
+
+def test_the_EUROPEAN_MRIO_can_carry_the_rest_of_the_country():
+    """`mrio_scope: with_rest` returns three blocks instead of one.
+
+    The region, the rest of its country and the rest of the archive, each ten
+    sectors. The three cover the archive, so the trade between regions is
+    inside the table: the feedback a one-region table can only mention in a
+    note is in its multipliers.
+    """
+    from quadrium.config import ConfigError, build_config
+    from quadrium.io_loader import LoaderError, load_eu_mrio, load_eu_mrio_wide
+
+    tmp, folder, sectors, Z, X = _wide_mrio_fixture()
+    S = len(sectors)
 
     t = load_eu_mrio_wide(folder, "AA11", 2018)
     check("the table is the region, the rest of its country and the rest of "
@@ -5620,12 +5644,159 @@ def test_the_EUROPEAN_MRIO_can_carry_the_rest_of_the_country():
             lambda: build_config({**meta, "mrio_scope": "everything"}, tables,
                                  tmp),
             "mrio_scope")
+    a_file = str(folder / "MRIO_2018_272regions.xlsx")
     refused("`mrio_scope` on another kind of table",
-            lambda: build_config({"project_id": "x",
-                                  "table_path": str(folder / labels[0]),
+            lambda: build_config({"project_id": "x", "table_path": a_file,
                                   "table_kind": "uk_analytical",
                                   "mrio_scope": "with_rest"}, tables, tmp),
             "applies only to")
+
+
+def test_the_regional_axis_rides_on_the_table():
+    """A split, and a round trip through a file, keep the three blocks.
+
+    `region_codes` is the fifth member of the family `run_table_composition.py`
+    was written for: a field that rides on a table, is not passed on when the
+    table is rebuilt, and says nothing when it goes. Until `mrio_scope` there
+    was one table in the engine that had a regional axis and nothing
+    downstream that could receive it, so the loss cost nothing and was
+    invisible. Dividing a sector of a three-block table is the first operation
+    that pays for it.
+
+    A split makes the blocks UNEQUAL -- the region's sector becomes two, the
+    aggregates' does not, because there is no key for an aggregate's -- so
+    carrying the axis means the object has to hold a table whose regions carry
+    different numbers of sectors. That is what a divided interregional table
+    is; refusing it would be refusing the result of the one operation this
+    table exists for.
+    """
+    from quadrium.config import ConfigError, build_config
+    from quadrium.export import write_interchange_xlsx
+    from quadrium.io_loader import load_eu_mrio_wide, load_io_table
+    from quadrium.models import (AllocationKey, ProxyStrength, Satellite,
+                                 Scenario, SplitSpec)
+    from quadrium.scenarios import run_scenario
+
+    tmp, folder, sectors, _Z, _X = _wide_mrio_fixture()
+    S = len(sectors)
+    t = load_eu_mrio_wide(folder, "AA11", 2018)
+
+    # A DIFFERENT VALUE IN EVERY UNIT, on purpose: an account indexed by
+    # sector code rather than by position comes back with the last block's
+    # figures in all three, and ten identical values would hide it.
+    t.satellites["jobs"] = Satellite(
+        name="jobs", unit="persons", values=[100.0 + i for i in range(t.n)],
+        source="fixture", source_year=2018)
+
+    key = AllocationKey(
+        key_id="k1", applies_to="output", new_sector_codes=["GI1", "GI2"],
+        raw_values=[70.0, 30.0], source="fixture", source_year=2018,
+        strength=ProxyStrength.WEAK)
+    scenario = Scenario(scenario_id="S1", label="split", description="d",
+                        keys_by_block={"output": "k1"})
+    res = run_scenario(t, [SplitSpec("G-I", ["GI1", "GI2"], ["a", "b"])],
+                       scenario, {"k1": key})
+    out = res.table
+
+    check("a split keeps the table's three blocks",
+          out.regions == ["AA11", "AA_REST", "REST"]
+          and out.region_codes is not None
+          and len(out.region_codes) == out.n,
+          f"{out.n_regions} region(s) over {out.n} units")
+    rc = list(out.region_codes or [])
+    check("the subsectors belong to the region whose sector was divided",
+          bool(rc) and rc[out.index_of("GI1")] == "AA11"
+          and rc[out.index_of("GI2")] == "AA11"
+          and rc.count("AA11") == S + 1 and rc.count("REST") == S,
+          f"AA11 now carries {rc.count('AA11')} sectors, the aggregates "
+          f"{rc.count('REST')}")
+    check("and the blocks still read as blocks, unequal though they now are",
+          bool(rc)
+          and out.block("AA11", "REST").shape == (S + 1, S)
+          and np.allclose(out.regional_output("REST"),
+                          t.regional_output("REST")),
+          f"AA11 -> REST is {out.block('AA11', 'REST').shape}" if rc else
+          "the split table has no regional axis to read")
+
+    # THE ROUND TRIP. The interchange format keys the labels and the satellite
+    # accounts by SECTOR CODE, and three blocks repeat the same ten codes.
+    path = write_interchange_xlsx(
+        t, tmp / "wide.xlsx",
+        derived_from="the three-block table, written to be read back.")
+    back = load_io_table(path)
+    check("a table written and read again knows its regions",
+          back.regions == ["AA11", "AA_REST", "REST"],
+          f"came back as {back.regions or 'no regional axis'}")
+    check("and the three blocks keep their own labels, not one block's",
+          back.sector_labels[:S] == t.sector_labels[:S]
+          and back.sector_labels[-S:] == t.sector_labels[-S:],
+          f"{back.sector_labels[-1]!r} against {t.sector_labels[-1]!r}")
+    check("and an account comes back unit by unit, not code by code",
+          np.allclose(back.satellites["jobs"].values,
+                      t.satellites["jobs"].values),
+          f"{back.satellites['jobs'].values[:3]} … against "
+          f"{t.satellites['jobs'].values[:3]} …")
+
+    # THE REFUSALS THE FORMAT MAKES. An axis that does not cover the table
+    # would label every block after the gap with its neighbour's region, and
+    # every code in it is a real region, so nothing downstream would notice.
+    import openpyxl
+
+    from quadrium.io_loader import LoaderError
+
+    def edited(name, fn):
+        wb = openpyxl.load_workbook(path)
+        fn(wb)
+        out_path = tmp / name
+        wb.save(out_path)
+        try:
+            load_io_table(out_path)
+        except LoaderError as exc:
+            return str(exc)
+        return None
+
+    def set_regions(value):
+        def go(wb):
+            ws = wb["metadata"]
+            for row in ws.iter_rows(min_col=1, max_col=2):
+                if str(row[0].value).strip().lower() == "regions":
+                    row[1].value = value
+                    return
+            raise AssertionError("the file has no `regions` row to edit")
+        return go
+
+    msg = edited("short_axis.xlsx", set_regions("AA11*10; AA_REST*10"))
+    check("an axis that does not cover the table is refused",
+          msg is not None and "covers 20" in msg and "has 30" in msg,
+          (msg or "it loaded")[:96])
+    msg = edited("malformed_axis.xlsx", set_regions("AA11 and the others"))
+    check("and one that is not `CODE*count` says so rather than guessing",
+          msg is not None and "CODE*count" in msg,
+          (msg or "it loaded")[:96])
+
+    def drop_region_column(wb):
+        ws = wb["Satellites"]
+        head = [str(c.value or "").strip().lower() for c in ws[1]]
+        ws.delete_cols(head.index("region") + 1)
+
+    msg = edited("no_region_column.xlsx", drop_region_column)
+    check("and an account with no region beside a table that has one is "
+          "refused, not aligned by guesswork",
+          msg is not None and "no `region` column" in msg,
+          (msg or "it loaded")[:96])
+
+    meta = {"project_id": "w", "table_path": str(folder),
+            "table_kind": "eu_mrio", "mrio_region": "AA11",
+            "mrio_scope": "with_rest", "mrio_employment": "sí"}
+    try:
+        build_config(meta, {"splits": [], "keys": []}, tmp)
+    except ConfigError as exc:
+        check("employment is refused with three blocks, and says why",
+              "with_rest" in str(exc) and "aggregat" in str(exc),
+              str(exc)[:96])
+    else:
+        check("employment is refused with three blocks, and says why", False,
+              "it built the table")
 
 
 def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():

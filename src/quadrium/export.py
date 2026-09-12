@@ -342,24 +342,52 @@ def _write_interchange_sheets(wb, t, *, table_id: str,
     # `origin` travels beside every value because it is the whole point: a
     # split's estimate that comes back labelled `observed` is worse than one
     # that comes back missing.
+    # A `region` COLUMN WHEN THE TABLE HAS AN AXIS, because the sheet is keyed
+    # by sector code and an interregional table repeats the same ten codes in
+    # every block. Written without it, a three-block account came back with
+    # the last block's figures in all three: the loader's dictionary kept the
+    # final row for each code, the coverage check counted ten codes out of ten
+    # and said nothing. The column is omitted when there is no axis, so every
+    # file this engine has already written still reads.
+    regional = t.region_codes is not None
     if t.satellites:
         ws = wb.create_sheet("Satellites")
         ws.append(["name", "unit", "source", "source_year", "sector_code",
-                   "value", "origin"])
+                   "value", "origin"] + (["region"] if regional else []))
         for c in ws[1]:
             c.font = bold
         for name, s in sorted(t.satellites.items()):
-            for code, v, o in zip(t.sector_codes, s.values, s.origin):
+            for j, (code, v, o) in enumerate(
+                    zip(t.sector_codes, s.values, s.origin)):
                 ws.append([s.name, s.unit, s.source, s.source_year,
-                           code, float(v), o])
+                           code, float(v), o]
+                          + ([t.region_codes[j]] if regional else []))
         ws.freeze_panes = "A2"
 
     ws = wb.create_sheet("metadata")
     meta = [("table_id", table_id),
             ("country", t.country), ("year", t.year), ("unit", t.unit),
             ("classification", t.classification), ("source", t.source)]
-    meta += [(f"label_{c}", lab)
-             for c, lab in zip(t.sector_codes, t.sector_labels)]
+    # THE REGIONAL AXIS, run by run: `AA11*11; AA_REST*10; REST*10`. Run
+    # lengths rather than one row per unit because the layout is already
+    # required to be one contiguous run per region, and after a split those
+    # runs are no longer the same length.
+    if regional:
+        runs: list[list] = []
+        for code in t.region_codes:
+            if runs and runs[-1][0] == code:
+                runs[-1][1] += 1
+            else:
+                runs.append([code, 1])
+        meta.append(("regions", "; ".join(f"{c}*{k}" for c, k in runs)))
+    # Keyed by REGION AND CODE where there is an axis, for the reason the
+    # Satellites sheet carries a region column: `label_G-I` written three
+    # times is read once, and all three blocks came back with the last one's
+    # label.
+    meta += [((f"label_{r}|{c}" if regional else f"label_{c}"), lab)
+             for r, c, lab in zip(t.region_codes if regional
+                                  else [None] * t.n,
+                                  t.sector_codes, t.sector_labels)]
 
     counts = t.provenance_counts() if t.provenance is not None else {}
     estimated = sum(v for k, v in counts.items() if k != "OBSERVED")
