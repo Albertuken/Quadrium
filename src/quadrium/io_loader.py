@@ -2771,6 +2771,30 @@ def load_eu_mrio(path: Path | str, region: str,
     return table
 
 
+def mrio_jobs_by_block(table, employment) -> list:
+    """Where the JOBS an impulse sets off land, on a three-block table.
+
+    The output version of this question is answered at load time
+    (`interregional["lands"]`), from the archive alone. This one needs an
+    employment account as well, so it is asked once the account is attached,
+    and it is the same arithmetic with the columns of the inverse weighted by
+    jobs per unit of output instead of counted one for one.
+
+    Returns one row per sector of the region's own block: the jobs set off in
+    the region, in the rest of its country and in the rest of the archive, per
+    unit of demand for that sector. A unit with no output weighs nothing --
+    the empty middle block of a country with a single region in the archive is
+    exactly that -- and a block Eurostat does not fully cover carries the jobs
+    of the regions it does cover, which the account's own notes state.
+    """
+    X = np.asarray(table.X, float)
+    e = np.asarray(employment, float) / np.where(X > 0, X, np.inf)
+    L = np.linalg.inv(np.eye(len(X)) - table.Z / np.where(X > 0, X, np.inf))
+    S = len(X) // 3
+    return [[float((e[b * S:(b + 1) * S] * L[b * S:(b + 1) * S, j]).sum())
+             for b in range(3)] for j in range(S)]
+
+
 def load_eu_mrio_wide(path: Path | str, region: str,
                       year: int = 2018) -> IOTable:
     """The region, the rest of its country and the rest of the archive.
@@ -2890,7 +2914,15 @@ def load_eu_mrio_wide(path: Path | str, region: str,
     # the share that stays here from 88.9 % to 72.7 %
     # (`run_wide_against_surveys.py`). The bias is in the split and not in the
     # level, so this table is where it shows.
-    L3 = np.linalg.inv(np.eye(3 * S) - Z3 / X3)
+    # A UNIT WITH NO OUTPUT GETS A COLUMN OF ZEROS, not a division by zero.
+    # Four countries -- Cyprus, Estonia, Luxembourg, Malta -- have a single
+    # region in the archive, so the middle block is empty and every one of its
+    # ten columns has an output of zero. Divided straight, `A` came out `nan`
+    # there and the inverse was `nan` everywhere, which the loader handed on
+    # without a word. A unit that produces nothing sets nothing off, and zero
+    # is what that means.
+    denom = np.where(X3 > 0, X3, np.inf)
+    L3 = np.linalg.inv(np.eye(3 * S) - Z3 / denom)
     lands = [[float(L3[b * S:(b + 1) * S, j].sum()) for b in range(3)]
              for j in range(S)]
     notes = (
@@ -2909,7 +2941,9 @@ def load_eu_mrio_wide(path: Path | str, region: str,
         f"the other two blocks are aggregates, whose technology is a mix of "
         f"the regions inside them. "
         + (f"The archive has no other region of {region[:2]}, so the middle "
-           f"block is empty. " if not same else "")
+           f"block is empty: its ten columns carry no output and set nothing "
+           f"off, which is what a block with no territory in it should do. "
+           if not same else "")
         + f"NEITHER IDENTITY CLOSES IN THIS ARCHIVE: the row residue is "
           f"{100 * np.abs(res_y).sum() / total:.1f} % of output and the "
           f"column residue {100 * np.abs(res_v).sum() / total:.1f} %, both "
@@ -2948,6 +2982,15 @@ def load_eu_mrio_wide(path: Path | str, region: str,
             "scope": "with_rest",
             "blocks": [region, rest_country, "REST"],
             "regions_in_blocks": [1, len(same), R - len(same) - 1],
+            # WHO IS IN EACH BLOCK, and what each of them produces. Carried
+            # because an account for an aggregate block cannot be built
+            # without it: whoever attaches employment has to add up the
+            # regions inside a block and say what share of it that covers.
+            "members": [[region], [regions[j] for j in same],
+                        [regions[j] for j in range(R)
+                         if j != k and j not in same]],
+            "output_by_region": {regions[j]: float(
+                X_all[j * S:(j + 1) * S].sum()) for j in range(R)},
             "share_if_one_region": one.interregional["share"],
             "share_by_sector_if_one_region":
                 list(one.interregional["share_by_sector"]),

@@ -28,6 +28,21 @@ Eurostat publishes the current NUTS codes and the archive codes France on NUTS
 refuses and points at the `satellites` sheet rather than translating a code by
 hand; `tests/test_engine.py` fires that refusal without a network.
 
+AND THE SAME ACCOUNT ON THREE BLOCKS (2026-09-12)
+---------------------------------------------------
+`mrio_scope: with_rest` was refused with `mrio_employment` until then, because
+an aggregate block's account had nothing to say about how much of the block
+Eurostat covers. It says it now: each aggregate is the sum of Eurostat's own
+figures for the regions inside it that Eurostat publishes -- 230 of the
+archive's 268 -- and the share of the block's output those regions produce
+travels with the account and is printed beside the figures. A block Eurostat
+covers none of is refused rather than returned as zero.
+
+What the account buys is a second landing table: where the JOBS an impulse
+sets off land, which is not where the output lands. For Catalonia the widest
+gap is real estate, 87.0 % of the jobs staying in the region against 93.9 %
+of the output.
+
 Run:
     python3 validators/run_eu_mrio_employment.py
 """
@@ -158,6 +173,68 @@ def main() -> int:
     check("and says how much of them runs through other regions, sector by "
           "sector", "jobs through other regions" in text,
           "the employment version of what a one-region table leaves out")
+
+    # ---- THE SAME ACCOUNT ON THREE BLOCKS. Refused until 2026-09-12 because
+    # an aggregate's account had nothing to say about how much of the block
+    # Eurostat covers. It says it now: each aggregate is the sum of the
+    # figures for the regions inside it that Eurostat publishes, and the
+    # coverage travels with it.
+    wide_book = tmp / "emp_wide.xlsx"
+    wb = openpyxl.load_workbook(book)
+    wb["project"].append(["mrio_scope", "with_rest"])
+    wb.save(wide_book)
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        wcfg = load_config(wide_book, offline=True)
+    wt = wcfg["table"]
+    wsat = (wt.satellites or {}).get("employment")
+    S = wt.n // 3
+    cov = ((wt.interregional.get("jobs") or {}).get("coverage") or [])
+    check("the account covers all thirty units of a three-block table",
+          wsat is not None and len(wsat.values) == 3 * S
+          and list(wsat.values[:S]) == expected[:S],
+          f"{0 if wsat is None else len(wsat.values)} figures; the region's "
+          f"own ten are the same ten as above")
+    check("and each aggregate is Eurostat's own figures added up, with the "
+          "share of the block it covers said",
+          len(cov) == 2 and all(c["covered"] <= c["regions"] for c in cov)
+          and any(c["covered"] < c["regions"] for c in cov)
+          and "stated rather than filled" in (wsat.notes or ""),
+          "; ".join(f"{c['block']}: {c['covered']} of {c['regions']} regions, "
+                    f"{100 * c['output_share']:.1f} % of its output"
+                    for c in cov))
+
+    lands = wt.interregional["lands"]
+    jl = (wt.interregional.get("jobs") or {}).get("lands") or []
+    if jl:
+        here_out = [row[0] / sum(row) for row in lands]
+        here_job = [row[0] / sum(row) for row in jl]
+        gap = [100 * (j - o) for j, o in zip(here_job, here_out)]
+        worst = max(range(len(gap)), key=lambda i: abs(gap[i]))
+        check("and a job and a euro of output do not land alike, which is why "
+              "the account is worth attaching",
+              max(abs(g) for g in gap) > 1.0,
+              f"{wt.sector_codes[worst]}: {100 * here_job[worst]:.1f} % of "
+              f"the jobs stay in {REGION} against "
+              f"{100 * here_out[worst]:.1f} % of the output, "
+              f"{gap[worst]:+.1f} points")
+
+        guide = (ROOT / "docs" / "GUIDE.md").read_text()
+        check("and the guide quotes that pair rather than a number that "
+              "drifted",
+              f"{100 * here_job[worst]:.1f} %" in guide
+              and f"{100 * here_out[worst]:.1f} %" in guide,
+              f"{100 * here_job[worst]:.1f} % and "
+              f"{100 * here_out[worst]:.1f} % in docs/GUIDE.md")
+
+    out2 = tmp / "out_wide"
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        code2 = cli([str(wide_book), "--outputs", str(out2), "--offline"])
+    rep2 = out2 / "emp" / "report.md"
+    text2 = rep2.read_text() if rep2.exists() else ""
+    check("and the report prints where the jobs land, block by block",
+          code2 == 0 and "where the JOBS land" in text2
+          and f"jobs in `{REGION}`" in text2,
+          f"exit {code2}")
 
     print("\n" + "=" * 78)
     if FAIL:

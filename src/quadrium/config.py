@@ -944,13 +944,77 @@ def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
         checked = (f"The {len(values)} sectors add up to the {total:,.1f} "
                    f"Eurostat publishes as the total.")
 
+    # The ten distinct sector codes. A three-block table repeats them once per
+    # block, and asking Eurostat for thirty would build a vector three times
+    # too long out of the same ten figures.
+    own_codes = list(dict.fromkeys(table.sector_codes))
+
+    def employment_of(code):
+        if code in MRIO_REDRAWN or code.startswith("UK"):
+            return None
+        g = MRIO_EUROSTAT_CODE.get(code, code)
+        try:
+            v = [cube.at(nace_r2=s, geo=g, time=str(year))
+                 for s in own_codes]
+        except EurostatError:
+            return None
+        return None if any(x is None for x in v) else v
+
+    # ---- THREE BLOCKS: the region, the rest of its country, the rest of the
+    # archive. Each aggregate's account is the sum of Eurostat's own figures
+    # for the regions inside it that Eurostat covers -- 230 of the archive's
+    # 268 -- and the coverage is stated rather than the gap filled. A block
+    # Eurostat covers none of is REFUSED, not returned as zero: zero says
+    # nobody works there.
+    ir = getattr(table, "interregional", None) or {}
+    if ir.get("scope") == "with_rest":
+        members = ir["members"]
+        out = ir["output_by_region"]
+        S = len(own_codes)
+        blocks, covered = [values[c] for c in own_codes], []
+        for m in members[1:]:
+            got = {r: employment_of(r) for r in m}
+            have = [r for r, v in got.items() if v is not None]
+            block_out = sum(out.get(r, 0.0) for r in m)
+            share = (sum(out.get(r, 0.0) for r in have) / block_out
+                     if block_out > 0 else 1.0)
+            if m and not have:
+                raise ConfigError(
+                    f"Eurostat publishes employment for none of the "
+                    f"{len(m)} region(s) in one of this table's blocks, so "
+                    f"that block's account would be zero — and zero says "
+                    f"nobody works there.\n\nLoad the region alone "
+                    f"(`mrio_scope region`), or give the figures yourself in "
+                    f"a `satellites` sheet with one row per sector of the "
+                    f"thirty.")
+            covered.append((len(have), len(m), share))
+            blocks += [sum(got[r][i] for r in have) for i in range(S)]
+        emp_values = blocks
+        cover_said = " ".join(
+            (f" `{name}` ({tot} regions): Eurostat covers all of them, so "
+             f"that block's account is the sum of their own figures and "
+             f"nothing is missing from it."
+             if n == tot else
+             f" `{name}` ({tot} regions): Eurostat covers {n} of them, "
+             f"producing {100 * sh:.1f} % of the block's output. That "
+             f"block's account is the sum of their own figures and is short "
+             f"by whatever the other {tot - n} employ — the gap is stated "
+             f"rather than filled, because an absent figure is not zero.")
+            for (n, tot, sh), name in zip(covered, ir["blocks"][1:]) if tot)
+        if any(tot == 0 for _, tot, _ in covered):
+            cover_said += (" The middle block is empty — the archive has no "
+                           "other region of this country — so it employs "
+                           "nobody, which is not a gap in the data.")
+    else:
+        emp_values, cover_said = [values[c] for c in table.sector_codes], ""
+
     served = ("" if geo == region else
               f" Eurostat serves the archive's {region} as {geo}: the same "
               f"territory under a later NUTS code, by Eurostat's own "
               f"correspondence tables (`run_mrio_eurostat_codes.py`).")
     sat = Satellite(
         name="employment", unit="thousand persons",
-        values=[values[c] for c in table.sector_codes],
+        values=emp_values,
         source=(f"Eurostat {EMPLOYMENT_DATASET}, employed persons, {geo}"
                 + ("" if geo == region else f" (the archive's {region})")),
         source_year=year,
@@ -960,7 +1024,7 @@ def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
                f"MRIO's, which the archive estimates, so the multiplier pairs "
                f"a measured figure with an estimated one and is no firmer "
                f"than the estimate. Per unit of output means per million US "
-               f"dollars, the archive's unit."))
+               f"dollars, the archive's unit.{cover_said}"))
 
     # HOW MUCH OF THOSE MULTIPLIERS RUNS THROUGH OTHER REGIONS, IN JOBS. The
     # same file carries every region, so the loader's columns for this region
@@ -970,18 +1034,17 @@ def _mrio_employment(meta: dict, table, table_path, base_dir, offline: bool,
     from .io_loader import mrio_jobs
     from .regionalise import EVIDENCE
 
-    def employment_of(code):
-        if code in MRIO_REDRAWN or code.startswith("UK"):
-            return None
-        g = MRIO_EUROSTAT_CODE.get(code, code)
-        try:
-            v = [cube.at(nace_r2=s, geo=g, time=str(year))
-                 for s in table.sector_codes]
-        except EurostatError:
-            return None
-        return None if any(x is None for x in v) else v
-
     jobs = mrio_jobs(table_path, region, year, employment_of)
+    if ir.get("scope") == "with_rest":
+        # Where the jobs land, the employment twin of `interregional["lands"]`.
+        # Asked here rather than at load time because it needs the account,
+        # and the account is attached by this function.
+        from .io_loader import mrio_jobs_by_block
+        jobs["lands"] = mrio_jobs_by_block(table, emp_values)
+        jobs["coverage"] = [
+            {"block": name, "regions": tot, "covered": n,
+             "output_share": round(sh, 4)}
+            for (n, tot, sh), name in zip(covered, ir["blocks"][1:])]
     jobs["archive_median_pct"] = EVIDENCE["employment_spillover_pct"]["median"]
     jobs["demand_median_pct"] = EVIDENCE["demand_spillover_pct"]["jobs_median"]
     # How far that figure moves across the deposit's years, so the report can
@@ -1183,14 +1246,6 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
             f"rest of the archive: thirty sectors, and what an impulse "
             f"sets off in the other two inside the table instead of in a "
             f"note\n")
-    if mrio_scope == "with_rest" and _yes(meta.get("mrio_employment")):
-        raise ConfigError(
-            "mrio_employment does not work with mrio_scope 'with_rest' yet. "
-            "The wide table's other two blocks are aggregates of many "
-            "regions, and Eurostat publishes employment for 230 of the "
-            "archive's 268, so an account for them would have to say how much "
-            "of each block it covers. Until it does, load the region alone "
-            "for employment, or give the figures in a `satellites` sheet.")
 
     # `eurostat` names a country and a year instead of a file, and `table_path`
     # becomes where the download is KEPT rather than where it already is. So

@@ -141,6 +141,22 @@ def main() -> int:
           f"median {min(med1):.1f} % to {max(med1):.1f} %, up to "
           f"{max(r[4] for r in rows):.0f} % in a single sector")
 
+    # ---- a country with ONE region in the archive, where the middle block
+    # is empty. Cyprus, Estonia, Luxembourg and Malta are like this, and
+    # nothing exercised them until 2026-09-12: every one of the empty block's
+    # ten columns has an output of zero, `A = Z / X` came out `nan` there, and
+    # the inverse was `nan` for the whole table. The loader handed that on
+    # without a word, which is the failure this file exists to catch.
+    lone = load_eu_mrio_wide(MRIO, "CY00", 2018)
+    lone_lands = np.array(lone.interregional["lands"], dtype=float)
+    check("a country with one region in the archive gets an empty middle "
+          "block, not a table of nan",
+          lone.interregional["regions_in_blocks"][1] == 0
+          and bool(np.isfinite(lone_lands).all())
+          and float(lone_lands[:, 1].sum()) == 0.0,
+          f"CY00: blocks {lone.interregional['regions_in_blocks']}, nothing "
+          f"lands in the empty one, and the rest is finite")
+
     # ---- the landing table the report prints, against the full system.
     # `lands` is read off three blocks; `share_by_sector` off all 2,720. They
     # measure the same thing from the two ends, so `stays here` and `a

@@ -5500,6 +5500,35 @@ def test_the_archives_greek_and_finnish_labels_are_corrected():
               False, "it loaded")
 
 
+def _employment_cube(sectors, regions, status=("EMP",)):
+    """Every region's employment in one file, in the shape Eurostat serves.
+
+    `regions` maps a geo to (its sectors' values, its published
+    total). Used by both tests that need a kept download, so
+    neither touches the network and the two cannot drift into
+    different shapes.
+    """
+
+    geos = list(regions)
+    codes = ["TOTAL"] + list(sectors)
+    dims = {"freq": ["A"], "unit": ["THS"], "wstatus": list(status),
+            "nace_r2": codes, "geo": geos, "time": ["2018"]}
+    value = {}
+    for ci, code in enumerate(codes):
+        for gi, g in enumerate(geos):
+            vals, total = regions[g]
+            v = total if code == "TOTAL" else vals.get(code)
+            if v is not None:
+                value[str(ci * len(geos) + gi)] = v
+    return {"version": "2.0", "class": "dataset",
+            "label": "Employment (thousand persons) by NUTS 3 region",
+            "id": list(dims), "size": [len(v) for v in dims.values()],
+            "dimension": {d: {"category": {
+                "index": {c: k for k, c in enumerate(v)},
+                "label": {c: c for c in v}}} for d, v in dims.items()},
+            "value": value}
+
+
 def _wide_mrio_fixture():
     """A four-region archive on disk: two regions of AA, two of BB.
 
@@ -5785,18 +5814,68 @@ def test_the_regional_axis_rides_on_the_table():
           msg is not None and "no `region` column" in msg,
           (msg or "it loaded")[:96])
 
+    # ---- AN EMPLOYMENT ACCOUNT FOR THREE BLOCKS. Refused until 2026-09-12
+    # because an aggregate's account had nothing to say about how much of the
+    # block Eurostat covers. It says it now, and a block Eurostat covers none
+    # of is still refused, because zero says nobody works there.
+    import json
+
+    sectors10 = list(sectors)
+    emp = {s: 10.0 + k for k, s in enumerate(sectors10)}
+    kept = tmp / "data" / "eurostat" / "nama_10r_3empers_ALL_2018.json"
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    everyone = {r: (emp, sum(emp.values()))
+                for r in ("AA11", "AA12", "BB11", "BB12")}
     meta = {"project_id": "w", "table_path": str(folder),
             "table_kind": "eu_mrio", "mrio_region": "AA11",
             "mrio_scope": "with_rest", "mrio_employment": "sí"}
+
+    tables = {"splits": [
+        {"sector_code": "G-I", "new_code": "GI1", "new_label": "a",
+         "key_id": "k1"},
+        {"sector_code": "G-I", "new_code": "GI2", "new_label": "b",
+         "key_id": "k1"}],
+        "keys": [
+        {"key_id": "k1", "new_sector_code": "GI1", "value": 70,
+         "source": "t", "source_year": 2018, "strength": "weak"},
+        {"key_id": "k1", "new_sector_code": "GI2", "value": 30,
+         "source": "t", "source_year": 2018, "strength": "weak"}]}
+
+    kept.write_text(json.dumps(_employment_cube(sectors10, everyone)))
+    cfg = build_config(dict(meta), tables, tmp, offline=True)
+    sat = cfg["table"].satellites.get("employment")
+    jb = (cfg["table"].interregional.get("jobs") or {})
+    check("an account for three blocks has a figure for every unit of the "
+          "thirty, not the region's ten three times",
+          sat is not None and len(sat.values) == 3 * S
+          and sat.values[:S] == [emp[c] for c in sectors10]
+          and sat.values[S:2 * S] == [emp[c] for c in sectors10]
+          and sat.values[2 * S:] == [2 * emp[c] for c in sectors10],
+          f"{0 if sat is None else len(sat.values)} values; the rest of the "
+          f"archive is two regions added up")
+    check("and it says what share of each aggregate Eurostat covers",
+          "covers all of them" in (sat.notes or "")
+          and [c["covered"] for c in jb.get("coverage", [])] == [1, 2],
+          "; ".join(f"{c['block']} {c['covered']}/{c['regions']}"
+                    for c in jb.get("coverage", [])))
+    check("and says where the jobs land, which is not where the output does",
+          len(jb.get("lands") or []) == S
+          and all(len(r) == 3 for r in jb.get("lands") or []),
+          f"{len(jb.get('lands') or [])} sectors, three blocks each")
+
+    kept.write_text(json.dumps(_employment_cube(
+        sectors10, {r: (emp, sum(emp.values()))
+                    for r in ("AA11", "BB11", "BB12")})))
     try:
-        build_config(meta, {"splits": [], "keys": []}, tmp)
+        build_config(dict(meta), tables, tmp, offline=True)
     except ConfigError as exc:
-        check("employment is refused with three blocks, and says why",
-              "with_rest" in str(exc) and "aggregat" in str(exc),
-              str(exc)[:96])
+        check("a block Eurostat covers none of is refused, not returned as "
+              "zero",
+              "none of the" in str(exc) and "nobody works there" in str(exc),
+              str(exc).splitlines()[0][:96])
     else:
-        check("employment is refused with three blocks, and says why", False,
-              "it built the table")
+        check("a block Eurostat covers none of is refused, not returned as "
+              "zero", False, "it built an account with a zero block")
 
 
 def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
@@ -5848,26 +5927,7 @@ def test_the_EUROPEAN_MRIO_takes_its_employment_from_Eurostat():
     emp2 = {s: 30.0 + 2 * k for k, s in enumerate(sectors)}
 
     def cube(regions, status=("EMP",)):
-        """Every region's employment in one file, as the engine keeps it.
-        `regions` maps a geo to (its sectors' values, its published total)."""
-        geos = list(regions)
-        codes = ["TOTAL"] + list(sectors)
-        dims = {"freq": ["A"], "unit": ["THS"], "wstatus": list(status),
-                "nace_r2": codes, "geo": geos, "time": ["2018"]}
-        value = {}
-        for ci, code in enumerate(codes):
-            for gi, g in enumerate(geos):
-                vals, total = regions[g]
-                v = total if code == "TOTAL" else vals.get(code)
-                if v is not None:
-                    value[str(ci * len(geos) + gi)] = v
-        return {"version": "2.0", "class": "dataset",
-                "label": "Employment (thousand persons) by NUTS 3 region",
-                "id": list(dims), "size": [len(v) for v in dims.values()],
-                "dimension": {d: {"category": {
-                    "index": {c: k for k, c in enumerate(v)},
-                    "label": {c: c for c in v}}} for d, v in dims.items()},
-                "value": value}
+        return _employment_cube(sectors, regions, status)
 
     both = {"AA11": (emp, sum(emp.values())),
             "AA12": (emp2, sum(emp2.values()))}

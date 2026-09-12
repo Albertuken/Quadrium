@@ -533,9 +533,18 @@ those nine regions the part that returns to the region itself is a median
 The split keeps the three blocks: the two new subsectors join your region's,
 whose block then carries one sector more than the other two, which is what a
 divided interregional table is
-(`validators/run_regional_roundtrip.py`). Employment
-(`mrio_employment`) is refused with this scope for now: an account for the
-aggregates would have to say how much of each block Eurostat covers.
+(`validators/run_regional_roundtrip.py`).
+
+**Employment works here too** (`mrio_employment`), and the account covers all
+thirty units: your region's ten from Eurostat, and each aggregate block's ten
+added up from the regions inside it that Eurostat publishes — 230 of the
+archive's 268. What it does not cover, it says: the account's notes give the
+share of each block's output that the covered regions produce, and the report
+prints it beside the figures. A block Eurostat covers none of is refused
+rather than returned as zero, because zero says nobody works there. With the
+account attached the report adds a second landing table, in jobs, and it does
+not read like the one in output: for Catalonia 87.0 % of the jobs an impulse
+in real estate sets off stay in the region against 93.9 % of the output.
 
 **Employment for the region, from Eurostat.** The archive's ten sectors are
 Eurostat's A10 grouping, and Eurostat publishes employment for NUTS-2 regions on

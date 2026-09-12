@@ -737,6 +737,35 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                         f"| `{c}` | {_fmt(100 * row[0] / tot)} % | "
                         f"{_fmt(100 * row[1] / tot)} % | "
                         f"{_fmt(100 * row[2] / tot)} % | {omit} |")
+
+            # AND THE SAME QUESTION IN JOBS, when an employment account is
+            # attached. It is not the same answer: a euro of output and a job
+            # are not spread alike across the blocks, and the difference is
+            # the point of having the account at all.
+            jl = ((ir.get("jobs") or {}).get("lands")
+                  if isinstance(ir.get("jobs"), dict) else None)
+            if jl:
+                cov = (ir.get("jobs") or {}).get("coverage") or []
+                short = [c for c in cov if c["covered"] < c["regions"]]
+                prov += [
+                    "", "And where the JOBS land, from the employment account "
+                    "attached to this table. A block Eurostat covers only in "
+                    "part carries the jobs of the regions it does cover and "
+                    "no estimate of the others"
+                    + ("" if not short else ": "
+                       + "; ".join(
+                           f"`{c['block']}` {c['covered']} of {c['regions']} "
+                           f"regions, {_fmt(100 * c['output_share'])} % of "
+                           f"the block's output" for c in short))
+                    + ".", "",
+                    f"| sector | jobs in `{blocks[0]}` | `{blocks[1]}` | "
+                    f"`{blocks[2]}` |", "|---|---:|---:|---:|"]
+                for c, row in zip(tbl.sector_codes, jl):
+                    tot = sum(row) or 1.0
+                    prov.append(
+                        f"| `{c}` | {_fmt(100 * row[0] / tot)} % | "
+                        f"{_fmt(100 * row[1] / tot)} % | "
+                        f"{_fmt(100 * row[2] / tot)} % |")
         if ir.get("share_by_sector"):
             sc = ir.get("survey_check") or {}
             low = (f" And the archive keeps trade at home: where "
