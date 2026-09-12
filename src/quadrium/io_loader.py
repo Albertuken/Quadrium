@@ -2777,14 +2777,21 @@ def load_eu_mrio_wide(path: Path | str, region: str,
 
     WHY IT EXISTS
     ---------------
-    A one-region table cannot hold what leaves through other regions and
-    comes back, and `load_eu_mrio` can only say how much that is: a median
+    A one-region table holds only the output an impulse sets off inside the
+    region, and `load_eu_mrio` can only say how much that leaves out: a median
     13.6 % of a region's output multipliers and 11.4 % of the jobs. Three
     blocks that between them cover the archive hold it instead. Whatever this
-    region buys from anywhere is a purchase from one of the other two, so the
-    feedback is IN the multipliers rather than in a note, and the trade
-    between regions stops being a final-demand column and a value-added row:
-    it is intermediate demand, where it belongs.
+    region buys from anywhere is a purchase from one of the other two, so what
+    it sets off elsewhere is IN the multipliers rather than in a note, and the
+    trade between regions stops being a final-demand column and a value-added
+    row: it is intermediate demand, where it belongs.
+
+    Most of what is added is output in the OTHER blocks and not a return to
+    this one. On the nine Austrian regions a median 81 % of it lands in the
+    rest of the country, and the region's own multiplier rises a median
+    0.04 % (`run_wide_against_surveys.py`). "The feedback a one-region table
+    omits" was this docstring's own wording until 2026-09-12, and it claimed
+    more than the numbers carry.
 
     WHAT IT COSTS
     ---------------
@@ -2877,9 +2884,11 @@ def load_eu_mrio_wide(path: Path | str, region: str,
         f"own flows added up, and this region's own block is the one-region "
         f"table's cell for cell. Because the three cover the archive, the "
         f"trade between regions is intermediate demand here rather than a "
-        f"final-demand column: the feedback a one-region table omits -- "
+        f"final-demand column: what a one-region table omits -- "
         f"{100 * one.interregional['share']:.1f} % of this region's output "
-        f"multipliers -- is inside these multipliers. What it costs is that "
+        f"multipliers, nearly all of it output set off in the other two "
+        f"blocks rather than a return to this one -- is inside these "
+        f"multipliers. What it costs is that "
         f"the other two blocks are aggregates, whose technology is a mix of "
         f"the regions inside them. "
         + (f"The archive has no other region of {region[:2]}, so the middle "

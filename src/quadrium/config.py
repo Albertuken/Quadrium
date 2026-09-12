@@ -1164,7 +1164,8 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
 
     # `mrio_scope` says how wide the table is: the region alone, or the region
     # with the rest of its country and the rest of the archive. The wide one
-    # holds the feedback the narrow one can only mention.
+    # holds what the narrow one can only mention: the output an impulse
+    # sets off in the other regions.
     raw_scope = str(meta.get("mrio_scope") or "").strip().lower()
     if raw_scope and kind != "eu_mrio":
         raise ConfigError(
@@ -1179,8 +1180,9 @@ def _load_declared_table(meta: dict, base_dir, tables: dict, offline: bool,
             f"    region     the region's own table, ten sectors (the "
             f"default)\n"
             f"    with_rest  that region, the rest of its country and the "
-            f"rest of the archive: thirty sectors, and the feedback between "
-            f"regions inside the table instead of in a note\n")
+            f"rest of the archive: thirty sectors, and what an impulse "
+            f"sets off in the other two inside the table instead of in a "
+            f"note\n")
     if mrio_scope == "with_rest" and _yes(meta.get("mrio_employment")):
         raise ConfigError(
             "mrio_employment does not work with mrio_scope 'with_rest' yet. "

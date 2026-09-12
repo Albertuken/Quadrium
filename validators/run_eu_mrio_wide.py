@@ -4,11 +4,12 @@ Three blocks give what the whole archive gives: 0.4 % at the worst region.
 WHY
 -----
 `load_eu_mrio` returns one region's own table, and its own notes say what that
-cannot hold: the part of an impulse that runs through other regions and comes
-back, a median 13.6 % of the output multipliers. `load_eu_mrio_wide` returns
-the region, the rest of its country and the rest of the archive -- three
-blocks that between them cover the archive, so that feedback is inside the
-multipliers. The question this file answers is whether aggregating 271 regions
+cannot hold: the output an impulse sets off in the other regions, a median
+13.6 % of the output multipliers. `load_eu_mrio_wide` returns the region, the
+rest of its country and the rest of the archive -- three blocks that between
+them cover the archive, so that output is inside the multipliers. Nearly all
+of it is production in those two blocks rather than a return to the region
+itself, which is a median 0.04 % (`run_wide_against_surveys.py`). The question this file answers is whether aggregating 271 regions
 into two blocks costs anything, because an aggregate's technology is a mix and
 nothing guarantees a mix behaves like its parts.
 
@@ -139,6 +140,59 @@ def main() -> int:
           min(med1) > 2.0 and max(med1) > 5.0,
           f"median {min(med1):.1f} % to {max(med1):.1f} %, up to "
           f"{max(r[4] for r in rows):.0f} % in a single sector")
+
+    # ---- and from a workbook, which is how the owner reaches it. Nothing
+    # else renders a report for a three-block table, so the section the
+    # report prints for one was code no check had ever run.
+    import io
+    import tempfile
+
+    import openpyxl
+
+    from quadrium.cli import main
+
+    tmp = Path(tempfile.mkdtemp(prefix="quadrium_wide_cli_"))
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "project"
+    for k, v in (("project_id", "wide"), ("table_path", str(MRIO)),
+                 ("table_kind", "eu_mrio"), ("mrio_region", REGIONS[0]),
+                 ("mrio_scope", "with_rest")):
+        ws.append([k, v])
+    ws = wb.create_sheet("splits")
+    ws.append(["sector_code", "new_code", "new_label", "key_id"])
+    ws.append(["G-I", "GI1", "Trade and transport", "k1"])
+    ws.append(["G-I", "GI2", "Accommodation and food", "k1"])
+    ws = wb.create_sheet("keys")
+    ws.append(["key_id", "new_sector_code", "value", "source", "source_year",
+               "strength"])
+    ws.append(["k1", "GI1", 70, "validator fixture, not a measurement", 2018,
+               "weak"])
+    ws.append(["k1", "GI2", 30, "validator fixture, not a measurement", 2018,
+               "weak"])
+    book = tmp / "wide.xlsx"
+    wb.save(book)
+
+    out, err = io.StringIO(), io.StringIO()
+    stdout, stderr = sys.stdout, sys.stderr
+    sys.stdout, sys.stderr = out, err
+    try:
+        code = main([str(book), "--outputs", str(tmp / "o")])
+    finally:
+        sys.stdout, sys.stderr = stdout, stderr
+    rep = tmp / "o" / "wide" / "report.md"
+    text = rep.read_text() if rep.exists() else ""
+    check("a workbook asks for three blocks and gets a report",
+          code == 0 and bool(text),
+          f"exit {code}. {err.getvalue().strip()[:160]}")
+    check("whose section says what the three blocks hold and what they cost",
+          "What this table holds that a one-region table cannot" in text
+          and "aggregates" in text,
+          f"{len(text.splitlines())} lines of report")
+    check("and carries the reservation beside the figures, not in a footnote",
+          "drawn in favour of here" in text and "72.7 %" in text,
+          "the split between this region and the rest of its country is a "
+          "bound, and the report says so where the numbers are")
 
     print("\n" + "=" * 78)
     if FAIL:

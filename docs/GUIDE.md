@@ -498,18 +498,34 @@ is the one for the year you loaded, and the report says so.
 and instead of ten sectors you get thirty: your region, the rest of its
 country and the rest of the archive, three blocks that between them cover it.
 Because they cover it, the trade between regions is intermediate demand rather
-than a final-demand column, and the feedback a one-region table can only
-mention is inside the multipliers. It costs almost nothing to aggregate the
+than a final-demand column, and what a one-region table can only mention —
+the output an impulse sets off in the other two blocks — is inside the
+multipliers. It costs almost nothing to aggregate the
 other 271 regions into two blocks: against the full 2,720-unit system the
 multipliers are out by 0.005 % to 0.354 % at the median, where a one-region
 table is out by 2.7 % to 9.2 % (`validators/run_eu_mrio_wide.py`). What it
 does cost is that those two blocks are aggregates, whose technology is a mix
 of the regions inside them, so the table answers what your region's demand
 sets off everywhere — not what each other region does. A sector code names
-your region's own block, which is what a split divides — and the split keeps
-the three blocks: the two new subsectors join your region's, whose block then
-carries one sector more than the other two, which is what a divided
-interregional table is (`validators/run_regional_roundtrip.py`). Employment
+your region's own block, which is what a split divides.
+
+**One reservation, and it is measured.** How much of an impulse stays in your
+region is the archive's answer, and the archive keeps trade at home: against
+the surveys that can check it, it records about a quarter of the purchases a
+region makes from the rest of its country. Give nine surveyed Austrian regions
+the purchases their own surveys record and the total an impulse sets off
+barely moves — a median −0.09 % — while the share of it that stays in the
+region falls from a median 88.9 % to 72.7 %
+(`validators/run_wide_against_surveys.py`). So the total is solid; read the
+line between your region and the rest of the country as a bound. Note also
+that what a one-region table omits is mostly output set off **elsewhere**: on
+those nine regions the part that returns to the region itself is a median
+0.04 %.
+
+The split keeps the three blocks: the two new subsectors join your region's,
+whose block then carries one sector more than the other two, which is what a
+divided interregional table is
+(`validators/run_regional_roundtrip.py`). Employment
 (`mrio_employment`) is refused with this scope for now: an account for the
 aggregates would have to say how much of each block Eurostat covers.
 
@@ -1351,12 +1367,12 @@ asked or not, what the method is known to get wrong:
 - cross-hauling is not reproduced in any amount anyone chose; it is
   28.3 % of Catalonia's interregional trade
 - this is a SINGLE-REGION table: an impulse cannot leave it and come back.
-  Across 259 European regions that feedback is a median 11.7 % of the output
+  Across 259 European regions that spillover is a median 11.7 % of the output
   multiplier, and between 2.1 % and 41.5 % from the tenth percentile to the
   ninetieth. Nothing in a region's own accounts says which end it sits at.
   And it was measured on an archive that, where 10 regional surveys can
   check it, records 0.25 times the trade a region has with the rest of its
-  country, so the true feedback is more likely higher: moved to what the
+  country, so the true spillover is more likely higher: moved to what the
   surveys record, the median is 21.6 %, not 11.7 %
 ```
 

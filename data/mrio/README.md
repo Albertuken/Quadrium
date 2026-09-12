@@ -75,6 +75,10 @@ against Eurostat's value added by branch, and finds them right.
 country and the rest of the archive — against the full 2,720-unit system:
 its multipliers are the full system's to within 0.35 % at the worst region,
 where a one-region table is out by 2.7 % to 9.2 %.
+`run_wide_against_surveys` then asks whether the middle block is right, and
+finds that what a one-region table omits is mostly output set off in the rest
+of the country rather than an impulse returning home: the region's own
+multiplier rises a median 0.04 %.
 `run_regional_roundtrip` divides a sector of that three-block table, writes it
 and reads it back: the blocks come out unequal — eleven sectors in the region,
 ten in each aggregate, because there is no allocation key for an aggregate's —
@@ -98,6 +102,7 @@ it. Nothing here is an impression.
 | Neither accounting identity closes. The residue is 7.8 % of output on the row side and 5.4 % on the column side for Catalonia, carried in a labelled RESIDUAL column and row | `run_mrio_real_output.py` |
 | Four regions are empty and nine trade with no other region — Île-de-France among them, with 1.5 million of output and not a euro of interregional trade | `run_mrio_spillovers.py` |
 | It keeps trade at home: against ten surveyed regions it records 0.25 times the purchases a region makes from the rest of its country, so what a one-region table omits is a floor, not an estimate | `run_mrio_against_surveys.py` |
+| And that bias lands on the SPLIT, not the total. On a three-block table, giving nine Austrian regions the purchases their own surveys record moves the total an impulse sets off by a median −0.09 %, while the share of it that stays in the region falls from a median 88.9 % to 72.7 % | `run_wide_against_surveys.py` |
 | Ten to fourteen units a year carry an output more than ten times their own value added — nine of them always, agriculture in metropolitan regions | `run_mrio_scale.py` |
 | Thessalia's construction is one of them in 2013 and 2014: output 1,063 in 2012, 8,820 in 2013, 710 in 2015, with its value added unchanged. It is the one year-to-year jump the employment figures still have | `run_mrio_scale.py`, `run_employment_years.py` |
 

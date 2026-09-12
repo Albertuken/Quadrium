@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 import numpy as np
 
 from .models import CellLabel, DisaggregationResult, count_label
+# The figures the engine is allowed to quote about regionalisation live in one
+# place and a validator checks each against its measurement; `regionalise` imports
+# nothing from here, so this way round is safe.
+from .regionalise import EVIDENCE
 
 
 def _fmt(x, dp=1):
@@ -655,8 +659,10 @@ def build_report(results: list[DisaggregationResult], meta: dict,
         # tables below carry none of it, on purpose -- and said to be that.
         ir = getattr(tbl, "interregional", None) or {}
         if ir.get("scope") == "with_rest":
-            # The wide table HOLDS the feedback, so the section says what it
-            # contains rather than what it omits.
+            # The wide table HOLDS what the one-region table leaves out, so
+            # the section says what it contains rather than what it omits --
+            # and says which part of it that is, because most of it is output
+            # set off in the other blocks and not a return to this region.
             blocks = ir.get("blocks") or []
             counts = ir.get("regions_in_blocks") or []
             per = ir.get("share_by_sector_if_one_region") or []
@@ -667,9 +673,10 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 f"({counts[1] if len(counts) > 1 else '?'} regions) and the "
                 f"rest of the archive "
                 f"({counts[2] if len(counts) > 2 else '?'} regions) — which "
-                f"between them cover the archive. So the part of an impulse "
-                f"that runs through other regions and comes back is **inside "
-                f"the multipliers below**, and the trade between regions is "
+                f"between them cover the archive. So what an impulse sets "
+                f"off in the other two — which a one-region table cannot "
+                f"hold — is **inside the multipliers below**, and the trade "
+                f"between regions is "
                 f"intermediate demand rather than a final-demand column. A "
                 f"table of `{blocks[0]}` alone would omit "
                 f"**{_fmt(100 * ir['share_if_one_region'])} %** of its output "
@@ -680,7 +687,25 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                 "This table answers what this region's demand sets off "
                 "everywhere, not what each other region does. A sector code "
                 f"names `{blocks[0]}`'s own block, which is what a split "
-                f"divides."]
+                f"divides.", "",
+                # The caveat goes BESIDE the figures and not in a footnote:
+                # what the archive gets wrong here is not the total but the
+                # line between this region and the rest of its country, and a
+                # reader who takes the split at face value is the reader this
+                # paragraph is for.
+                f"**How much of this stays here is the archive's answer, and "
+                f"it is drawn in favour of here.** The archive records about "
+                f"a quarter of the purchases a region makes from the rest of "
+                f"its country, against the surveys that can check it. Give "
+                f"nine surveyed regions the purchases their own surveys "
+                f"record and the total an impulse sets off barely moves — a "
+                f"median {_fmt(EVIDENCE['wide_vs_surveys']['total_move_pct'])} "
+                f"% — while the share of it that stays in the region falls "
+                f"from a median "
+                f"{_fmt(EVIDENCE['wide_vs_surveys']['here_pct'])} % to "
+                f"{_fmt(EVIDENCE['wide_vs_surveys']['here_pct_survey'])} %. "
+                f"So trust the total; read the split as a bound "
+                f"(`run_wide_against_surveys.py`)."]
             if per:
                 prov += ["", "| sector | omitted by a one-region table |",
                          "|---|---:|"]

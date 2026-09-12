@@ -21,11 +21,11 @@ The costs are measurements, not opinions, and each is checked by a validator:
     using delta = 0.25 blind, against a fitted value   mean 2.2 points, worst 6.8
     cross-hauling the family does not reproduce        28.3 % of Catalonia's
                                                        interregional trade
-    interregional feedback a single-region table       median 11.7 % of the
-    cannot contain at all                              multiplier, 2.1 % to
-                                                       41.5 % (259 regions)
-                                                       -- a LOWER bound: the
-                                                       archive it is measured
+    interregional spillover a single-region table      median 11.7 % of the
+    cannot contain at all: the output an impulse       multiplier, 2.1 % to
+    sets off in OTHER regions, of which the part       41.5 % (259 regions)
+    returning to this one is a median 0.04 %           -- a LOWER bound: the
+    (`run_wide_against_surveys.py`)                    archive it is measured
                                                        on holds 0.25 of the
                                                        surveyed trade with the
                                                        rest of the country;
@@ -62,7 +62,7 @@ EVIDENCE = {
     # region's trade -- nine Austrian regions and Catalonia -- the archive
     # gives a region a quarter of the purchases from the rest of its country
     # that they record, and twice the purchases from itself, while the total
-    # it buys is about right. So the feedback above is more likely too low
+    # it buys is about right. So the spillover above is more likely too low
     # than too high; how much is `spillover_share_pct_survey` below. It holds
     # at the surveys' own year too: 0.23 in 2010 (`run_mrio_same_year.py`).
     # `run_mrio_against_surveys.py`.
@@ -75,6 +75,17 @@ EVIDENCE = {
     # `run_spillover_sensitivity.py`.
     "spillover_share_pct_survey": {"p10": 4.7, "median": 21.6, "p90": 61.4,
                                    "surveyed_higher": 10, "factor": 4.0},
+    # The same question asked of the THREE-BLOCK table, on the nine Austrian
+    # regions at 2010 against their own 2010 surveys. Two answers that pull in
+    # opposite directions: the total an impulse sets off hardly moves when the
+    # archive's home bias is corrected, but the line between "here" and "the
+    # rest of the country" moves a lot, and always the same way. And what a
+    # one-region table omits turns out to be production ELSEWHERE rather than
+    # feedback returning home, which the engine used to call feedback.
+    # `run_wide_against_surveys.py`.
+    "wide_vs_surveys": {"regions": 9, "rest_of_country_of_gain": 0.81,
+                        "feedback_pct": 0.04, "total_move_pct": -0.09,
+                        "here_pct": 88.9, "here_pct_survey": 72.7},
     # And whether any of it depends on the year. Across the deposit's eleven
     # years the archive's median stays put while a single region's figure
     # moves by several points; regions keep their order.
@@ -408,8 +419,9 @@ def regionalise(A_national: np.ndarray,
         f"  - cross-hauling is not reproduced in any amount anyone chose; it is "
         f"28.3 % of Catalonia's interregional trade",
         f"  - this is a SINGLE-REGION table: an impulse cannot leave it and "
-        f"come back. Across {EVIDENCE['spillover_regions_measured']} European "
-        f"regions that feedback is a median "
+        f"come back, and what it sets off elsewhere is not in it either. "
+        f"Across {EVIDENCE['spillover_regions_measured']} European "
+        f"regions that spillover is a median "
         f"{EVIDENCE['spillover_share_pct']['median']:.1f} % of the output "
         f"multiplier, and between "
         f"{EVIDENCE['spillover_share_pct']['p10']:.1f} % and "
@@ -419,7 +431,7 @@ def regionalise(A_national: np.ndarray,
         f"where {EVIDENCE['mrio_vs_surveys']['regions']} regional surveys can "
         f"check it, records {EVIDENCE['mrio_vs_surveys']['rest_of_country_ratio']:.2f} "
         f"times the trade a region has with the rest of its country, so the "
-        f"true feedback is more likely higher: moved to what the surveys "
+        f"true spillover is more likely higher: moved to what the surveys "
         f"record, the median is "
         f"{EVIDENCE['spillover_share_pct_survey']['median']:.1f} %, not "
         f"{EVIDENCE['spillover_share_pct']['median']:.1f} %",
