@@ -2258,6 +2258,16 @@ def _mrio_block(path: Path) -> tuple[np.ndarray, list[str]]:
     return Z, labels
 
 
+# The two side files parsed, kept by path and by what the file was when it was
+# read. Openpyxl takes about a third of a second on each, and a caller that
+# loads many regions of one year -- every validator that sweeps the archive
+# does -- paid it again for every region: four minutes of the five a sweep of
+# all 272 took. The big block already had a cache on disk; this is the same
+# idea in memory, and it is keyed on the file's size and mtime so an edited
+# file is read again rather than remembered wrong.
+_MRIO_SIDE_CACHE: dict = {}
+
+
 def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
     """A side file's headers and values, units always on the first axis.
 
@@ -2265,6 +2275,18 @@ def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
     rows it sits beside. See `load_eu_mrio`.
     """
     import openpyxl
+
+    try:
+        st = Path(path).stat()
+        key = (str(path), orientation, st.st_size, st.st_mtime_ns)
+    except OSError:
+        key = None
+    if key is not None and key in _MRIO_SIDE_CACHE:
+        head, M = _MRIO_SIDE_CACHE[key]
+        # A COPY of the values, never the cached array itself: a caller that
+        # writes into what it is given would otherwise change what the next
+        # caller reads, and the two would never meet to compare notes.
+        return list(head), M.copy()
 
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     try:
@@ -2280,6 +2302,8 @@ def _mrio_side(path: Path, orientation: str) -> tuple[list[str], np.ndarray]:
         head = [str(r[0]) for r in rows[1:]]
         M = np.array([[0.0 if c is None else float(c) for c in r[1:]]
                       for r in rows[1:]], float).T
+    if key is not None:
+        _MRIO_SIDE_CACHE[key] = (list(head), M.copy())
     return head, M
 
 

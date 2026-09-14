@@ -121,10 +121,18 @@ class Source:
                     f"eurostat_year    {self.year}",
                     f"eurostat_dataset {friendly}"]
         if self.table_kind == "eu_mrio":
+            # `mrio_scope with_rest` is offered, not imposed: the region's own
+            # table is still the default and still what most splits want.
+            # But a reader who is told only about `mrio_region` never learns
+            # that a table of one region leaves out 2.7 % to 9.2 % of the
+            # multiplier at the median, and that three blocks cost 0.35 % at
+            # the worst (`run_eu_mrio_wide.py`). The comment row says so.
             return ["table_kind      eu_mrio",
                     f"table_path      {self.path}",
                     f"mrio_region     {self.geo}",
-                    f"mrio_year       {self.year}"]
+                    f"mrio_year       {self.year}",
+                    "# mrio_scope    with_rest   <- add this row to keep the "
+                    "rest of the country and of the archive in the table"]
         return [f"table_kind      {self.table_kind}",
                 f"table_path      {self.path}"]
 
@@ -311,7 +319,11 @@ def _mrio_sources(folder: Path) -> list[Source]:
             note=("a region's own table, cut from an ESTIMATED archive that "
                   "does not balance: the residue is carried and sized in the "
                   "report, and a region that trades with no other region is "
-                  "refused on loading"))
+                  "refused on loading. A table of one region leaves out 2.7 % "
+                  "to 9.2 % of the multiplier at the median; `mrio_scope "
+                  "with_rest` keeps the rest of the country and of the "
+                  "archive as two more blocks, within 0.35 % of the whole "
+                  "archive's"))
             for r, x in zip(regions, output) if x > 0]
     return out
 

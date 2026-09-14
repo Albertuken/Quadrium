@@ -5500,6 +5500,45 @@ def test_the_archives_greek_and_finnish_labels_are_corrected():
               False, "it loaded")
 
 
+def test_every_report_says_which_version_produced_it():
+    """The stamp follows the package, and a preamble still lands beneath it.
+
+    Until 2026-09-14 the report and `project.py` both carried
+    "Quadrium 0.1.0 (MVP 0.1)" as a literal, so every release after 0.1.0 would
+    have signed its reports as 0.1.0. The two were coupled -- `project.py`
+    finds that text to insert a preamble under it -- so changing one without
+    the other would have made the preamble vanish without a word. Nothing
+    checked either.
+    """
+    import quadrium
+    from quadrium import reporting
+
+    check("the report's stamp is the package's own version",
+          reporting.STAMP == f"Quadrium {quadrium.__version__}",
+          reporting.STAMP)
+    src = Path(reporting.__file__).read_text()
+    proj = Path(reporting.__file__).with_name("project.py").read_text()
+    check("and no version number is written by hand in either file",
+          "Quadrium 0." not in src.replace("Quadrium {", "")
+          and "Quadrium 0." not in proj,
+          "the stamp is built from __version__ in one place")
+
+    table = build_table()
+    from quadrium.project import IOProject
+    import tempfile
+    root = Path(tempfile.mkdtemp(prefix="quadrium_stamp_"))
+    project = IOProject(project_id="stamp", table=table,
+                        splits=[SplitSpec("ACC", NEW, LBL)],
+                        scenarios=build_scenarios()[:1], keys=build_keys(),
+                        root=root, preamble="A PREAMBLE THAT MUST SURVIVE")
+    project.run().write()
+    report = (root / "stamp" / "report.md").read_text()
+    check("and a project's preamble still appears, directly under the stamp",
+          f"{reporting.STAMP}\n\nA PREAMBLE THAT MUST SURVIVE" in report,
+          "found under the stamp" if "A PREAMBLE THAT MUST SURVIVE" in report
+          else "the preamble is missing from the report")
+
+
 def _employment_cube(sectors, regions, status=("EMP",)):
     """Every region's employment in one file, in the shape Eurostat serves.
 

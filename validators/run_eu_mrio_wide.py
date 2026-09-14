@@ -186,6 +186,28 @@ def main() -> int:
           f"{ev['regions']}; measured {round(med, 2)} / {round(worst, 1)} "
           f"over {len(REGIONS)}")
 
+    # ---- and how far it moves with the year. The report says the landing
+    # table is the loaded year's; this is the measurement behind the number
+    # it gives, over the same seven regions and all eleven years.
+    ranges = []
+    for region in REGIONS:
+        here = []
+        for y in range(2008, 2019):
+            yl = np.array(load_eu_mrio_wide(MRIO, region, y)
+                          .interregional["lands"], dtype=float)
+            here.append(100 * float(np.median(yl[:, 0] / yl.sum(1))))
+        ranges.append(max(here) - min(here))
+    ev_y = EVIDENCE["wide_lands_by_year"]
+    got = (len(REGIONS), 11, round(float(np.median(ranges)), 1),
+           round(max(ranges), 1))
+    check("where an impulse lands moves a few points with the year, and the "
+          "report quotes how many",
+          got == (ev_y["regions"], ev_y["years"], ev_y["range_median_pts"],
+                  ev_y["range_max_pts"]),
+          f"a median {got[2]} points between a region's highest and lowest "
+          f"year, at most {got[3]}; EVIDENCE says {ev_y['range_median_pts']} "
+          f"and {ev_y['range_max_pts']}")
+
     # ---- and the three figures the guide quotes from this table, because a
     # number in prose drifts silently while a number in a report is rebuilt
     # every run.

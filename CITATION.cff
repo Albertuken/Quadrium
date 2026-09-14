@@ -8,32 +8,35 @@ authors:
     orcid: "https://orcid.org/0000-0002-0159-6032"
 repository-code: "https://github.com/Albertuken/Quadrium"
 license: MIT
-version: 0.1.0
-date-released: 2026-09-05
+version: 0.2.0
+date-released: 2026-09-14
 # The concept DOI. It always resolves to the latest version, which is what
-# a citation of the software should point at; the DOI of this particular
-# version is below.
+# a citation of the software should point at. The DOI of THIS version is
+# assigned by Zenodo when the release is published and added here then; the
+# entry that stood below was v0.1.0's (10.5281/zenodo.22345638), and a version
+# bump must not relabel an earlier version's DOI as its own.
 doi: 10.5281/zenodo.22345637
 identifiers:
   - type: doi
     value: 10.5281/zenodo.22345637
     description: "Concept DOI — resolves to the latest version"
-  - type: doi
-    value: 10.5281/zenodo.22345638
-    description: "Version 0.1.0"
 abstract: >-
   An engine for building and manipulating supply-use and input-output systems:
   loading published tables from statistical offices, disaggregating sectors
   against proxy data, balancing with RAS and GRAS, transforming supply-use
-  pairs into symmetric tables, projecting to a later year, and regionalising a
-  national table with the location quotient family. Every method is implemented
-  against the paragraph and page of the manual that specifies it, every cell
-  carries whether it was observed, estimated or adjusted, and every result is
-  printed together with the measured cost of the assumptions that produced it.
+  pairs into symmetric tables, projecting to a later year, regionalising a
+  national table with the location quotient family, and loading any region of
+  the European multiregional archive with the rest of its country and of Europe
+  as further blocks, with Eurostat's regional employment attached. Every method
+  is implemented against the paragraph and page of the manual that specifies
+  it, every cell carries whether it was observed, estimated or adjusted, and
+  every result is printed together with the measured cost of the assumptions
+  that produced it.
 keywords:
   - input-output analysis
   - supply-use tables
   - regionalisation
+  - multiregional input-output
   - location quotient
   - sector disaggregation
   - reproducible research

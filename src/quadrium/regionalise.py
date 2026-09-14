@@ -87,6 +87,12 @@ EVIDENCE = {
     # table quotes: where an impulse lands read off three blocks, against the
     # same quantity read off all 2,720 units. `run_eu_mrio_wide.py`.
     "wide_lands_vs_full": {"regions": 7, "median_pts": 0.05, "max_pts": 1.7},
+    # And how far the landing table moves with the year loaded: the median
+    # share of an impulse that stays in the region, taken each year from 2008
+    # to 2018 for the same seven regions. It is the loaded year's figure, the
+    # way every other regional figure in the report is. `run_eu_mrio_wide.py`.
+    "wide_lands_by_year": {"regions": 7, "years": 11,
+                           "range_median_pts": 4.0, "range_max_pts": 4.6},
     "wide_vs_surveys": {"regions": 9, "rest_of_country_of_gain": 0.81,
                         "feedback_pct": 0.04, "total_move_pct": -0.09,
                         "here_pct": 88.9, "here_pct_survey": 72.7},

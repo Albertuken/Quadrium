@@ -515,7 +515,9 @@ sets off that is produced in your region, in the rest of its country and in
 the rest of the archive. For Catalonia in 2018 that runs from agriculture,
 where 46.2 % stays and 44.4 % goes to the rest of Spain, to trade and
 transport, where 96.3 % stays. A one-region table cannot ask the question at
-all.
+all. The figures are the year's you loaded: across the archive's eleven years
+the share that stays in a region moves a median 4.0 points between its highest
+and lowest year.
 
 **One reservation, and it is measured.** How much of an impulse stays in your
 region is the archive's answer, and the archive keeps trade at home: against

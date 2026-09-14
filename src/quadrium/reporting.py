@@ -17,6 +17,15 @@ from .models import CellLabel, DisaggregationResult, count_label
 # place and a validator checks each against its measurement; `regionalise` imports
 # nothing from here, so this way round is safe.
 from .regionalise import EVIDENCE
+from . import __version__
+
+# What every report says produced it. ONE string, used by the report and by
+# `project.py`, which finds it to insert a preamble beneath it. Both carried
+# the first release's number written out by hand until 2026-09-14, so every
+# later release would have signed its reports as the first -- and changing one
+# of the two without the other would have made the preamble vanish without a
+# word, because nothing checked the text.
+STAMP = f"Quadrium {__version__}"
 
 
 def _fmt(x, dp=1):
@@ -595,7 +604,7 @@ def build_report(results: list[DisaggregationResult], meta: dict,
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     first = results[0]
     lines = [f"# {table_title}", "",
-             f"Generated {now} · Quadrium 0.1.0 (MVP 0.1)", "",
+             f"Generated {now} · {STAMP}", "",
              f"Sector `{first.table.sector_codes[first.split_index]}`"
              if False else "", ]
     lines = [x for x in lines if x != ""]
@@ -725,7 +734,13 @@ def build_report(results: list[DisaggregationResult], meta: dict,
                     f"{EVIDENCE['wide_lands_vs_full']['median_pts']} points "
                     f"and at most "
                     f"{EVIDENCE['wide_lands_vs_full']['max_pts']} "
-                    f"(`run_eu_mrio_wide.py`).", "",
+                    f"(`run_eu_mrio_wide.py`). These are {tbl.year}'s: "
+                    f"across the deposit's "
+                    f"{EVIDENCE['wide_lands_by_year']['years']} years the "
+                    f"share that stays in a region moves a median "
+                    f"{EVIDENCE['wide_lands_by_year']['range_median_pts']} "
+                    f"points between its highest and lowest year, at most "
+                    f"{EVIDENCE['wide_lands_by_year']['range_max_pts']}.", "",
                     f"| sector | stays in `{blocks[0]}` | "
                     f"`{blocks[1]}` | `{blocks[2]}` | a one-region "
                     f"table omits |", "|---|---:|---:|---:|---:|"]
