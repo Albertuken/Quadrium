@@ -67,7 +67,7 @@ jobs:
       - name: the console script exists and answers
         run: quadrium --help
 
-      # 41 unit tests and every validator, all offline: each one states what it
+      # The unit tests and every validator, all offline: each one states what it
       # tests, cites the paragraph and page it comes from, and prints the
       # deviation it measured against official data.
       - name: checks

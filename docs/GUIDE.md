@@ -1463,7 +1463,17 @@ still the archive's, and nobody has measured it.
 
 - **Estimate trade between regions.** Section 9 gives you one region against
   its country; the origin-destination flows between regions are not modelled.
-- **Environmental or employment extensions.** Monetary flows only.
+- **Find your environmental or employment figures for you, except in one
+  case.** Any quantity per sector — jobs, emissions, water — can be attached in
+  the `satellites` sheet (section 4), and the report gives its direct and total
+  coefficients. The engine fetches one on its own only for a region of the
+  European MRIO: its employment from Eurostat (`mrio_employment`, section 3,
+  Route B). Emissions, and employment for any other table, you type in.
+- **Tell subsectors or regions apart by intensity.** A split divides an account
+  by the same key as the output, and a regionalised table takes its country's
+  intensity, so the parts come out with the parent's jobs or tonnes per euro.
+  If you hold the quantity for the subsector or the region, that is the number
+  to use.
 - **Invent your proxy.** The split is only as good as the key you bring, and
   the tool's main contribution is refusing to let you forget that.
 

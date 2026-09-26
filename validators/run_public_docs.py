@@ -30,9 +30,10 @@ feature landed, and it is the reason this file is not just three `len()` calls.
 FINDING THE TWO DOCUMENTS
 ---------------------------
 `docs/GUIDE.md` is written in the private tree and copied out; `README.md` is
-maintained in the public one. So each tree holds one of them at hand and the
-other in its sibling, and this file looks in both places rather than passing on
-whichever it happens to find. A check that skips half its subject is the kind of
+written in the private tree's `public/` and copied to the public root, so only
+the public tree holds it where a stranger finds it. It is checked there, beside
+the validators it counts, and this file looks in both places rather than
+passing on whichever it happens to find. A check that skips half its subject is the kind of
 vacuous pass this project removes validators for.
 
 Run:
