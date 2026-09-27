@@ -54,15 +54,20 @@ privately.
 
 A third group is here and **says out loud that it cannot run**, which is a
 different answer from the two above and is stated rather than left to be
-inferred. `run_mrio_axis_scale`, `run_mrio_nuts_join`, `run_mrio_side_join`,
-`run_mrio_real_output`, `run_mrio_spillovers` and
-`run_spillover_predictability` all read the 33 MB European MRIO workbook.
-Neither repository tracks it, and the reason is its size rather than its
-licence: it is CC BY 4.0 and could be redistributed, but the archive holds
+inferred. They read the 33 MB European MRIO workbook: everything named
+`run_mrio_*`, `run_eu_mrio_*`, `run_spillover_*`, `run_employment_*`,
+`run_wide_*`, `run_demand_spillovers`, `run_feedback_vs_spillover` and
+`run_regional_roundtrip`. The list is deliberately not spelled out one by one
+here — it was, and it was six names long for months after it had grown;
+`check.sh` counts them on every run and prints which ones checked nothing, and
+`data/mrio/README.md` says what each of them needs.
+
+Neither repository tracks the workbook, and the reason is its size rather than
+its licence: it is CC BY 4.0 and could be redistributed, but the archive holds
 eleven such workbooks and git is the wrong place for them. It is one download
 away for anyone — Huang & Koutroumpis, Zenodo record 7875024 — and the URL,
-byte count and SHA-256 are in `data/mrio/_provenance.json`.
-With the workbook in `data/mrio/`, all six run and reproduce what they report.
+byte count and SHA-256 are in `data/mrio/_provenance.json`. With the workbook
+in `data/mrio/`, every one of them runs and reproduces what it reports.
 `run_reachability` reads a record taken by a tool that lives in the private
 tree, and seven more — `run_automation_limits`, `run_core082_acquisition`,
 `run_eurostat_negatives`, `run_h_approach`, `run_topdown_procedure`,
